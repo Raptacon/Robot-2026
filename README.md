@@ -4,7 +4,7 @@
 
 ## Welcome to Robot 2024
 
-Please take a look at the [wiki](https://github.com/Raptacon/Robot-2023/wiki) for the most up to date documenation
+Please take a look at the [wiki](https://github.com/Raptacon/Robot-2023/wiki) for the most up to date documentation
 
 Also make sure to check out the [Kanban board](https://github.com/Raptacon/Robot-2023/projects/1)
 test
@@ -54,25 +54,25 @@ Now that robotpy is installed, makes sure that you have the file pyproject.toml 
 
 # Hardware for the Robot
 
-## roboRio (Gray box)
+## roboRIO(Gray box)
 
 There are now two types of roboRIOs. The v2 can be identified by having the microSD card reader next to the large USB header on the top of the roboRIO. Otherwise the RIOs look the same. Identify your RIO version first before going to the v1 or v2 section to program the image.
 
 Once you DO install the latest image, PLEASE LABEL the RIO with the current date and image version. This will make it easy to identify when the RIO was last updated. 
 
-### roboRio v1
+### roboRIO v1
 
 To install the roboRIO image for a v1 RIO look at the docs [here](https://docs.wpilib.org/en/stable/docs/zero-to-robot/step-3/imaging-your-roborio.html#imaging-your-roborio-1).
 
 Once you DO install the latest image, PLEASE LABEL the RIO with the current date and image version. This will make it easy to identify when the RIO was last updated. 
 
-### roboRio v2
+### roboRIO v2
 
 To install the roboRIO image for a v1 RIO look at the docs [here](https://docs.wpilib.org/en/stable/docs/zero-to-robot/step-3/roborio2-imaging.html#imaging-your-roborio-2).
 
 Once you DO install the latest image, PLEASE LABEL the RIO with the current date and image version. This will make it easy to identify when the RIO was last updated.
 
-### RoboRio packages
+### roboRIO packages
 
 If you have ran the command "python -m robotpy sync" and have successfully installed the packages associated with it, connect to the robot and run the command "python -m robotpy deploy". This command runs tests based on our code, if the tests fail check what they are. You can continue deploying packages and code, but do so with caution. You should see files being downloaded on the bot. It will take a while if no packages have been installed on the bot previously. For this to work you do need to have python installed on the bot. 
 
