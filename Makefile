@@ -52,12 +52,6 @@ clean:
 realclean: clean
 	rm -fr ${VENV}
 
-docker: docker_build
-	docker run --rm -ti -v $$(PWD):/src raptacon2022_build bash
-
-docker_build:
-	docker build . --tag raptacon2022_build
-
 # Installs the 3rd party dependencies such as photonvision and rapatcon3200 (whatever is in the toml esp in the requires section)
 # https://docs.wpilib.org/en/stable/docs/software/python/pyproject_toml.html
 sync:

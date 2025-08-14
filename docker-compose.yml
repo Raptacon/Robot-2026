@@ -1,11 +1,13 @@
 
 services:
   raptacon:
+    container_name: raptacon
     build:
       context: .
       dockerfile: Dockerfile
     volumes:
       - .:/home
+    working_dir: /home
     stdin_open: true  # equivalent to docker run -i
     tty: true         # equivalent to docker run -t
     entrypoint: /bin/bash
