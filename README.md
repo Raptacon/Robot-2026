@@ -12,7 +12,9 @@ test
 # Installation
 
 ## Docker
-We include a docker-compose.yml which allows you to run a container with a desktop environment that you can access from your browser. In order to use this, run
+We include a docker-compose.yml which allows you to run a container with a desktop environment that you can access from your browser.
+
+After installing and runing Docker Desktop if you are on Windows (or ensuring that the docker daemon is running otherwise), run
 `docker compose run webtop`
 and visit the web ui at [https://localhost:3001](https://localhost:3001) in order to use it. Once inside the container, run
 `/raptacon/setup_docker.sh`
