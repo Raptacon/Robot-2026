@@ -2,9 +2,9 @@
 
 ![Build link](https://github.com/Raptacon/Robot-2023/actions/workflows/robot_ci.yml)
 
-## Welcome to Robot 2024
+## Welcome to Robot 2025
 
-Please take a look at the [wiki](https://github.com/Raptacon/Robot-2023/wiki) for the most up to date documentation
+Please take a look at the [wiki](https://github.com/Raptacon/Robot-2025/wiki) for the most up to date documentation
 
 Also make sure to check out the [Kanban board](https://github.com/Raptacon/Robot-2023/projects/1)
 test

@@ -1,6 +1,6 @@
 # Raptacon Style Guide
 
-This document is intended to provide a standard for how to write code for this repository or other Raptacon repositories. 
+This document intends to provide a standard for how to write code for this repository or other Raptacon repositories. 
 
 As of October 12, 2024, this guide is not necessarily being followed.
 The expectation is that all _new_ code being submitted follows these guidelines.
