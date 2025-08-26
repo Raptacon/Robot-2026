@@ -104,14 +104,13 @@ class SwerveModuleMk4iL2Consts(SwerveModuleMk4iConsts):
 
     wheelDiameter: float = 0.10033  # in meters
     # COf: coefficient, force/force (no units)
-    wheelCOF: float = 1.08
-    fudgeFactor: float = 0.931
+    wheelCOF: float = 1.00548
     driveGearRatio: float = 6.75
     steerGearRatio: float = 150 / 7
 
     # position: meters per rotation
     # velocity: meters per second
-    drivePositionConversionFactor: float = (fudgeFactor * wheelCOF * (math.pi * wheelDiameter)) / (
+    drivePositionConversionFactor: float = (wheelCOF * (math.pi * wheelDiameter)) / (
         driveGearRatio * SwerveModuleMk4iConsts.kTicksPerRotation
     )
     driveVelocityConversionFactor: float = drivePositionConversionFactor / 60.0
