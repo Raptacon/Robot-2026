@@ -1,0 +1,20 @@
+services:
+  webtop:
+    image: lscr.io/linuxserver/webtop:arch-xfce
+    container_name: webtop
+    security_opt:
+      - seccomp:unconfined #optional
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/Denver
+      - SUBFOLDER=/ #optional
+      - TITLE=Webtop #optional
+    volumes:
+      - ./webtop_config:/config
+      - .:/raptacon
+    ports:
+      - "3000:3000"
+      - "3001:3001"
+    shm_size: "1gb" #optional
+    restart: unless-stopped

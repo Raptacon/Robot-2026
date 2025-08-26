@@ -33,7 +33,7 @@ ${VENV}:
 lint: ## Runs the linter(s)
 	# From CI pipeline. We are more strict in our local check
 	# --select=E9,F6,F7,F8,F4,W1,W2,W4,W5,W6,E11 --ignore W293
-	${VENVBIN}/flake8 . --count --select=E9,F6,F7,F8,F4,W1,W2,W4,W5,W6,E11 --ignore W293,W503 --show-source --statistics --exclude */tests/pyfrc*,utils/yaml/*,.venv*/,venv*/
+	${VENVBIN}/flake8 . --count --select=E9,F6,F7,F8,F4,W1,W2,W4,W5,W6,E11 --ignore W293,W503 --show-source --statistics --exclude webtop_config,*/tests/pyfrc*,utils/yaml/*,.venv*/,venv*/
 
 test: setup_${VENV} lint  coverage ## Does a lint and then test
 	${VENVBIN}/${PYTHON} -m robotpy test
@@ -51,12 +51,6 @@ clean:
 
 realclean: clean
 	rm -fr ${VENV}
-
-docker: docker_build
-	docker run --rm -ti -v $$(PWD):/src raptacon2022_build bash
-
-docker_build:
-	docker build . --tag raptacon2022_build
 
 # Installs the 3rd party dependencies such as photonvision and rapatcon3200 (whatever is in the toml esp in the requires section)
 # https://docs.wpilib.org/en/stable/docs/software/python/pyproject_toml.html
