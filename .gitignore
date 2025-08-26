@@ -141,7 +141,7 @@ simgui*
 imgui.ini
 .deploy_cfg
 .installer_config
-setup_.venv_windows
+setup_.venv*
 logs/
 tests/logs
 **/ctre_sim/
