@@ -1,2 +1,2 @@
-echo "cd /raptacon" >> /config/.bashrc
-pacman -Syu vscode --noconfirm
+grep -qxF 'cd /raptacon' /config/.bashrc || echo "cd /raptacon" >> /config/.bashrc
+echo $(pacman -Syu vscode --noconfirm)

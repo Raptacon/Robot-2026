@@ -13,7 +13,6 @@ services:
     volumes:
       - ./webtop_config:/config
       - .:/raptacon
-      - ./webtop_config/wallpaper:/usr/share/backgrounds/default
     ports:
       - "3000:3000"
       - "3001:3001"
