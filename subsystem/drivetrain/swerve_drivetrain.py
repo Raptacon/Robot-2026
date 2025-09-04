@@ -32,6 +32,7 @@ class SwerveDrivetrain(Subsystem):
         """
         self.constants = SwerveDriveConsts()
         self.invert_gyro = self.constants.invertGyro
+        self.speedMultiplier = 1
 
         # must give in front-left, front-right, back-left, back-right order
         self.swerve_modules = [
@@ -149,8 +150,6 @@ class SwerveDrivetrain(Subsystem):
         velocity_vector_y: float,
         angular_velocity: float,
         field_relative: bool = True,
-        turbo_mode: bool = False,
-        slow_mode: bool = False
     ) -> None:
         """
         Operate the swerve drive according to three given component velocities. These velocities
@@ -168,17 +167,10 @@ class SwerveDrivetrain(Subsystem):
         Returns:
             None: individual swerve modules are given new goal states to transition to in-place
         """
-        # Turn down speed for better driver usage
-        dampener_use = OperatorRobotConfig.swerve_velocity_dampener
+        dampener_use = self.speedMultiplier
         dampener_use_velocity_x, dampener_use_velocity_y, dampener_use_angular = (
             dampener_use, dampener_use, dampener_use
         )
-        if turbo_mode:
-            dampener_use_velocity_x, dampener_use_velocity_y, dampener_use_angular = (1.0, 1.0, 1.0)
-        if slow_mode:
-            dampener_use_velocity_x, dampener_use_velocity_y, dampener_use_angular = (
-                dampener_use, dampener_use, 0.55
-            )
 
         dampened_velocity_vector_x = dampener_use_velocity_x * velocity_vector_x
         dampened_velocity_vector_y = dampener_use_velocity_y * velocity_vector_y
@@ -442,6 +434,12 @@ class SwerveDrivetrain(Subsystem):
             self.flip_to_red_alliance,
             self
         )
+
+    def setSpeedMultiplier(self, speedMult):
+        """
+        Set the multiplier for the drivetrain (between 0 and 1).
+        """
+        self.speedMultiplier = speedMult
 
     def periodic(self) -> None:
         """
