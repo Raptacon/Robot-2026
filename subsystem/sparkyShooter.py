@@ -5,12 +5,12 @@ import wpilib
 class Shooter(commands2.Subsystem):
     def __init__(self) -> None:
         super().__init__()
-        self.intakeMotor = rev.CANSparkMax(23, rev.CANSparkLowLevel.MotorType.kBrushless)
+        self.intakeMotor = rev.SparkMax(23, rev.SparkLowLevel.MotorType.kBrushless)
         sparkMaxUtils.configureSparkMaxCanRates(self.intakeMotor)
         self.intakeMotor.setInverted(True)
-        self.leftShootMotor = rev.CANSparkMax(24, rev.CANSparkLowLevel.MotorType.kBrushless)
+        self.leftShootMotor = rev.SparkMax(24, rev.SparkLowLevel.MotorType.kBrushless)
         sparkMaxUtils.configureSparkMaxCanRates(self.leftShootMotor)
-        self.rightShooterMotor = rev.CANSparkMax(25, rev.CANSparkLowLevel.MotorType.kBrushless)
+        self.rightShooterMotor = rev.SparkMax(25, rev.SparkLowLevel.MotorType.kBrushless)
         sparkMaxUtils.configureSparkMaxCanRates(self.rightShooterMotor)
         self.rightShooterMotor.setInverted(False)
 

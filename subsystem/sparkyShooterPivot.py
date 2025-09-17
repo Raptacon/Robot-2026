@@ -17,17 +17,17 @@ class ShooterPivot(commands2.PIDSubsystem):
         pidController.setTolerance(0.1)
         super().__init__(pidController, 0)
 
-        self.pivotMotorRight = rev.CANSparkMax(
-            31, rev.CANSparkLowLevel.MotorType.kBrushless
+        self.pivotMotorRight = rev.SparkMax(
+            31, rev.SparkLowLevel.MotorType.kBrushless
         )
-        self.pivotMotorLeft = rev.CANSparkMax(
-            26, rev.CANSparkLowLevel.MotorType.kBrushless
+        self.pivotMotorLeft = rev.SparkMax(
+            26, rev.SparkLowLevel.MotorType.kBrushless
         )
         sparkMaxUtils.configureSparkMaxCanRates(self.pivotMotorRight)
-        self.pivotMotorRight.setIdleMode(rev.CANSparkMax.IdleMode.kBrake)
+        self.pivotMotorRight.setIdleMode(rev.SparkMax.IdleMode.kBrake)
         self.pivotMotorRight.setInverted(False)
 
-        self.pivotMotorLeft.setIdleMode(rev.CANSparkMax.IdleMode.kBrake)
+        self.pivotMotorLeft.setIdleMode(rev.SparkMax.IdleMode.kBrake)
         self.pivotMotorLeft.setInverted(True)
 
         self.encoderRight = self.pivotMotorRight.getEncoder()
@@ -41,16 +41,16 @@ class ShooterPivot(commands2.PIDSubsystem):
 
         # Enable softlimit for negative direction. Note that all postions go from 0..~ -1
         self.pivotMotorRight.enableSoftLimit(
-            rev.CANSparkMax.SoftLimitDirection.kReverse, True
+            rev.SparkMax.SoftLimitDirection.kReverse, True
         )
         self.pivotMotorRight.setSoftLimit(
-            rev.CANSparkMax.SoftLimitDirection.kReverse, -1.0
+            rev.SparkMax.SoftLimitDirection.kReverse, -1.0
         )
         self.pivotMotorLeft.enableSoftLimit(
-            rev.CANSparkMax.SoftLimitDirection.kReverse, True
+            rev.SparkMax.SoftLimitDirection.kReverse, True
         )
         self.pivotMotorLeft.setSoftLimit(
-            rev.CANSparkMax.SoftLimitDirection.kReverse, -1.0
+            rev.SparkMax.SoftLimitDirection.kReverse, -1.0
         )
 
         # get limits
@@ -83,8 +83,8 @@ class ShooterPivot(commands2.PIDSubsystem):
         super().periodic()
         if wpilib.DriverStation.isEnabled() and self.coasting:
             self.coasting = False
-            self.pivotMotorRight.setIdleMode(rev.CANSparkBase.IdleMode.kBrake)
-            self.pivotMotorLeft.setIdleMode(rev.CANSparkBase.IdleMode.kBrake)
+            self.pivotMotorRight.setIdleMode(rev.SparkBase.IdleMode.kBrake)
+            self.pivotMotorLeft.setIdleMode(rev.SparkBase.IdleMode.kBrake)
 
         elif not self.coasting:
             self.coasting = True
@@ -128,10 +128,10 @@ class ShooterPivot(commands2.PIDSubsystem):
         if not self.forwardLimit.get():
             # disable limit to allow zeroing
             self.pivotMotorRight.enableSoftLimit(
-                rev.CANSparkMax.SoftLimitDirection.kForward, False
+                rev.SparkMax.SoftLimitDirection.kForward, False
             )
             self.pivotMotorLeft.enableSoftLimit(
-                rev.CANSparkMax.SoftLimitDirection.kForward, False
+                rev.SparkMax.SoftLimitDirection.kForward, False
             )
 
             self.zeroed = False
@@ -145,10 +145,10 @@ class ShooterPivot(commands2.PIDSubsystem):
             self.encoderLeft.setPosition(0)
             # once zeroed, set softlimit to allow a soft "landing"
             self.pivotMotorRight.enableSoftLimit(
-                rev.CANSparkMax.SoftLimitDirection.kForward, True
+                rev.SparkMax.SoftLimitDirection.kForward, True
             )
             self.pivotMotorLeft.enableSoftLimit(
-                rev.CANSparkMax.SoftLimitDirection.kForward, True
+                rev.SparkMax.SoftLimitDirection.kForward, True
             )
             self.setSoftLimitForward(-0.01)
 
@@ -207,10 +207,10 @@ class ShooterPivot(commands2.PIDSubsystem):
 
     def setSoftLimitForward(self, limit: float):
         self.pivotMotorRight.setSoftLimit(
-            rev.CANSparkMax.SoftLimitDirection.kForward, 0.00
+            rev.SparkMax.SoftLimitDirection.kForward, 0.00
         )
         self.pivotMotorLeft.setSoftLimit(
-            rev.CANSparkMax.SoftLimitDirection.kForward, 0.00
+            rev.SparkMax.SoftLimitDirection.kForward, 0.00
         )
 
     def setMotorCurrent(self, current: int):

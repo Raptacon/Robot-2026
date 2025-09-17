@@ -10,8 +10,8 @@ class IntakePivot(commands2.PIDSubsystem):
     kMaxPostion = 1.0 * 2 * math.pi
     kRolloverDeadZoneDeg = 340
     def __init__(self) -> None:
-        self.pivotMotor = rev.CANSparkMax(22, rev.CANSparkLowLevel.MotorType.kBrushless)
-        self.pivotMotor.setIdleMode(rev.CANSparkMax.IdleMode.kCoast)
+        self.pivotMotor = rev.SparkMax(22, rev.SparkLowLevel.MotorType.kBrushless)
+        self.pivotMotor.setIdleMode(rev.SparkMax.IdleMode.kCoast)
         self.pivotMotor.setInverted(False)
 
         self.pivotRelEncoder = self.pivotMotor.getEncoder()
