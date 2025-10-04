@@ -302,10 +302,6 @@ class RobotSwerve:
         self.keyPressed = self.table.getNumber("pressedKey", -1)
         self.heartbeat = self.table.getNumber("Stream Deck Heartbeat", 0)
         self.speedMultiplier = wpilib.SmartDashboard.getNumber("Drivetrain speed", 1)
-        # if(self.speedMultiplier < 0):
-        #     self.speedMultiplier = 0
-        # elif(self.speedMultiplier > 1):
-        #     self.speedMultiplier = 1
         self.drivetrain.setSpeedMultiplier(self.speedMultiplier)
 
         wpilib.SmartDashboard.putNumber("Stream Deck Life", self.heartbeat)
