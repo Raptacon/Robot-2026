@@ -17,6 +17,7 @@ from lookups.utils import getCurrentReefZone
 from lookups.reef_positions import reef_position_lookup
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
 from subsystem.captainIntake import CaptainIntake
+from config import OperatorRobotConfig
 
 # Third-party imports
 import commands2
@@ -100,6 +101,7 @@ class RobotSwerve:
         }
 
         # Telemetry setup
+        wpilib.SmartDashboard.putNumber("Drivetrain speed", 1)
         self.enableTelemetry = wpilib.SmartDashboard.getBoolean("enableTelemetry", True)
         if self.enableTelemetry:
             self.telemetry = Telemetry(
@@ -162,6 +164,7 @@ class RobotSwerve:
 
     def teleopInit(self):
         self.table.putNumber("pressedKey", -1)
+        
         self.keys = {0: commands2.cmd.print_("Key 0 pressed"),
                      1: commands2.cmd.print_("Key 1 pressed"),
                      2: commands2.cmd.print_("Key 2 pressed"),
@@ -193,9 +196,7 @@ class RobotSwerve:
                 lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftY(), 0.06),
                 lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftX(), 0.06),
                 lambda: wpimath.applyDeadband(-1 * self.driver_controller.getRightX(), 0.1),
-                lambda: not self.driver_controller.getRightBumperButton(),
-                lambda: self.driver_controller.getLeftBumperButton(),
-                lambda: self.driver_controller.getRightTriggerAxis() > 0.5
+                lambda: not self.driver_controller.getRightBumperButton()
             )
         )
 
@@ -300,6 +301,9 @@ class RobotSwerve:
             commands2.CommandScheduler.getInstance().cancelAll()
         self.keyPressed = self.table.getNumber("pressedKey", -1)
         self.heartbeat = self.table.getNumber("Stream Deck Heartbeat", 0)
+        self.speedMultiplier = wpilib.SmartDashboard.getNumber("Drivetrain speed", 1)
+        self.drivetrain.setSpeedMultiplier(self.speedMultiplier)
+
         wpilib.SmartDashboard.putNumber("Stream Deck Life", self.heartbeat)
 
         wpilib.SmartDashboard.putBoolean("A Button Pressed", self.mech_controller.getRightBumperButton())

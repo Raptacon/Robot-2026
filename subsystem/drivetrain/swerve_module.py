@@ -9,6 +9,7 @@ from raptacon3200.utils import sparkMaxUtils
 # Third-party imports
 import phoenix6
 import rev
+from wpimath.controller import SimpleMotorFeedforwardMeters
 from wpimath.kinematics import SwerveModulePosition, SwerveModuleState
 from wpimath.geometry import Rotation2d, Translation2d
 
@@ -35,7 +36,8 @@ class SwerveModuleMk4iSparkMaxNeoCanCoder:
         invert_drive: bool = False,
         invert_steer: bool = False,
         encoder_calibration: float = 0,
-        swerve_level_constants: SwerveModuleMk4iConsts=SwerveModuleMk4iL2Consts()
+        swerve_level_constants: SwerveModuleMk4iConsts=SwerveModuleMk4iL2Consts(),
+        update_period: float = 0.05
     ) -> None:
         """
         Creates a new swerve module at a given location in the robot.
@@ -56,6 +58,7 @@ class SwerveModuleMk4iSparkMaxNeoCanCoder:
             encoder_calibration: the starting position of the absolute encoder when the long orientation of the wheel
                 follows the X (front-to-back) axis and the bevel faces left
             swerve_level_constants: physical constants that define properties of the swerve module
+            update_period: how often, in seconds, to update the feedforward controller on the drive motor
             
         Returns
             None: class initialization executed upon construction
@@ -81,6 +84,12 @@ class SwerveModuleMk4iSparkMaxNeoCanCoder:
         self.steer_motor_encoder = self.steer_motor.getEncoder()
 
         self.drive_motor_pid = self.drive_motor.getClosedLoopController()
+        self.drive_motor_feedforward = SimpleMotorFeedforwardMeters(
+            kS=0,
+            kV=self.constants.kNominalVoltage / self.constants.maxTranslationMPS,
+            kA=0,
+            dt=update_period
+        )
         self.steer_motor_pid = self.steer_motor.getClosedLoopController()
 
         # Configuration setup
@@ -303,6 +312,8 @@ class SwerveModuleMk4iSparkMaxNeoCanCoder:
         Returns:
             None - PID controllers are updated in-place with new setpoints
         """
+        current_speed = self.current_state().speed
+
         encoder_rotation = Rotation2d.fromDegrees(self.current_raw_absolute_steer_position())
         state.optimize(encoder_rotation)
         state_degrees = state.angle.degrees()
@@ -315,7 +326,10 @@ class SwerveModuleMk4iSparkMaxNeoCanCoder:
             state_speed *= cosine_scaler
 
         self.steer_motor_pid.setReference(state_degrees, rev.SparkLowLevel.ControlType.kPosition, rev.ClosedLoopSlot.kSlot0)
-        self.drive_motor_pid.setReference(state_speed, rev.SparkLowLevel.ControlType.kVelocity, rev.ClosedLoopSlot.kSlot0)
+        self.drive_motor_pid.setReference(
+            state_speed, rev.SparkLowLevel.ControlType.kVelocity, rev.ClosedLoopSlot.kSlot0,
+            self.drive_motor_feedforward.calculate(current_speed, state_speed)
+        )
 
     def set_motor_stop_mode(self, to_drive: bool, to_break: bool) -> None:
         """
