@@ -101,6 +101,7 @@ class RobotSwerve:
         }
 
         # Telemetry setup
+        wpilib.SmartDashboard.putNumber("Drivetrain speed", 1)
         self.enableTelemetry = wpilib.SmartDashboard.getBoolean("enableTelemetry", True)
         if self.enableTelemetry:
             self.telemetry = Telemetry(
@@ -163,7 +164,7 @@ class RobotSwerve:
 
     def teleopInit(self):
         self.table.putNumber("pressedKey", -1)
-        wpilib.SmartDashboard.putNumber("Drivetrain speed", 1)
+        
         self.keys = {0: commands2.cmd.print_("Key 0 pressed"),
                      1: commands2.cmd.print_("Key 1 pressed"),
                      2: commands2.cmd.print_("Key 2 pressed"),
@@ -301,7 +302,6 @@ class RobotSwerve:
         self.keyPressed = self.table.getNumber("pressedKey", -1)
         self.heartbeat = self.table.getNumber("Stream Deck Heartbeat", 0)
         self.speedMultiplier = wpilib.SmartDashboard.getNumber("Drivetrain speed", 1)
-        wpilib.SmartDashboard.putNumber("Input validation swerve", self.speedMultiplier)
         # if(self.speedMultiplier < 0):
         #     self.speedMultiplier = 0
         # elif(self.speedMultiplier > 1):
