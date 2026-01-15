@@ -12,11 +12,10 @@ from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
 
 # Third-party imports
 import commands2
-import ntcore
 import wpilib
 import wpimath
 from commands2.button import Trigger
-from pathplannerlib.auto import AutoBuilder, NamedCommands
+from pathplannerlib.auto import AutoBuilder
 from pathplannerlib.path import PathPlannerPath
 
 class RobotSwerve:
