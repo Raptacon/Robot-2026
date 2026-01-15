@@ -6,7 +6,6 @@ from typing import Callable
 
 # Internal imports
 from data.telemetry import Telemetry
-from constants import PoseOptions, MechConsts
 from vision import Vision
 from commands.default_swerve_drive import DefaultDrive
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
@@ -70,7 +69,7 @@ class RobotSwerve:
         self.enableTelemetry = wpilib.SmartDashboard.getBoolean("enableTelemetry", True)
         if self.enableTelemetry:
             self.telemetry = Telemetry(
-                driveTrain=self.drivetrain, elevator=self.elevator, vision=self.vision, intake=self.intake_subsystem
+                driveTrain=self.drivetrain, vision=self.vision
             )
 
         wpilib.SmartDashboard.putString("Robot Version", self.getDeployInfo("git-hash"))
