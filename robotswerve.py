@@ -65,6 +65,7 @@ class RobotSwerve:
         }
 
         # Telemetry setup
+        wpilib.SmartDashboard.putNumber("Drivetrain speed", 1)
         self.enableTelemetry = wpilib.SmartDashboard.getBoolean("enableTelemetry", True)
         if self.enableTelemetry:
             self.telemetry = Telemetry(
@@ -138,15 +139,15 @@ class RobotSwerve:
                 lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftY(), 0.06),
                 lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftX(), 0.06),
                 lambda: wpimath.applyDeadband(-1 * self.driver_controller.getRightX(), 0.1),
-                lambda: not self.driver_controller.getRightBumperButton(),
-                lambda: self.driver_controller.getLeftBumperButton(),
-                lambda: self.driver_controller.getRightTriggerAxis() > 0.5
+                lambda: not self.driver_controller.getRightBumperButton()
             )
         )
 
     def teleopPeriodic(self):
         if self.driver_controller.getLeftTriggerAxis() > 0.5:
             commands2.CommandScheduler.getInstance().cancelAll()
+        self.speedMultiplier = wpilib.SmartDashboard.getNumber("Drivetrain speed", 1)
+        self.drivetrain.setSpeedMultiplier(self.speedMultiplier)
 
     def testInit(self):
         commands2.CommandScheduler.getInstance().cancelAll()
