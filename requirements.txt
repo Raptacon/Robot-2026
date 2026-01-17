@@ -8,8 +8,11 @@ coverage
 wheel
 # numpy
 robotpy[all]==2026.*
-phoenix6
-# photonlibpy
+robotpy-rev==2026.0.1
+robotpy-navx==2026.0.0b1
+robotpy-pathplannerlib==2026.1.1
+phoenix6==26.1.0
+photonlibpy==2026.0.1b38
 # pyntcore==2025.*
 
 
