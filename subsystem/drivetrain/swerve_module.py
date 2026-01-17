@@ -4,11 +4,12 @@ from typing import Tuple
 # Internal imports
 from config import OperatorRobotConfig
 from constants import SwerveModuleMk4iConsts, SwerveModuleMk4iL2Consts
-from raptacon3200.utils import sparkMaxUtils
+# from raptacon3200.utils import sparkMaxUtils
 
 # Third-party imports
 import phoenix6
 import rev
+from wpimath.controller import SimpleMotorFeedforwardMeters
 from wpimath.kinematics import SwerveModulePosition, SwerveModuleState
 from wpimath.geometry import Rotation2d, Translation2d
 
@@ -22,6 +23,69 @@ https://store.ctr-electronics.com/cancoder/
 Other defaults may be added in future
 """
 
+# sparkMaxUtils stand-in
+
+# Third-party imports
+import rev
+
+#############################
+# CONSTANTS ###################
+#############################
+
+
+class SparkMaxConstants:
+    faultRateMs: int = 50
+    motorPosRateMs: int = 50
+    appliedOutputRateMs: int = 50
+    motorTelmRateMs: int = 50
+    analogRateMs: int = 1833
+    altEncoderRateMs: int = 1050
+    dutyCycleEncRateMs: int = 2150
+    dutyCycleEncVelRateMs: int = 3150
+
+
+
+def configureSparkMaxCanRates(
+    config: rev.SparkMaxConfig,
+    drive_motor_flag: bool,
+    faultRateMs: int = SparkMaxConstants.faultRateMs,
+    motorPosRateMs: int = SparkMaxConstants.motorPosRateMs,
+    appliedOutputRateMs: int = SparkMaxConstants.appliedOutputRateMs
+) -> None:
+    """
+    Configure the data transfer type and rate for swerve drive SparkMaxs. Some configurations
+    are universal while others vary based on the given inputs.
+    Args:
+        config: the configuration object for the SparkMax to update
+        drive_motor_flag: if True, the SparkMax controls a drive motor on the swerve drive.
+            If False, it controls a steer motor
+        faultRateMs: the rate, in milliseconds, at which fault signals are transmitted
+        motorPosRateMs: the rate, in milliseconds, at which the position of the motor is transmitted
+        appliedOutputRateMs: the rate, in milliseconds, at which the motor's applied output is transmitted
+    Returns:
+        None - passed configuration is updated in-place
+    """
+    (
+        config.signals
+        # Fixed settings
+        .absoluteEncoderPositionAlwaysOn(False)
+        .absoluteEncoderVelocityAlwaysOn(False)
+        .analogPositionAlwaysOn(False)
+        .analogVelocityAlwaysOn(False)
+        .analogVoltageAlwaysOn(False)
+        .externalOrAltEncoderPositionAlwaysOn(False)
+        .externalOrAltEncoderVelocityAlwaysOn(False)
+        .primaryEncoderPositionAlwaysOn(True)
+        .IAccumulationAlwaysOn(False)
+
+        # Input settings
+        .primaryEncoderVelocityAlwaysOn(drive_motor_flag)
+        .primaryEncoderPositionPeriodMs(motorPosRateMs)
+        .appliedOutputPeriodMs(appliedOutputRateMs)
+        .faultsPeriodMs(faultRateMs)
+    )
+
+# end sparkMaxUtils
 
 class SwerveModuleMk4iSparkMaxNeoCanCoder:
     """
@@ -35,7 +99,8 @@ class SwerveModuleMk4iSparkMaxNeoCanCoder:
         invert_drive: bool = False,
         invert_steer: bool = False,
         encoder_calibration: float = 0,
-        swerve_level_constants: SwerveModuleMk4iConsts=SwerveModuleMk4iL2Consts()
+        swerve_level_constants: SwerveModuleMk4iConsts=SwerveModuleMk4iL2Consts(),
+        update_period: float = 0.05
     ) -> None:
         """
         Creates a new swerve module at a given location in the robot.
@@ -56,6 +121,7 @@ class SwerveModuleMk4iSparkMaxNeoCanCoder:
             encoder_calibration: the starting position of the absolute encoder when the long orientation of the wheel
                 follows the X (front-to-back) axis and the bevel faces left
             swerve_level_constants: physical constants that define properties of the swerve module
+            update_period: how often, in seconds, to update the feedforward controller on the drive motor
             
         Returns
             None: class initialization executed upon construction
@@ -81,6 +147,12 @@ class SwerveModuleMk4iSparkMaxNeoCanCoder:
         self.steer_motor_encoder = self.steer_motor.getEncoder()
 
         self.drive_motor_pid = self.drive_motor.getClosedLoopController()
+        self.drive_motor_feedforward = SimpleMotorFeedforwardMeters(
+            kS=0,
+            kV=self.constants.kNominalVoltage / self.constants.maxTranslationMPS,
+            kA=0,
+            dt=update_period
+        )
         self.steer_motor_pid = self.steer_motor.getClosedLoopController()
 
         # Configuration setup
@@ -131,7 +203,7 @@ class SwerveModuleMk4iSparkMaxNeoCanCoder:
         Returns:
             None - internal steer configuration is updated in-place
         """
-        sparkMaxUtils.configureSparkMaxCanRates(self.steer_motor_config, drive_motor_flag=False)
+        configureSparkMaxCanRates(self.steer_motor_config, drive_motor_flag=False)
         (
             self.steer_motor_config
             .inverted(invert)
@@ -144,7 +216,7 @@ class SwerveModuleMk4iSparkMaxNeoCanCoder:
 
         (
             self.steer_motor_config.closedLoop
-            .setFeedbackSensor(rev.ClosedLoopConfig.FeedbackSensor.kPrimaryEncoder)
+            .setFeedbackSensor(rev.FeedbackSensor.kPrimaryEncoder)
             .pid(*OperatorRobotConfig.swerve_steer_pid)
             .positionWrappingEnabled(True)
             .positionWrappingInputRange(0, 360.0)
@@ -169,7 +241,7 @@ class SwerveModuleMk4iSparkMaxNeoCanCoder:
         Returns:
             None - internal drive configuration is updated in-place
         """
-        sparkMaxUtils.configureSparkMaxCanRates(self.drive_motor_config, drive_motor_flag=True)
+        configureSparkMaxCanRates(self.drive_motor_config, drive_motor_flag=True)
         (
             self.drive_motor_config
             .inverted(invert)
@@ -182,7 +254,7 @@ class SwerveModuleMk4iSparkMaxNeoCanCoder:
 
         (
             self.drive_motor_config.closedLoop
-            .setFeedbackSensor(rev.ClosedLoopConfig.FeedbackSensor.kPrimaryEncoder)
+            .setFeedbackSensor(rev.FeedbackSensor.kPrimaryEncoder)
             .pidf(*OperatorRobotConfig.swerve_drive_pid)
         )
 
@@ -212,12 +284,12 @@ class SwerveModuleMk4iSparkMaxNeoCanCoder:
             motor_set = self.drive_motor
             config_use = self.drive_motor_config
 
-        write_mode = rev.SparkBase.PersistMode.kNoPersistParameters
+        write_mode = rev.PersistMode.kNoPersistParameters
         if burn_flash:
-            write_mode = rev.SparkBase.PersistMode.kPersistParameters
+            write_mode = rev.PersistMode.kPersistParameters
 
         motor_set.configure(
-            config_use, rev.SparkBase.ResetMode.kNoResetSafeParameters,
+            config_use, rev.ResetMode.kNoResetSafeParameters,
             write_mode
         )
 
@@ -303,6 +375,8 @@ class SwerveModuleMk4iSparkMaxNeoCanCoder:
         Returns:
             None - PID controllers are updated in-place with new setpoints
         """
+        current_speed = self.current_state().speed
+
         encoder_rotation = Rotation2d.fromDegrees(self.current_raw_absolute_steer_position())
         state.optimize(encoder_rotation)
         state_degrees = state.angle.degrees()
@@ -315,7 +389,10 @@ class SwerveModuleMk4iSparkMaxNeoCanCoder:
             state_speed *= cosine_scaler
 
         self.steer_motor_pid.setReference(state_degrees, rev.SparkLowLevel.ControlType.kPosition, rev.ClosedLoopSlot.kSlot0)
-        self.drive_motor_pid.setReference(state_speed, rev.SparkLowLevel.ControlType.kVelocity, rev.ClosedLoopSlot.kSlot0)
+        self.drive_motor_pid.setReference(
+            state_speed, rev.SparkLowLevel.ControlType.kVelocity, rev.ClosedLoopSlot.kSlot0,
+            self.drive_motor_feedforward.calculate(current_speed, state_speed)
+        )
 
     def set_motor_stop_mode(self, to_drive: bool, to_break: bool) -> None:
         """
