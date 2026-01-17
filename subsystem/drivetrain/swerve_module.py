@@ -46,7 +46,6 @@ class SparkMaxConstants:
 
 
 def configureSparkMaxCanRates(
-    self,
     config: rev.SparkMaxConfig,
     drive_motor_flag: bool,
     faultRateMs: int = SparkMaxConstants.faultRateMs,
@@ -204,7 +203,7 @@ class SwerveModuleMk4iSparkMaxNeoCanCoder:
         Returns:
             None - internal steer configuration is updated in-place
         """
-        self.configureSparkMaxCanRates(self.steer_motor_config, drive_motor_flag=False)
+        configureSparkMaxCanRates(self.steer_motor_config, drive_motor_flag=False)
         (
             self.steer_motor_config
             .inverted(invert)
@@ -242,7 +241,7 @@ class SwerveModuleMk4iSparkMaxNeoCanCoder:
         Returns:
             None - internal drive configuration is updated in-place
         """
-        self.configureSparkMaxCanRates(self.drive_motor_config, drive_motor_flag=True)
+        configureSparkMaxCanRates(self.drive_motor_config, drive_motor_flag=True)
         (
             self.drive_motor_config
             .inverted(invert)
