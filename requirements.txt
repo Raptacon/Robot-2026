@@ -6,10 +6,11 @@ modulegraph
 flake8
 coverage
 wheel
-numpy
-robotpy[all]==2025.*
-photonlibpy
-pyntcore==2025.*
+# numpy
+robotpy[all]==2026.*
+phoenix6
+# photonlibpy
+# pyntcore==2025.*
 
 
-raptacon3200>=2025.0.1
+# raptacon3200>=2025.0.1
