@@ -216,7 +216,7 @@ class SwerveModuleMk4iSparkMaxNeoCanCoder:
 
         (
             self.steer_motor_config.closedLoop
-            .setFeedbackSensor(rev.ClosedLoopConfig.FeedbackSensor.kPrimaryEncoder)
+            .setFeedbackSensor(rev.FeedbackSensor.kPrimaryEncoder)
             .pid(*OperatorRobotConfig.swerve_steer_pid)
             .positionWrappingEnabled(True)
             .positionWrappingInputRange(0, 360.0)
@@ -254,7 +254,7 @@ class SwerveModuleMk4iSparkMaxNeoCanCoder:
 
         (
             self.drive_motor_config.closedLoop
-            .setFeedbackSensor(rev.ClosedLoopConfig.FeedbackSensor.kPrimaryEncoder)
+            .setFeedbackSensor(rev.FeedbackSensor.kPrimaryEncoder)
             .pidf(*OperatorRobotConfig.swerve_drive_pid)
         )
 
@@ -284,12 +284,12 @@ class SwerveModuleMk4iSparkMaxNeoCanCoder:
             motor_set = self.drive_motor
             config_use = self.drive_motor_config
 
-        write_mode = rev.SparkBase.PersistMode.kNoPersistParameters
+        write_mode = rev.PersistMode.kNoPersistParameters
         if burn_flash:
-            write_mode = rev.SparkBase.PersistMode.kPersistParameters
+            write_mode = rev.PersistMode.kPersistParameters
 
         motor_set.configure(
-            config_use, rev.SparkBase.ResetMode.kNoResetSafeParameters,
+            config_use, rev.ResetMode.kNoResetSafeParameters,
             write_mode
         )
 
