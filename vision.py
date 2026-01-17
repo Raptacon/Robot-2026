@@ -2,7 +2,7 @@ from typing import Callable, List, Optional, Tuple
 
 from wpilib import SmartDashboard
 from wpimath.geometry import Pose2d, Transform3d, Rotation3d, Translation3d
-from photonlibpy import PhotonCamera, PhotonPoseEstimator, PoseStrategy
+from photonlibpy import PhotonCamera, PhotonPoseEstimator
 from photonlibpy.targeting import PhotonPipelineResult, PhotonTrackedTarget
 from robotpy_apriltag import AprilTagField, AprilTagFieldLayout
 
@@ -23,8 +23,6 @@ class Vision:
         self.cameraPoseEstimators = [
             PhotonPoseEstimator(
                 self.field_layout,
-                PoseStrategy.MULTI_TAG_PNP_ON_COPROCESSOR,
-                camera,
                 Transform3d(Translation3d(*camToRobotTranslation), Rotation3d.fromDegrees(*camToRobotRotation))
             )
             for camera, camToRobotTranslation, camToRobotRotation in zip(
