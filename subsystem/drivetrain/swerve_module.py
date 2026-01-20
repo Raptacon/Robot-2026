@@ -26,7 +26,7 @@ Other defaults may be added in future
 # sparkMaxUtils stand-in
 
 # Third-party imports
-import rev
+
 
 #############################
 # CONSTANTS ###################
