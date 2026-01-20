@@ -28,14 +28,14 @@ class RobotConstants:
 
 class SwerveDriveConsts(RobotConstants):
     # where the wheel is compared to the center of the robot in meters
-    moduleFrontLeftX: float = 0.31115
-    moduleFrontLeftY: float = 0.26035
-    moduleFrontRightX: float = 0.31115
-    moduleFrontRightY: float = -0.26035
-    moduleBackLeftX: float = -0.31115
-    moduleBackLeftY: float = 0.26035
-    moduleBackRightX: float = -0.31115
-    moduleBackRightY: float = -0.26035
+    moduleFrontLeftX: float = 0.264
+    moduleFrontLeftY: float = 0.287
+    moduleFrontRightX: float = 0.264
+    moduleFrontRightY: float = -0.287
+    moduleBackLeftX: float = -0.264
+    moduleBackLeftY: float = 0.287
+    moduleBackRightX: float = -0.264
+    moduleBackRightY: float = -0.287
 
     # inverts if the module or gyro does not rotate counterclockwise positive
     invertGyro: bool = False
