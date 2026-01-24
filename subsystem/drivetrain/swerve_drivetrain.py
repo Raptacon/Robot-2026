@@ -12,6 +12,7 @@ from commands2 import Subsystem
 from pathplannerlib.auto import AutoBuilder
 from pathplannerlib.config import ModuleConfig, RobotConfig, PIDConstants
 from pathplannerlib.controller import PPHolonomicDriveController
+from wpilib import SmartDashboard
 from wpilib import DriverStation
 from wpimath.estimator import SwerveDrive4PoseEstimator
 from wpimath.geometry import Pose2d, Rotation2d, Rotation3d, Translation2d
@@ -447,3 +448,16 @@ class SwerveDrivetrain(Subsystem):
         (disabled, autonomous, teleoperated, test).
         """
         self.update_pose_estimator()
+        SmartDashboard.putNumber("gyro val", self.gyroscope.getRotation3d().Z())
+        SmartDashboard.putNumber("top left abs", self.swerve_modules[0].absolute_encoder.get_absolute_position(refresh=True).value_as_double)
+        SmartDashboard.putNumber("top right abs", self.swerve_modules[1].absolute_encoder.get_absolute_position(refresh=True).value_as_double)
+        SmartDashboard.putNumber("bottom left abs", self.swerve_modules[2].absolute_encoder.get_absolute_position(refresh=True).value_as_double)
+        SmartDashboard.putNumber("bottom right abs", self.swerve_modules[3].absolute_encoder.get_absolute_position(refresh=True).value_as_double)
+        SmartDashboard.putNumber("top left drive", self.swerve_modules[0].drive_motor_encoder.getPosition())
+        SmartDashboard.putNumber("top right drive", self.swerve_modules[1].drive_motor_encoder.getPosition())
+        SmartDashboard.putNumber("bottom left drive", self.swerve_modules[2].drive_motor_encoder.getPosition())
+        SmartDashboard.putNumber("bottom right drive", self.swerve_modules[3].drive_motor_encoder.getPosition())
+        SmartDashboard.putNumber("top left steer", self.swerve_modules[0].steer_motor_encoder.getPosition())
+        SmartDashboard.putNumber("top right steer", self.swerve_modules[1].steer_motor_encoder.getPosition())
+        SmartDashboard.putNumber("bottom left steer", self.swerve_modules[2].steer_motor_encoder.getPosition())
+        SmartDashboard.putNumber("bottom right steer", self.swerve_modules[3].steer_motor_encoder.getPosition())
