@@ -3,7 +3,7 @@ import phoenix5
 import wpilib
 
 from subsystem.intakeactions import IntakeSubsystem
-
+from commands2.button import Trigger
 
 class MyRobot(commands2.TimedCommandRobot):
     """
@@ -39,6 +39,8 @@ class MyRobot(commands2.TimedCommandRobot):
 
         MyRobot.intake = IntakeSubsystem()
 
+        self.intakeController = wpilib.XboxController(0);
+    
 
     def disabledInit(self):
         """
@@ -91,10 +93,20 @@ class MyRobot(commands2.TimedCommandRobot):
         The "init" teleoperated method is often used to provide a standard
         instruction interface for a select choice of robot mechanisms.
         """
-        
 
+        Trigger(self.intakeController.getYButtonPressed).onTrue(
+            IntakeSubsystem.stowIntake()
+        )
+        Trigger(self.intakeController.getAButtonPressed).onTrue(
+            IntakeSubsystem.deployIntake()
+        )
+        Trigger(self.intakeController.getXButtonPressed).onTrue(
+            IntakeSubsystem.deactivateRoller()
+        )
+        Trigger(self.intakeController.getBButtonPressed).onTrue(
+            IntakeSubsystem.activateRoller()
+        )
 
-        pass
 
     def teleopPeriodic(self):
         """
@@ -107,7 +119,7 @@ class MyRobot(commands2.TimedCommandRobot):
         """
         
         self.intake.activateRoller();
-    
+        
 
         # ***
 
