@@ -1,7 +1,6 @@
 import wpilib
 import commands2
 import rev
-import pyfrc
 import time
 import os
 

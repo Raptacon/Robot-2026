@@ -4,11 +4,9 @@ Collection of numeric constants that define physical properties of the robot
 
 # Native imports
 import math
-
+from enum import Enum
 
 # Third-Party Imports
-
-
 
 #############################
 # ROBOT ###################
@@ -120,3 +118,21 @@ class SwerveModuleMk4iL2Consts(SwerveModuleMk4iConsts):
     steerVelocityConversionFactor: float = steerPositionConversionFactor / 60.0
 
     moduleType: str = "Mk4i_L2"
+
+#############################
+# INTAKE ###################
+#############################
+
+
+class CaptainPlanetConsts:
+    kMotorCanId = 13
+    kMotorInverted = False
+    kCurrentLimitAmps = 30
+    kFrontBreakBeam = 0
+    kBackBreakBeam = 1
+    kDefaultSpeed = 0.15
+    kOperatorDampener = 0.15
+    class BreakBeamActionOptions(Enum):
+        DONOTHING = 1
+        TOFRONT = 2
+        TOBACK = 3
