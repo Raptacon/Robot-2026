@@ -2,12 +2,11 @@ from typing import Callable, List, Optional, Tuple
 
 from wpilib import SmartDashboard
 from wpimath.geometry import Pose2d, Transform3d, Rotation3d, Translation3d
-from photonlibpy import PhotonCamera, PhotonPoseEstimator, PoseStrategy
+from photonlibpy import PhotonCamera, PhotonPoseEstimator
 from photonlibpy.targeting import PhotonPipelineResult, PhotonTrackedTarget
 from robotpy_apriltag import AprilTagField, AprilTagFieldLayout
 
 from config import OperatorRobotConfig
-from lookups.reef_positions import reef_position_lookup
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
 
 
@@ -20,13 +19,10 @@ class Vision:
         self.cameras = [PhotonCamera(left_cam_name), PhotonCamera(right_cam_name)]
         self.drive = driveTrain
         self.field_layout = AprilTagFieldLayout.loadField(AprilTagField.k2025ReefscapeWelded)
-        self.reef_tag_ids = {positions["tag"] for positions in reef_position_lookup.values()}
 
         self.cameraPoseEstimators = [
             PhotonPoseEstimator(
                 self.field_layout,
-                PoseStrategy.MULTI_TAG_PNP_ON_COPROCESSOR,
-                camera,
                 Transform3d(Translation3d(*camToRobotTranslation), Rotation3d.fromDegrees(*camToRobotRotation))
             )
             for camera, camToRobotTranslation, camToRobotRotation in zip(
