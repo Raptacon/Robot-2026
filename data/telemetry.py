@@ -1,9 +1,6 @@
 # Internal imports
 from config import OperatorRobotConfig
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
-from subsystem.diverCarlElevator import DiverCarlElevator
-from subsystem.diverCarlChistera import DiverCarlChistera
-from subsystem.captainIntake import CaptainIntake
 from vision import Vision
 
 # Third-party imports
@@ -54,44 +51,12 @@ for i in range(len(OperatorRobotConfig.swerve_module_channels)):
         ]
     )
 
-elevatorEntries = [
-    ["elevatorCurrentHeightAboveZero", FloatLogEntry, "/positions"],
-    ["elevatorCurrentHeight", FloatLogEntry, "/positions"],
-    ["elevatorCurrentGoalHeight", FloatLogEntry, "/positions"],
-    ["elevatorCurrentGoalHeightAboveZero", FloatLogEntry, "/positions"],
-    ["elevatorAtGoal", BooleanLogEntry, "/positions/atgoal"],
-    ["elevatorErrorFromGoal", FloatLogEntry, "/positions"],
-    ["elevatorAtTopLimit", BooleanLogEntry, "/limits"],
-    ["elevatorAtBottomLimit", BooleanLogEntry, "/limits"],
-    ["elevatorMotorCurrent", FloatLogEntry, "/output"],
-    ["elevatorMotorOutput", FloatLogEntry, "/output"],
-    ["elevatorMotorVelocity", FloatLogEntry, "/output"],
-]
-
-armEntries = [
-    ["armPositionArc", FloatLogEntry, "/positions"],
-    ["armSetArc", FloatLogEntry, "/positions"],
-    ["armReqArc", FloatLogEntry, "/positions"],
-    ["armAtGoal", BooleanLogEntry, "/positions"],
-    ["armError", FloatLogEntry, "/positions"],
-    ["armAtHardlimit", BooleanLogEntry, "/limits"],
-    ["armDisabled", BooleanLogEntry, "/output"],
-]
-
 driverStationEntries = [
     ["alliance", StringLogEntry, "alliance"],
     ["autonomous", BooleanLogEntry, "autonomous"],
     ["teleop", BooleanLogEntry, "teleop"],
     ["test", BooleanLogEntry, "test"],
     ["enabled", BooleanLogEntry, "enabled"],
-]
-
-intakeEntries = [
-    ["intakeFrontBreakBeam", BooleanLogEntry, "/breakbeams"],
-    ["intakeBackBreakBeam", BooleanLogEntry, "/breakbeams"],
-    ["intakeMotorCurrent", FloatLogEntry, "/output"],
-    ["intakeMotorOutput", FloatLogEntry, "/output"],
-    ["intakeMotorTemperature", FloatLogEntry, "/output"],
 ]
 
 visionEntries = [
@@ -107,10 +72,7 @@ class Telemetry:
         driverController: wpilib.XboxController = None,
         mechController: wpilib.XboxController = None,
         driveTrain: SwerveDrivetrain = None,
-        elevator: DiverCarlElevator = None,
         driverStation: wpilib.DriverStation = None,
-        arm: DiverCarlChistera = None,
-        intake: CaptainIntake = None,
         vision: Vision = None
     ):
         self.driverController = driverController
@@ -118,10 +80,7 @@ class Telemetry:
         self.odometryPosition = driveTrain.pose_estimator
         self.driveTrain = driveTrain
         self.swerveModules = driveTrain.swerve_modules
-        self.elevator = elevator
         self.driverStation = driverStation
-        self.arm = arm
-        self.intake = intake
         self.vision = vision
 
         self.networkTable = NetworkTableInstance.getDefault()
@@ -178,16 +137,10 @@ class Telemetry:
                 entryname,
                 entrytype(self.datalog, "rawswervedrivetrain/" + logname),
             )
-        for entryname, entrytype, logname in elevatorEntries:
-            setattr(self, entryname, entrytype(self.datalog, "elevator/" + logname))
         for entryname, entrytype, logname in driverStationEntries:
             setattr(
                 self, entryname, entrytype(self.datalog, "driverstation/" + logname)
             )
-        for entryname, entrytype, logname in armEntries:
-            setattr(self, entryname, entrytype(self.datalog, "arm/" + logname))
-        for entryname, entrytype, logname in intakeEntries:
-            setattr(self, entryname, entrytype(self.datalog, "intake/" + logname))
 
         if self.driverStation:
             self.driverStation.startDataLog(self.datalog)
@@ -303,28 +256,6 @@ class Telemetry:
                     swerveModule.current_state().speed
                 )
 
-    def getElevatorInputs(self):
-        """
-        Retrieves values reflecting the current state of the elevator and information about
-        the goal position of the elevator
-        """
-        if self.elevator is not None:
-            self.elevatorCurrentHeightAboveZero.append(
-                self.elevator.current_height_above_zero
-            )
-            self.elevatorCurrentHeight.append(self.elevator.current_height)
-            self.elevatorCurrentGoalHeight.append(self.elevator.current_goal_height)
-            self.elevatorCurrentGoalHeightAboveZero.append(
-                self.elevator.current_goal_height_above_zero
-            )
-            self.elevatorAtGoal.append(self.elevator.at_goal)
-            self.elevatorErrorFromGoal.append(self.elevator.error_from_goal)
-            self.elevatorAtTopLimit.append(self.elevator.at_top_limit)
-            self.elevatorAtBottomLimit.append(self.elevator.at_bottom_limit)
-            self.elevatorMotorCurrent.append(self.elevator.motor_current)
-            self.elevatorMotorOutput.append(self.elevator.motor_output)
-            self.elevatorMotorVelocity.append(self.elevator.motor_velocity)
-
     def getDriverStationInputs(self):
         """
         Gets the inputs of some match/general robot things,
@@ -343,29 +274,6 @@ class Telemetry:
             self.test.append(self.driverStation.isTest())
             self.enabled.append(self.driverStation.isEnabled())
 
-    def getArmInputs(self):
-        self.armPositionArc.append(self.arm.getArc())
-        self.armSetArc.append(self.arm.getSetArc())
-        self.armReqArc.append(self.arm._requestedGoal)
-        self.armAtGoal.append(self.arm.atGoal())
-        self.armError.append(self.arm.getError())
-        self.armAtHardlimit.append(self.arm.getForwardLimit())
-        self.armDisabled.append(self.arm.getDisabled())
-
-    def getIntakeInputs(self):
-        if self.intake is not None:
-            self.intakeFrontBreakBeam.append(
-                self.intake.frontBeamBroken
-            )
-            self.intakeBackBreakBeam.append(
-                self.intake.backBeamBroken
-            )
-            self.intakeMotorTemperature.append(
-                self.intake.intakeMotor.getMotorTemperature()
-            )
-            self.intakeMotorCurrent.append(self.intake.intakeMotor.getOutputCurrent())
-            self.intakeMotorOutput.append(self.intake.intakeMotor.getAppliedOutput())
-
     def getVisionInputs(self):
         if self.vision is not None:
             if self.vision.cameraPoseEstimates[0]:
@@ -379,8 +287,6 @@ class Telemetry:
         self.getOdometryInputs()
         self.getFullSwerveState()
         self.getRawSwerveInputs()
-        self.getElevatorInputs()
-        self.getIntakeInputs()
         self.getVisionInputs()
         self.getDriverStationInputs()
 
