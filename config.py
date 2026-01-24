@@ -21,7 +21,7 @@ class OperatorRobotConfig:
         9.751359375 / 360.0,  196.3286719 / 360.0,  347.9217188 / 360.0, 83.2865625 / 360.0
     )
     swerve_steer_pid: Tuple[float] = (0.007, 0, 0)
-    swerve_drive_pid: Tuple[float] = (0.0020645, 0, 0, 1 / 473)
+    swerve_drive_pid: Tuple[float] = (0, 0, 0, 0) # TODO: tune PIDs
     pathplanner_translation_pid: Tuple[float] = (4.0, 0.0, 0.0)
     pathplanner_rotation_pid: Tuple[float] = (5.0, 0.0, 0.0)
 

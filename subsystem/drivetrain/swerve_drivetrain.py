@@ -448,3 +448,8 @@ class SwerveDrivetrain(Subsystem):
         (disabled, autonomous, teleoperated, test).
         """
         self.update_pose_estimator()
+        # TODO: delete prints
+        SmartDashboard.putNumber("top left drive", self.swerve_modules[0].drive_motor_encoder.getVelocity())
+        SmartDashboard.putNumber("top right drive", self.swerve_modules[1].drive_motor_encoder.getVelocity())
+        SmartDashboard.putNumber("bottom left drive", self.swerve_modules[2].drive_motor_encoder.getVelocity())
+        SmartDashboard.putNumber("bottom right drive", self.swerve_modules[3].drive_motor_encoder.getVelocity())

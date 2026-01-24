@@ -151,6 +151,10 @@ class RobotSwerve:
 
     def testInit(self):
         commands2.CommandScheduler.getInstance().cancelAll()
+        self.drivetrain.swerve_modules[0].drive_motor.set(1)
+        self.drivetrain.swerve_modules[1].drive_motor.set(1)
+        self.drivetrain.swerve_modules[2].drive_motor.set(1)
+        self.drivetrain.swerve_modules[3].drive_motor.set(1)
 
     def testPeriodic(self):
         pass
