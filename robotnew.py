@@ -1,5 +1,4 @@
 import commands2
-import phoenix5
 import wpilib
 
 from subsystem.intakeactions import IntakeSubsystem
@@ -37,9 +36,9 @@ class MyRobot(commands2.TimedCommandRobot):
         # This lets us cleanly refer to the functionality in the timed robot class
         super().__init__()
 
-        MyRobot.intake = IntakeSubsystem()
+        self.intake = IntakeSubsystem()
 
-        self.intakeController = wpilib.XboxController(0);
+        self.intakeController = wpilib.XboxController(0)
     
 
     def disabledInit(self):
@@ -95,16 +94,16 @@ class MyRobot(commands2.TimedCommandRobot):
         """
 
         Trigger(self.intakeController.getYButtonPressed).onTrue(
-            IntakeSubsystem.stowIntake()
+            commands2.cmd.runOnce(self.intake.stowIntake, self.intake)
         )
         Trigger(self.intakeController.getAButtonPressed).onTrue(
-            IntakeSubsystem.deployIntake()
+            commands2.cmd.runOnce(self.intake.deployIntake, self.intake)
         )
         Trigger(self.intakeController.getXButtonPressed).onTrue(
-            IntakeSubsystem.deactivateRoller()
+            commands2.cmd.runOnce(self.intake.deactivateRoller, self.intake)
         )
         Trigger(self.intakeController.getBButtonPressed).onTrue(
-            IntakeSubsystem.activateRoller()
+            commands2.cmd.runOnce(self.intake.activateRoller, self.intake)
         )
 
 
@@ -118,7 +117,7 @@ class MyRobot(commands2.TimedCommandRobot):
         with the drivetrain and/or to actuate our mechanisms.
         """
         
-        self.intake.activateRoller();
+        self.intake.activateRoller()
         
 
         # ***
@@ -147,4 +146,4 @@ class MyRobot(commands2.TimedCommandRobot):
 # this .py script the "main" file of our program
 if __name__ == "__main__":
     # WPILib will operate the robot according to the logic we defined in our class
-    wpilib.run(WestCoastRobot)
+    wpilib.run(MyRobot)
