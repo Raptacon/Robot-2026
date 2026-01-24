@@ -1,105 +1,138 @@
-#!/usr/bin/env python3
-
-import typing
-import inspect
 import commands2
-
-from robotswerve import RobotSwerve
+import phoenix5
 import wpilib
-import logging
+
+from subsystem.intakeactions import IntakeSubsystem
+
 
 class MyRobot(commands2.TimedCommandRobot):
     """
-    Our default robot class, pass it to wpilib.run
-    Command v2 robots are encouraged to inherit from TimedCommandRobot, which
-    has an implementation of (self) -> None:
-    which runs the scheduler for you
+    We've created a "WestCoastRobot" class to express all of our robot code to
+    WPILib. This class has a number of different methods, each representing
+    different phases of booting up the robot and progressing through match gameplay.
+
+    WPILib strongly follows object-oriented programming principles, and one such
+    principle we see here is inheritance. "Inheritance" is when one class brings
+    in the data attributes and methods of another. For example, if we make a
+    class to represent a mammal and say that a mammal is warm-blooded, then when
+    we make a class to represent a dog and inherit from the mammal class,
+    the dog will also be warm blooded.
+
+    Here, our robot class inherits from a generic timed robot class that we
+    brought in from the commands2 part of the RobotPy ecosystem. Any robot
+    built off of this timed robot class will execute code based on an internal
+    clock that ticks on a fixed interval. We'll explore this more later when we
+    start looking at autonomous routines.
     """
-    # 50 ms default period
-    kDefaultPeriod: typing.ClassVar[float] = 50.0
-    autonomousCommand: typing.Optional[commands2.Command] = None
-
-    def __init__(self) -> None:
-
-        self.__errorLogged = False
-        self.__lastError = None
-        self.__errorCatchedCount = 0
-
-        # setup our scheduling period. Defaulting to 20 Hz (50 ms)
-        super().__init__(period=MyRobot.kDefaultPeriod / 1000)
-        # Instantiate our RobotContainer. This will perform all our button bindings, and put our
-        # autonomous chooser on the dashboard.
-        if not hasattr(self, "container"):
-            # to work around sim creating motors during tests, assign to class and if already created keep using created robot class for tests.
-            # during robot running, this is only every called once
-            MyRobot.container = RobotSwerve(lambda: self.isDisabled)
-
-    def robotInit(self) -> None:
+    def robotInit(self):
         """
-        This function is run when the robot is first started up and should be used for any
-        initialization code.
+        The code in robotInit is executed as soon as the robot is powered on or
+        when new code is deployed. It is typically used to set up virtual
+        representations of physical aspects of the robot, like motors, drivetrains,
+        sensors, and much more!
+
+        When creating instance attributes, we'll use self.<attribute_name>
+        syntax, like self.a_specific_dog. This lets us create data elements within a specific object.
+        """
+        # This lets us cleanly refer to the functionality in the timed robot class
+        super().__init__()
+
+        MyRobot.intake = IntakeSubsystem()
+
+
+    def disabledInit(self):
+        """
+        This code executes immediately when the robot is switched into its disabled
+        state. When the robot is disabled, it should stop functioning and do
+        nothing. This state is often used to ensure safety.
+        """
+        # "pass" is a Python keyword saying that we are doing nothing in this method
+        pass
+
+    def disabledPeriodic(self):
+        """
+        This code executes on every internal clock tick while the robot is in its
+        disabled state. You can think of this as a time-spaced "while" loop that
+        keeps running until the robot exists the disabled state. 
+        """
+        pass
+
+    def autonomousInit(self):
+        """
+        This code executes immediately when the robot is switched into its autonomous
+        state. When the robot is autonomous, it operates with absolutely zero human
+        input. FRC matches often start with a 15-second autonomous period.
+
+        The "init" autonomous method is often used to set up the starting positional
+        parameters of the robot and provide a standard set of instructions.
         """
 
-    def robotPeriodic(self) -> None:
-        self.__callAndCatch(self.container.robotPeriodic)
+        pass
 
-        wpilib.SmartDashboard.putNumber("Code Crash Count", self.__errorCatchedCount)
+    def autonomousPeriodic(self):
+        """
+        This code executes on every internal clock tick while the robot is in its
+        autonomous state. You can think of this as a time-spaced "while" loop that
+        keeps running until the robot exists the autonomous state.
 
-    def disabledInit(self) -> None:
-        """This function is called once each time the robot enters Disabled mode."""
-        self.container.disabledInit()
-
-    def disabledPeriodic(self) -> None:
-        """This function is called periodically when disabled"""
-        self.container.disabledPeriodic()
-
-    def autonomousInit(self) -> None:
-        """This autonomous runs the autonomous command selected by your RobotContainer class."""
-        self.container.autonomousInit()
-
-    def autonomousPeriodic(self) -> None:
-        """This function is called periodically during autonomous"""
-        self.__callAndCatch(self.container.autonomousPeriodic)
+        The "periodic" autonomous method is often used to perform a sequence of
+        specific operations as the robot progresses through its autonomous routine.
+        """
+        pass
 
     def teleopInit(self) -> None:
-        self.container.teleopInit()
+        """
+        This code executes immediately when the robot is switched into its
+        teleoperated state. When the robot is teleoperated, it operates according
+        to explicit instructions given by a human driver. FRC matches often have
+        a 2 minute and 15 second teleoperated period.
 
-    def teleopPeriodic(self) -> None:
-        """This function is called periodically during operator control"""
-        self.__callAndCatch(self.container.teleopPeriodic)
-
-    def testInit(self) -> None:
-        self.container.testInit()
-
-    def testPeriodic(self) -> None:
-        self.container.testPeriodic()
-
-    def getRobot(self) -> RobotSwerve:
-        return self.container
-
-    def __callAndCatch(self, func: typing.Callable[[], None]) -> None:
-        try:
-            #Invoke the function
-            func()
-
-            #if we returned, it didnt crash so clear the last error if it was set
-            if self.__errorLogged and self.__lastError is not None:
-                logging.info(f"Logged error cleared for: {str(self.__lastError)}")
-                self.__errorLogged = False
-                self.__lastError = None
-        except Exception as e:
-            self.__lastError = e
-            name = inspect.currentframe().f_back.f_code.co_name
-            if self.isSimulation():
-                raise e
-
-            self.__errorCatchedCount = self.__errorCatchedCount + 1
-
-            if not self.__errorLogged:
-                logging.exception(f"(CRASH CATCH) {name} error: ")
-                self.__errorLogged = True
+        
+        The "init" teleoperated method is often used to provide a standard
+        instruction interface for a select choice of robot mechanisms.
+        """
+        
 
 
+        pass
+
+    def teleopPeriodic(self):
+        """
+        This code executes on every internal clock tick while the robot is in its
+        teleoperated state. You can think of this as a time-spaced "while" loop that
+        keeps running until the robot exists the teleoperated state.
+
+        The "periodic" teleoperated method is often used perform specific manuevers
+        with the drivetrain and/or to actuate our mechanisms.
+        """
+        
+        self.intake.activateRoller();
+    
+
+        # ***
+
+    def testInit(self):
+        """
+        The test state is used to debug a specific block of code. We use this
+        to try out some new code that we've written while avoiding conflicts
+        with the existing code in the other state methods.
+        """
+        pass
+
+    def testPeriodic(self):
+        """
+        The test state is used to debug a specific block of code. We use this
+        to try out some new code that we've written while avoiding conflicts
+        with the existing code in the other state methods.
+        """
+        pass
+
+
+# This is fancy Python syntax telling the interpreter to run the indented code block
+# when executing this script.
+
+# If you're familiar with the "main" file in Java, this code effectively makes
+# this .py script the "main" file of our program
 if __name__ == "__main__":
-    print("Please run python -m robotpy <args>")
-    exit(1)
+    # WPILib will operate the robot according to the logic we defined in our class
+    wpilib.run(WestCoastRobot)
