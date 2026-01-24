@@ -12,11 +12,10 @@ from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
 
 # Third-party imports
 import commands2
-import ntcore
 import wpilib
 import wpimath
 from commands2.button import Trigger
-from pathplannerlib.auto import AutoBuilder, NamedCommands
+from pathplannerlib.auto import AutoBuilder
 from pathplannerlib.path import PathPlannerPath
 
 class RobotSwerve:
@@ -28,13 +27,13 @@ class RobotSwerve:
 
     def __init__(self, is_disabled: Callable[[], bool]) -> None:
         # networktables setup
-        self.inst = ntcore.NetworkTableInstance.getDefault()
-        self.table = self.inst.getTable("Stream_Deck")
         self.field = wpilib.Field2d()
         wpilib.SmartDashboard.putData("Field", self.field)
 
         # Subsystem instantiation
         self.drivetrain = SwerveDrivetrain()
+        
+        # Alliance instantiaion
         self.alliance = "red" if self.drivetrain.flip_to_red_alliance() else "blue"
 
         # Vision setup
@@ -55,9 +54,6 @@ class RobotSwerve:
         self.driver_controller = wpilib.XboxController(0)
         self.mech_controller = wpilib.XboxController(1)
 
-        # Register Named Commands
-
-
         # Autonomous setup
         self.auto_command = None
         self.auto_chooser = AutoBuilder.buildAutoChooser()
@@ -69,6 +65,7 @@ class RobotSwerve:
         }
 
         # Telemetry setup
+        wpilib.SmartDashboard.putNumber("Drivetrain speed", 1)
         self.enableTelemetry = wpilib.SmartDashboard.getBoolean("enableTelemetry", True)
         if self.enableTelemetry:
             self.telemetry = Telemetry(
@@ -124,24 +121,6 @@ class RobotSwerve:
         pass
 
     def teleopInit(self):
-        self.table.putNumber("pressedKey", -1)
-        self.keys = {0: commands2.cmd.print_("Key 0 pressed"),
-                     1: commands2.cmd.print_("Key 1 pressed"),
-                     2: commands2.cmd.print_("Key 2 pressed"),
-                     3: commands2.cmd.print_("Key 3 pressed"),
-                     4: commands2.cmd.print_("Key 4 pressed"),
-                     5: commands2.cmd.print_("Key 5 pressed"),
-                     6: commands2.cmd.print_("Key 6 pressed"),
-                     7: commands2.cmd.print_("Key 7 pressed"),
-                     8: commands2.cmd.print_("Key 8 pressed"),
-                     9: commands2.cmd.print_("Key 9 pressed"),
-                     10: commands2.cmd.print_("Key 10 pressed"),
-                     11: commands2.cmd.print_("Key 11 pressed"),
-                     12: commands2.cmd.print_("Key 12 pressed"),
-                     13: commands2.cmd.print_("Key 13 pressed"),
-                     14: commands2.cmd.print_("Key 14 pressed"),
-                     -1: commands2.cmd.print_("No key pressed"),}
-
         if self.auto_command:
             self.auto_command.cancel()
 
@@ -156,20 +135,15 @@ class RobotSwerve:
                 lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftY(), 0.06),
                 lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftX(), 0.06),
                 lambda: wpimath.applyDeadband(-1 * self.driver_controller.getRightX(), 0.1),
-                lambda: not self.driver_controller.getRightBumperButton(),
-                lambda: self.driver_controller.getLeftBumperButton(),
-                lambda: self.driver_controller.getRightTriggerAxis() > 0.5
+                lambda: not self.driver_controller.getRightBumperButton()
             )
         )
 
     def teleopPeriodic(self):
         if self.driver_controller.getLeftTriggerAxis() > 0.5:
             commands2.CommandScheduler.getInstance().cancelAll()
-        self.keyPressed = self.table.getNumber("pressedKey", -1)
-        self.heartbeat = self.table.getNumber("Stream Deck Heartbeat", 0)
-        wpilib.SmartDashboard.putNumber("Stream Deck Life", self.heartbeat)
-
-        wpilib.SmartDashboard.putBoolean("A Button Pressed", self.mech_controller.getRightBumperButton())
+        self.speedMultiplier = wpilib.SmartDashboard.getNumber("Drivetrain speed", 1)
+        self.drivetrain.setSpeedMultiplier(self.speedMultiplier)
 
     def testInit(self):
         commands2.CommandScheduler.getInstance().cancelAll()
