@@ -14,6 +14,7 @@ from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
 import commands2
 import wpilib
 import wpimath
+import wpinet
 from commands2.button import Trigger
 from pathplannerlib.auto import AutoBuilder
 from pathplannerlib.path import PathPlannerPath
@@ -48,6 +49,9 @@ class RobotSwerve:
         # Initialize timer
         self.timer = wpilib.Timer()
         self.timer.start()
+
+        # Elastic setup
+        wpinet.WebServer.getInstance().start(5800, wpilib.getDeployDirectory())
 
         # HID setup
         wpilib.DriverStation.silenceJoystickConnectionWarning(True)

@@ -165,6 +165,13 @@ Extra things:
 # Stream Deck
 To use our Stream Deck, you need to run the Raptacon streamdeck repo along with the robot code. We do this because we do not want too many 3rd party libraries in the robot code.
 
+# Elastic Dashboard
+Elastic is the real-time dashboard we are using currently.
+<!-- add how to get pre-made dashboard layout on computer that does not have it -->
+For more information on remote downloading for Elastic, go to https://frc-elastic.gitbook.io/docs/additional-features-and-references/remote-layout-downloading#overwrite
+
+For general information on Elastic, go to https://frc-elastic.gitbook.io/docs
+
 # Information
 
 ## Deployed Robot Version
