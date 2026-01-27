@@ -54,7 +54,10 @@ class Robot_Vision:
                     targetYaw = target.getYaw() / 360 / 2
                     targetPitch = target.getPitch() / 360 / 2
                 print(target.getFiducialId())
+                print(targetPitch)
+                print(targetYaw)
     
+
         self.yawservo_pos -= targetYaw
         self.pitchservo_pos += targetPitch
         self.yawservo.set(self.yawservo_pos)
