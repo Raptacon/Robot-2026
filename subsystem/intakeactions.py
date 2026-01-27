@@ -21,12 +21,12 @@ jamReversalCount = 0 #Leave at 0, stores amount of attempts in reversing motors 
 class IntakeSubsystem(commands2.SubsystemBase):
     def __init__(self):
         #Initialize Intake
-        self.intakeMotor = rev.SparkMax(1, rev.SparkLowLevel.MotorType.kBrushless)
+        self.intakeMotor = rev.SparkFlex(11, rev.SparkLowLevel.MotorType.kBrushless)
         self.intakeMotorEncoder = self.intakeMotor.getEncoder()
         self.intakeMotorPosition = self.intakeMotorEncoder.getPosition()
 
         #Initialize Roller
-        self.rollerMotor = rev.SparkMax(2, rev.SparkLowLevel.MotorType.kBrushless)
+        self.rollerMotor = rev.SparkFlex(2, rev.SparkLowLevel.MotorType.kBrushless)
         self.rollerMotorEncoder = self.rollerMotor.getEncoder()
         self.rollerMotorVelocity = self.rollerMotorEncoder.getVelocity()
 
