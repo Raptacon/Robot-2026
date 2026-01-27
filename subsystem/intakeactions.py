@@ -44,8 +44,8 @@ class IntakeSubsystem(commands2.SubsystemBase):
             #Runs until Sensor returns deployment complete; Terminate program with ERR101 if fault condition is detected
             while True:
                 self.intakeMotor.set(intakeVelocity)
-                self.intakeMotor.set(0)
                 if self.intakeMotorPosition >= intakeMotorThreshold:
+                    self.intakeMotor.set(0)
                     break
                 if baselineFault - time.perf_counter() >= intakeFaultThreshold:
                     os._exit(101)
@@ -77,8 +77,8 @@ class IntakeSubsystem(commands2.SubsystemBase):
             #Runs until Sensor returns stow complete; Terminate program with ERR102 if fault condition is detected
             while True:
                 self.intakeMotor.set(-intakeVelocity)
-                self.intakeMotor.set(0)
                 if self.intakeMotorPosition == 0:
+                    self.intakeMotor.set(0)
                     break
                 if baselineFault - time.perf_counter() >= rollerFaultThreshold:
                     os._exit(102)
