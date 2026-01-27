@@ -50,7 +50,7 @@ class Robot_Vision:
         if len(results) > 0:
             result = results[-1]  # take the most recent result the camera had
             for target in result.getTargets():
-                if target.getFiducialId() == 19:
+                if target.getFiducialId() == 20:
                     targetYaw = target.getYaw() / 360 / 2
                     targetPitch = target.getPitch() / 360 / 2
                 print(target.getFiducialId())
