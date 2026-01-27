@@ -118,7 +118,11 @@ class RobotSwerve:
         pass
 
     def autonomousPeriodic(self):
-        pass
+        self.auto_command = self.auto_chooser.getSelected()
+        if self.auto_command:
+            self.auto_command.schedule()
+        else:
+            self.drivetrain.reset_pose_estimator(self.drivetrain.get_default_starting_pose())
 
     def teleopInit(self):
         if self.auto_command:
