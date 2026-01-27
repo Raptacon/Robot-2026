@@ -47,15 +47,15 @@ class Robot_Vision:
         targetPitch = 0.0
         self.counter.setInteger(self.counter.getInteger(0) + 1)
         results = self.camera.getAllUnreadResults()
-        if len(results) > 0:
+        if len(results) > 0: #(what is the function of this line? What does len mean?)
             result = results[-1]  # take the most recent result the camera had
             for target in result.getTargets():
-                if target.getFiducialId() == 20:
+                if target.getFiducialId() == 20: #(is there a way we can make some kind of list to pull information from? I don't want to keep changing this number later and redeploying)
                     targetYaw = target.getYaw() / 360 / 2
                     targetPitch = target.getPitch() / 360 / 2
                 print(target.getFiducialId())
-                print(targetPitch)
-                print(targetYaw)
+                print(targetPitch) #the camera only started following the april tag when I wrote these two print lines. A strange thing to look into.
+                print(targetYaw) 
     
 
         self.yawservo_pos -= targetYaw
