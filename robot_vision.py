@@ -2,6 +2,7 @@
 import wpilib
 import ntcore
 import photonlibpy
+from typing import Callable
 
 nt = ntcore.NetworkTableInstance.getDefault()
 # nt.startClient3("Sim Robot")
