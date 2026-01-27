@@ -1,15 +1,9 @@
 {
-  "robotWidth": 0.774,
-  "robotLength": 0.876,
+  "robotWidth": 0.798,
+  "robotLength": 0.74676,
   "holonomicMode": true,
-  "pathFolders": [
-    "reef_stem_paths",
-    "Paths2025_Blue",
-    "Paths2025_Red"
-  ],
-  "autoFolders": [
-    "Autos2025_Blue"
-  ],
+  "pathFolders": [],
+  "autoFolders": [],
   "defaultMaxVel": 0.75,
   "defaultMaxAccel": 1.0,
   "defaultMaxAngVel": 360.0,
@@ -24,14 +18,14 @@
   "driveMotorType": "NEO",
   "driveCurrentLimit": 40.0,
   "wheelCOF": 1.0,
-  "flModuleX": 0.31115,
-  "flModuleY": 0.26,
-  "frModuleX": 0.31115,
-  "frModuleY": -0.26035,
-  "blModuleX": -0.31115,
-  "blModuleY": 0.26035,
-  "brModuleX": -0.31115,
-  "brModuleY": -0.26035,
+  "flModuleX": 0.264,
+  "flModuleY": 0.287,
+  "frModuleX": 0.264,
+  "frModuleY": -0.287,
+  "blModuleX": -0.264,
+  "blModuleY": 0.287,
+  "brModuleX": -0.264,
+  "brModuleY": -0.287,
   "bumperOffsetX": 0.0,
   "bumperOffsetY": 0.0,
   "robotFeatures": []
