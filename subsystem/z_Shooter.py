@@ -5,12 +5,21 @@ import wpilib
 class zShooter():
     def __init__(self):
         super().__init__()
-        self.motor = rev.SparkFlex(1, rev.SparkLowLevel.MotorType.kBrushless)
-        self.encoder = self.motor.getEncoder()
+        self.intakeMotor = rev.SparkFlex(14, rev.SparkLowLevel.MotorType.kBrushless)
+        self.topMotor = rev.SparkFlex(10, rev.SparkLowLevel.MotorType.kBrushless)
+        self.bottomMotor = rev.SparkMax(6, rev.SparkLowLevel.MotorType.kBrushless)
+        self.intakeEncoder = self.intakeMotor.getEncoder()
+        self.topEncoder = self.topMotor.getEncoder()
+        self.bottomEncoder = self.bottomMotor.getEncoder()
         self.motor_config = rev.SparkBaseConfig()
 
-        self.motor_config.inverted(False)
-        self.motor.config(self.motor_config, rev.SparkBase.ResetMode.kNoResetSafeParameters, rev.SparkBase.PersistMode.kPersistParameters)
+        self.topMotor.configure(self.motor_config.inverted(False), rev.ResetMode.kNoResetSafeParameters, rev.PersistMode.kPersistParameters)
+        self.bottomMotor.configure(self.motor_config.inverted(False), rev.ResetMode.kNoResetSafeParameters, rev.PersistMode.kPersistParameters)
+        self.intakeMotor.configure(self.motor_config.inverted(False), rev.ResetMode.kNoResetSafeParameters, rev.PersistMode.kPersistParameters)
 
-    def setShooterSpeed(self, speed):
-        self.motor.set(speed)
+    def setIntakeSpeed(self, speed):
+        self.intakeMotor.set(speed)
+    def setTopShooterSpeed(self, speed):
+        self.topMotor.set(speed)
+    def setBottomShooterSpeed(self, speed):
+        self.bottomMotor.set(speed)

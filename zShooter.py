@@ -6,29 +6,18 @@ from typing import Callable
 
 # Internal imports
 from data.telemetry import Telemetry
-from constants import PoseOptions, MechConsts
 from vision import Vision
-from commands.auto.pathplan_to_pose import pathplanToPose
 from commands.default_swerve_drive import DefaultDrive
-import commands.operate_elevator as elevCommands
-import commands.operate_intake as IntakeCommands
-from commands.operate_elevator import ElevateManually
-from lookups.utils import getCurrentReefZone
-from lookups.reef_positions import reef_position_lookup
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
-from subsystem.captainIntake import CaptainIntake
 
 # Third-party imports
 import commands2
 import rev
-import ntcore
 import wpilib
 import wpimath
 from commands2.button import Trigger
-from pathplannerlib.auto import AutoBuilder, NamedCommands
+from pathplannerlib.auto import AutoBuilder
 from pathplannerlib.path import PathPlannerPath
-from subsystem.diverCarlElevator import DiverCarlElevator as Elevator
-from subsystem.diverCarlChistera import DiverCarlChistera as Arm
 from subsystem.z_Shooter import zShooter as Shooter
 class RobotSwerve:
     """
@@ -36,9 +25,7 @@ class RobotSwerve:
     """
     # forward declare critical types for editors
     drivetrain: SwerveDrivetrain
-    elevator: Elevator
-    arm: Arm
-
+    
     def __init__(self, is_disabled: Callable[[], bool]) -> None:
         self.shooter = Shooter()
     def robotPeriodic(self):
@@ -57,7 +44,16 @@ class RobotSwerve:
         pass
 
     def teleopPeriodic(self):
-        self.shooter.setShooterSpeed(0.3)
+        self.shooter.setIntakeSpeed(0.1)
+        self.shooter.setTopShooterSpeed(0.1)
+        self.shooter.setBottomShooterSpeed(0.1)
+        self.intakeVelocity = self.shooter.intakeEncoder.getVelocity()
+        self.topVelocity = self.shooter.topEncoder.getVelocity()
+        self.bottomVelocity = self.shooter.bottomEncoder.getVelocity()
+        
+        wpilib.SmartDashboard.putNumber("In_Velocity", self.intakeVelocity)
+        wpilib.SmartDashboard.putNumber("T_Velocity", self.topVelocity)
+        wpilib.SmartDashboard.putNumber("B_Velocity", self.bottomVelocity)
     def testInit(self):
         commands2.CommandScheduler.getInstance().cancelAll()
 
