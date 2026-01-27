@@ -49,7 +49,7 @@ class SwerveDriveConsts(RobotConstants):
     moduleBackLeftInvertSteer: bool = True
     moduleBackRightInvertSteer: bool = True
 
-    maxTranslationMPS: float = 4.14528
+    maxTranslationMPS: float = 4.18
     maxAngularDPS: float = math.degrees(
         maxTranslationMPS / math.hypot(moduleFrontLeftY, moduleFrontLeftX)
     )
