@@ -1,46 +1,28 @@
-# Native imports
 import wpilib
 import ntcore
 import photonlibpy
+from robotpy_apriltag import AprilTagFieldLayout, AprilTagField
 from typing import Callable
+import wpimath
 
 nt = ntcore.NetworkTableInstance.getDefault()
-# nt.startClient3("Sim Robot")
-# nt.setServer("localhost")
 
-
-class Robot_Vision:
-    """
-    Container to hold the main vision code
-    """
-
-    def __init__(self, is_disabled: Callable[[], bool]) -> None:
+class MyRobot(wpilib.TimedRobot):
+    def robotInit(self): 
         self.counter = nt.getTable("MyRobot").getEntry("Counter")
         self.counter.setInteger(0)
+        field = AprilTagFieldLayout.loadField(AprilTagField.kDefaultField)
+        kRobotToCam = wpimath.geometry.Transform3d(
+            wpimath.geometry.Translation3d(0.5, 0.0, 0.5),
+            wpimath.geometry.Rotation3d.fromDegrees(0.0, -30.0, 0.0),
+        )
+        self.camPoseEst = photonlibpy.PhotonPoseEstimator(field,kRobotToCam,)
         print(nt.getTopics())
         self.camera = photonlibpy.PhotonCamera("Arducam_OV9281_USB_Camera")
         self.yawservo = wpilib.Servo(0)
         self.pitchservo = wpilib.Servo(1)
         self.yawservo_pos = 0.5
         self.pitchservo_pos = 0.5
-
-
-    def robotPeriodic(self):
-        pass
-    def disabledInit(self):
-        pass
-
-    def disabledPeriodic(self):
-        pass
-
-    def autonomousInit(self):
-        pass
-
-    def autonomousPeriodic(self):
-        pass
-
-    def teleopInit(self):
-        pass
 
     def teleopPeriodic(self):
         targetYaw = 0.0
@@ -54,24 +36,13 @@ class Robot_Vision:
                     targetYaw = target.getYaw() / 360 / 2
                     targetPitch = target.getPitch() / 360 / 2
                 print(target.getFiducialId())
-                print(targetPitch) #the camera only started following the april tag when I wrote these two print lines. A strange thing to look into.
-                print(targetYaw) 
-    
+                
+                pose = target.getBestCameraToTarget()
+                print(pose)
+
 
         self.yawservo_pos -= targetYaw
         self.pitchservo_pos += targetPitch
         self.yawservo.set(self.yawservo_pos)
         self.pitchservo.set(self.pitchservo_pos)
-
-
-
-    def testInit(self):
-        pass
-    def testPeriodic(self):
-        pass
-
-    def getDeployInfo(self, key: str) -> str:
-        pass
-
-    def setAlignmentTag(self, alignmentTagId: int | None) -> None:
-        pass
+        
