@@ -41,15 +41,16 @@ class RobotIntake:
         Trigger(self.intakeController.getAButtonPressed).onTrue(
             commands2.cmd.runOnce(self.intake.deployIntake, self.intake)
         )
-        Trigger(self.intakeController.getXButtonPressed).onTrue(
-            commands2.cmd.runOnce(self.intake.deactivateRoller, self.intake)
-        )
-        Trigger(self.intakeController.getBButtonPressed).onTrue(
-            commands2.cmd.runOnce(self.intake.activateRoller, self.intake)
-        )
+        #Trigger(self.intakeController.getXButtonPressed).onTrue(
+            #commands2.cmd.runOnce(self.intake.deactivateRoller, self.intake)
+        #)
+        #Trigger(self.intakeController.getBButtonPressed).onTrue(
+            #commands2.cmd.runOnce(self.intake.activateRoller, self.intake)
+        #)
 
     def teleopPeriodic(self):
-        self.intake.activateRoller()
+        #self.intake.activateRoller()
+        pass
 
     def testInit(self):
         pass
