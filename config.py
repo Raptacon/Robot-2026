@@ -18,7 +18,7 @@ class OperatorRobotConfig:
     # Give in front-left, front-right, back-left, back-right order
     # starting rotational position for the absolute encoders
     swerve_abs_encoder_calibrations: Tuple[float] = (
-        196.3286719 / 360.0, 127.353515625 / 360.0,  347.9217188 / 360.0, 83.2865625 / 360.0
+        10.283203125 / 360.0, 323.6148 / 360.0,  347.2737188 / 360.0, 83.2865625 / 360.0
     )
     swerve_steer_pid: Tuple[float] = (0.007, 0, 0)
     swerve_drive_pid: Tuple[float] = (0, 0, 0, 0) # TODO: tune PIDs
