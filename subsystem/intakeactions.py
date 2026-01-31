@@ -8,16 +8,18 @@ import ntcore
 from constants import CaptainPlanetConsts as intakeConsts
 
 class IntakeSubsystem(commands2.SubsystemBase):
-    def __init__(self):
+    def __init__(self, hasSecondMotor = True):
         #Initialize Intake
         self.intakeMotor = rev.SparkFlex(11, rev.SparkLowLevel.MotorType.kBrushless)
         self.intakeMotorEncoder = self.intakeMotor.getEncoder()
         self.intakeMotorPosition = self.intakeMotorEncoder.getPosition()
 
+        self.hasSecondMotor = hasSecondMotor
         #Initialize Roller
-        self.rollerMotor = rev.SparkFlex(2, rev.SparkLowLevel.MotorType.kBrushless)
-        self.rollerMotorEncoder = self.rollerMotor.getEncoder()
-        self.rollerMotorVelocity = self.rollerMotorEncoder.getVelocity()
+        if self.hasSecondMotor:
+            self.rollerMotor = rev.SparkFlex(2, rev.SparkLowLevel.MotorType.kBrushless)
+            self.rollerMotorEncoder = self.rollerMotor.getEncoder()
+            self.rollerMotorVelocity = self.rollerMotorEncoder.getVelocity()
 
         #Initialize Break Beams
         self.frontBreakbeam = wpilib.DigitalInput(intakeConsts.kFrontBreakBeam)
@@ -53,22 +55,24 @@ class IntakeSubsystem(commands2.SubsystemBase):
                     os._exit(101)
 
     def activateRoller(self):
-        baselineFault = time.perf_counter() #Set Baseline for Fault Detection
-        
-        #Apply voltage to roller until it starts moving; Terminate program with ERR103 if fault condition is detected
-        while self.rollerMotorVelocity == 0:
-            self.rollerMotor.set(self.rollerVelocity)
-            if baselineFault - time.perf_counter() >= self.rollerFaultThreshold:
-                os._exit(103)
+        if self.hasSecondMotor:
+            baselineFault = time.perf_counter() #Set Baseline for Fault Detection
+            
+            #Apply voltage to roller until it starts moving; Terminate program with ERR103 if fault condition is detected
+            while self.rollerMotorVelocity == 0:
+                self.rollerMotor.set(self.rollerVelocity)
+                if baselineFault - time.perf_counter() >= self.rollerFaultThreshold:
+                    os._exit(103)
 
     def deactivateRoller(self):
-        baselineFault = time.perf_counter() #Set Baseline for Fault Detection
-    
-        #Try to terminate voltage until motor stops moving; Terminate program with ERR103 if fault condition is detected
-        while self.rollerMotorVelocity != 0:
-            self.rollerMotor.set(0)
-            if baselineFault - time.perf_counter() >= self.rollerFaultThreshold:
-                os._exit(103)
+        if self.hasSecondMotor:
+            baselineFault = time.perf_counter() #Set Baseline for Fault Detection
+        
+            #Try to terminate voltage until motor stops moving; Terminate program with ERR103 if fault condition is detected
+            while self.rollerMotorVelocity != 0:
+                self.rollerMotor.set(0)
+                if baselineFault - time.perf_counter() >= self.rollerFaultThreshold:
+                    os._exit(103)
 
     def stowIntake(self):
         if self.intakeMotorPosition != 0:
@@ -84,20 +88,21 @@ class IntakeSubsystem(commands2.SubsystemBase):
                     os._exit(102)
 
     def jamDetection(self):
-        if self.frontBeamBroken:
-            baselineJam = time.perf_counter() #Set Baseline for Jam Detection
-            while not self.backBeamBroken:
-                #If Ball appears to have jammed, reverse rollers
-                if baselineFault - time.perf_counter >= self.rollerFaultThreshold:
-                    baselineFault = time.perf_counter() #Set Baseline for Fault Detection
-        
-                    #Reverse voltage to motor until front sensors go off; Terminate program with ERR104 if fault condition is detected
-                    while not self.frontBeamBroken:
-                        if self.rollerMotorVelocity >= 0:
-                            jamReversalCount += 1
-                            self.rollerMotor.set(-self.rollerVelocity)
-                        elif jamReversalCount >= self.jamFaultThreshold:
-                            os._exit(104)  
+        if self.hasSecondMotor:
+            if self.frontBeamBroken:
+                baselineJam = time.perf_counter() #Set Baseline for Jam Detection
+                while not self.backBeamBroken:
+                    #If Ball appears to have jammed, reverse rollers
+                    if baselineFault - time.perf_counter >= self.rollerFaultThreshold:
+                        baselineFault = time.perf_counter() #Set Baseline for Fault Detection
+            
+                        #Reverse voltage to motor until front sensors go off; Terminate program with ERR104 if fault condition is detected
+                        while not self.frontBeamBroken:
+                            if self.rollerMotorVelocity >= 0:
+                                jamReversalCount += 1
+                                self.rollerMotor.set(-self.rollerVelocity)
+                            elif jamReversalCount >= self.jamFaultThreshold:
+                                os._exit(104)  
     
     def updateIntake(self, newIntakeVelocity):
         self.intakeVelocity = newIntakeVelocity
