@@ -30,10 +30,10 @@ class MyRobot(wpilib.TimedRobot):
         targetPitch = 0.0
         self.counter.setInteger(self.counter.getInteger(0) + 1)
         results = self.camera.getAllUnreadResults()
-        if len(results) > 0: #(what is the function of this line? What does len mean?)
+        if len(results) > 0: 
             result = results[-1]  # take the most recent result the camera had
             for target in result.getTargets():
-                if target.getFiducialId() == 20: #(is there a way we can make some kind of list to pull information from? I don't want to keep changing this number later and redeploying)
+                if target.getFiducialId() == 20: 
                     targetYaw = target.getYaw()   / 360 / 2
                     targetPitch = target.getPitch() / 360 / 2
                 print(target.getFiducialId())
@@ -47,10 +47,12 @@ class MyRobot(wpilib.TimedRobot):
             targetYaw = 0.0
         if abs(targetPitch) < 0.005:
             targetPitch = 0.0
-        #if(not math.isclose(targetYaw, self.yawservo_pos, abs_tol= 0.2)): #10 percent error
+        
         self.yawservo_pos -= targetYaw
-        #if(not math.isclose(targetPitch, self.pitchservo_pos, abs_tol = 0.1)):
         self.pitchservo_pos += targetPitch
         self.yawservo.set(self.yawservo_pos)
         self.pitchservo.set(self.pitchservo_pos)
+        
+        #if(not math.isclose(targetYaw, self.yawservo_pos, abs_tol= 0.2)): #10 percent error
+        #if(not math.isclose(targetPitch, self.pitchservo_pos, abs_tol = 0.1)):
         
