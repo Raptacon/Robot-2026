@@ -42,6 +42,7 @@ def GetSparkConfig(
     config.inverted(inverted)
     config.setIdleMode(idleMode)
     config.voltageCompensation(12.0)
+    config.smartCurrentLimit(40)
     #config.apply()
     GetSparkSignalsVelocityControlConfig(config.signals, periodMs)
     return config
@@ -60,6 +61,9 @@ def GetFlywheelPidConfig(p : float = 0.0, i : float = 0.0, d : float = 0.0, outp
 
 
 class MyRobot(TimedCommandRobot):
+    def __init__(self):
+        #setup 10ms frames
+        super().__init__(period=0.01)
     def robotInit(self):
         flywheelMotors = {}
         motor = rev.SparkFlex(10, rev.SparkLowLevel.MotorType.kBrushless)
@@ -74,10 +78,10 @@ class MyRobot(TimedCommandRobot):
         motor.configure(config, rev.ResetMode.kResetSafeParameters, rev.PersistMode.kNoPersistParameters)
         flywheelMotors["lowerFlyWheel"] = motor
 
-        motor = rev.SparkFlex(14, rev.SparkLowLevel.MotorType.kBrushless)
+        """motor = rev.SparkFlex(14, rev.SparkLowLevel.MotorType.kBrushless)
         motor.configure(config, rev.ResetMode.kResetSafeParameters, rev.PersistMode.kNoPersistParameters)
         flywheelMotors["intakeFlyWheel"] = motor
-
+        """
         self.flywheels = flywheel.FlywheelSysId(flywheelMotors)
 
         #setup logging
@@ -85,7 +89,7 @@ class MyRobot(TimedCommandRobot):
         urcl.start()
         #urcl.start(motorIdNameMap, wpilib.DataLogManager.getLog())
 
-        sysIdConfig = SysIdRoutine.Config(2, 8, 10.0, None)
+        sysIdConfig = SysIdRoutine.Config(2, 5, 10.0, None)
         sysIdMechanism = SysIdRoutine.Mechanism(self.flywheels.setMotorVoltage, self.flywheels.sysIdLog, self.flywheels, "Flywheels")
         self.sysId = SysIdRoutine(sysIdConfig, sysIdMechanism)
 

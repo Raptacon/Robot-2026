@@ -2,6 +2,14 @@ from commands2 import Command, Subsystem
 from commands2.sysid import SysIdRoutine
 from wpilib.sysid import SysIdRoutineLog
 import rev
+
+#sample feedforad value
+#0.017981
+#Feed forard
+#1.5606034333275533206173053580718e-4 = 0.00015606034333275534
+#kP 3
+#kd - 0
+#ki 0.005 (reduce steady state error)
 class FlywheelSysId(Subsystem):
     def __init__(self, motors: list[rev.SparkMax]):
         super().__init__()
@@ -38,7 +46,7 @@ class FlywheelSysId(Subsystem):
             
             #not included velocity acceleration, angularAcceleration, angularPosition,
             motor_log.angularVelocity(angular_velocity)
-            motor_log.position(angular_position)
+            motor_log.angularPosition(angular_position)
             motor_log.current(current)
             motor_log.voltage(applied_voltage)
             #extra data
