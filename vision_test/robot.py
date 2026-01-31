@@ -4,6 +4,7 @@ import photonlibpy
 from robotpy_apriltag import AprilTagFieldLayout, AprilTagField
 from typing import Callable
 import wpimath
+import math
 
 nt = ntcore.NetworkTableInstance.getDefault()
 
@@ -33,15 +34,22 @@ class MyRobot(wpilib.TimedRobot):
             result = results[-1]  # take the most recent result the camera had
             for target in result.getTargets():
                 if target.getFiducialId() == 20: #(is there a way we can make some kind of list to pull information from? I don't want to keep changing this number later and redeploying)
-                    targetYaw = target.getYaw() / 360 / 2
+                    targetYaw = target.getYaw()   / 360 / 2
                     targetPitch = target.getPitch() / 360 / 2
                 print(target.getFiducialId())
                 
                 pose = target.getBestCameraToTarget()
                 print(pose)
+                print(targetYaw)
+                print(targetPitch)
 
-
+        if abs(targetYaw) < 0.005: #eliminates overcorrection
+            targetYaw = 0.0
+        if abs(targetPitch) < 0.005:
+            targetPitch = 0.0
+        #if(not math.isclose(targetYaw, self.yawservo_pos, abs_tol= 0.2)): #10 percent error
         self.yawservo_pos -= targetYaw
+        #if(not math.isclose(targetPitch, self.pitchservo_pos, abs_tol = 0.1)):
         self.pitchservo_pos += targetPitch
         self.yawservo.set(self.yawservo_pos)
         self.pitchservo.set(self.pitchservo_pos)
