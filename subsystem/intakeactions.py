@@ -26,14 +26,14 @@ class IntakeSubsystem(commands2.SubsystemBase):
         self.backBeamBroken = not self.backBreakbeam.get()
 
         #Set Variables
-        self.intakeVelocity = 0.3 #Speed (in rpm) in which the intake motor will move upon deployment/stowing
         self.intakeMotorThreshold = 1 #Used to determine whether or not intake is deployed
         self.intakeFaultThreshold = 2 #Amount of time spent trying to deploy/stow intake before fault condition is triggered
-        self.rollerVelocity = 0.3 #Speed in which the roller motor will move upon deployment
         self.rollerFaultThreshold = 2 #Amount of time spent trying to operate rollers before fault condition is triggered
         self.jamTime = 3 #Amount of time to wait before assuming a ball inside the intake has gotten stuck
         self.jamFaultThreshold = 0 #Amount of attempts done trying to reverse rollers in the event of a jam before a fault condition is triggered
 
+        self.intakeVelocity = 0 #Leave at zero - any updating is to be done thru Network Table, Speed (in rpm) in which the intake motor will move upon deployment/stowing
+        self.rollerVelocity = 0 #Leave at zero - any updating is to be done thru Network Table, Speed in which the roller motor will move upon deployment
         self.baselineFault = 0 #Leave at 0, provides baseline to compare to when determining faults
         self.baselineJam = 0 #Leave at 0, provides baseline to compare to when determining faults
         self.jamReversalCount = 0 #Leave at 0, stores amount of attempts in reversing motors in the event of a jam before a fault condition is triggered
@@ -98,3 +98,9 @@ class IntakeSubsystem(commands2.SubsystemBase):
                             self.rollerMotor.set(-self.rollerVelocity)
                         elif jamReversalCount >= self.jamFaultThreshold:
                             os._exit(104)  
+    
+    def updateIntake(self, newIntakeVelocity):
+        self.intakeVelocity = newIntakeVelocity
+
+    def updateRoller(self, newRollerVelocity):
+        self.rollerVelocity = newRollerVelocity
