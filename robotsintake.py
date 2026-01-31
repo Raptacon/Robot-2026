@@ -15,7 +15,7 @@ class RobotIntake:
     """
 
     def __init__(self, is_disabled: Callable[[], bool]) -> None:
-        self.intake = IntakeSubsystem()
+        self.intake = IntakeSubsystem(hasSecondMotor=False)
 
         self.intakeController = wpilib.XboxController(0)
 
@@ -47,10 +47,10 @@ class RobotIntake:
     def teleopInit(self):
         
         Trigger(self.intakeController.getYButtonPressed).onTrue(
-            commands2.cmd.runOnce(self.intake.stowIntake, self.intake)
+            commands2.cmd.run(self.intake.stowIntake, self.intake)
         )
         Trigger(self.intakeController.getAButtonPressed).onTrue(
-            commands2.cmd.runOnce(self.intake.deployIntake, self.intake)
+            commands2.cmd.run(self.intake.deployIntake, self.intake)
         )
         Trigger(self.intakeController.getXButtonPressed).onTrue(
             commands2.cmd.runOnce(self.intake.deactivateRoller, self.intake)

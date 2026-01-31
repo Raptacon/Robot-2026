@@ -46,13 +46,11 @@ class IntakeSubsystem(commands2.SubsystemBase):
             baselineFault = time.perf_counter() #Set Baseline for Fault Detection
 
             #Runs until Sensor returns deployment complete; Terminate program with ERR101 if fault condition is detected
-            while True:
-                self.intakeMotor.set(self.intakeVelocity)
-                if self.intakeMotorPosition >= self.intakeMotorThreshold:
-                    self.intakeMotor.set(0)
-                    break
-                if baselineFault - time.perf_counter() >= self.intakeFaultThreshold:
-                    os._exit(101)
+            self.intakeMotor.set(self.intakeVelocity)
+            if self.intakeMotorPosition >= self.intakeMotorThreshold:
+                self.intakeMotor.set(0)
+            if baselineFault - time.perf_counter() >= self.intakeFaultThreshold:
+                os._exit(101)
 
     def activateRoller(self):
         if self.hasSecondMotor:
@@ -79,13 +77,12 @@ class IntakeSubsystem(commands2.SubsystemBase):
             baselineFault = time.perf_counter() #Set Baseline for Fault Detection
 
             #Runs until Sensor returns stow complete; Terminate program with ERR102 if fault condition is detected
-            while True:
-                self.intakeMotor.set(-self.intakeVelocity)
-                if self.intakeMotorPosition == 0:
-                    self.intakeMotor.set(0)
-                    break
-                if baselineFault - time.perf_counter() >= self.rollerFaultThreshold:
-                    os._exit(102)
+            self.intakeMotor.set(-self.intakeVelocity)
+            if self.intakeMotorEncoder.getPosition() < 0:
+                wpilib.SmartDashboard.putNumber("Intake Velocity", 0)
+                self.intakeVelocity = 0
+            if baselineFault - time.perf_counter() >= self.rollerFaultThreshold:
+                os._exit(102)
 
     def jamDetection(self):
         if self.hasSecondMotor:
@@ -109,3 +106,6 @@ class IntakeSubsystem(commands2.SubsystemBase):
 
     def updateRoller(self, newRollerVelocity):
         self.rollerVelocity = newRollerVelocity
+
+    def periodic(self):
+        wpilib.SmartDashboard.putNumber("Intake position", self.intakeMotorEncoder.getPosition())
