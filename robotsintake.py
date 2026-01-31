@@ -20,7 +20,8 @@ class RobotIntake:
         self.intakeController = wpilib.XboxController(0)
 
     def robotPeriodic(self):
-        pass
+        wpilib.SmartDashboard.putNumber("Intake Velocity", self.intake.intakeVelocity)
+        wpilib.SmartDashboard.putNumber("Roller Velocity", self.intake.rollerVelocity)
 
     def disabledInit(self):
         pass
@@ -35,6 +36,7 @@ class RobotIntake:
         pass
 
     def teleopInit(self):
+        
         Trigger(self.intakeController.getYButtonPressed).onTrue(
             commands2.cmd.runOnce(self.intake.stowIntake, self.intake)
         )
@@ -48,8 +50,10 @@ class RobotIntake:
             commands2.cmd.runOnce(self.intake.activateRoller, self.intake)
         )
 
+
     def teleopPeriodic(self):
-        self.intake.activateRoller()
+        print("Intake Velocity: " + str(self.intake.intakeVelocity))
+        print("Roller Velocity: " + str(self.intake.rollerVelocity))
 
     def testInit(self):
         pass
