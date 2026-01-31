@@ -19,9 +19,18 @@ class RobotIntake:
 
         self.intakeController = wpilib.XboxController(0)
 
+        wpilib.SmartDashboard.putNumber("Intake Velocity", 0)
+        wpilib.SmartDashboard.putNumber("Roller Velocity", 0)
+
+        self.intakeVelocity = 0
+        self.rollerVelocity = 0
+
     def robotPeriodic(self):
-        wpilib.SmartDashboard.putNumber("Intake Velocity", self.intake.intakeVelocity)
-        wpilib.SmartDashboard.putNumber("Roller Velocity", self.intake.rollerVelocity)
+        self.intakeVelocity = wpilib.SmartDashboard.getNumber("Intake Velocity", 0)
+        self.rollerVelocity = wpilib.SmartDashboard.getNumber("Roller Velocity", 0)
+
+        self.intake.updateIntake(self.intakeVelocity)
+        self.intake.updateRoller(self.rollerVelocity)
 
     def disabledInit(self):
         pass
