@@ -24,7 +24,7 @@ class IntakeSubsystem(commands2.SubsystemBase):
         #Initialize Intake
         self.intakeMotor = rev.SparkFlex(11, rev.SparkLowLevel.MotorType.kBrushless)
         self.intakeMotorEncoder = self.intakeMotor.getEncoder()
-        self.intakeMotorPosition = self.intakeMotorEncoder.getPosition()
+        #self.intakeMotorPosition = self.intakeMotorEncoder.getPosition()
 
         self.hasSecondMotor = hasSecondMotor
         #Initialize Roller
@@ -40,7 +40,8 @@ class IntakeSubsystem(commands2.SubsystemBase):
         self.backBeamBroken = not self.backBreakbeam.get()
 
         #Set Variables
-        self.intakeMotorThreshold = 1 #Used to determine whether or not intake is deployed
+        self.intakeDeployed = 100 #Minimum amount of rotations before assuming intake is deployed
+        self.intakeStowed = 0 #Maximum amount of rotations before assuming intake is deployed
         self.intakeFaultThreshold = 2 #Amount of time spent trying to deploy/stow intake before fault condition is triggered
         self.rollerFaultThreshold = 2 #Amount of time spent trying to operate rollers before fault condition is triggered
         self.jamTime = 3 #Amount of time to wait before assuming a ball inside the intake has gotten stuck
@@ -54,12 +55,12 @@ class IntakeSubsystem(commands2.SubsystemBase):
 
     def deployIntake(self):
         #Check Sensor for deployment, if not, deploy it.
-        if self.intakeMotorPosition == 0:
+        if self.intakeMotorEncoder.getPosition() <= self.intakeDeployed:
             baselineFault = time.perf_counter() #Set Baseline for Fault Detection
 
             #Runs until Sensor returns deployment complete; Terminate program with ERR101 if fault condition is detected
             self.intakeMotor.set(self.intakeVelocity)
-            if self.intakeMotorPosition >= self.intakeMotorThreshold:
+            if self.intakeMotorEncoder.getPosition() >= self.intakeDeployed:
                 self.intakeMotor.set(0)
             if baselineFault - time.perf_counter() >= self.intakeFaultThreshold:
                 os._exit(101)
@@ -85,12 +86,12 @@ class IntakeSubsystem(commands2.SubsystemBase):
                     os._exit(103)
 
     def stowIntake(self):
-        if self.intakeMotorPosition != 0:
+        if self.intakeMotorEncoder.getPosition() >= self.intakeStowed:
             baselineFault = time.perf_counter() #Set Baseline for Fault Detection
 
             #Runs until Sensor returns stow complete; Terminate program with ERR102 if fault condition is detected
             self.intakeMotor.set(-self.intakeVelocity)
-            if self.intakeMotorEncoder.getPosition() < 0:
+            if self.intakeMotorEncoder.getPosition() <= self.intakeStowed:
                 wpilib.SmartDashboard.putNumber("Intake Velocity", 0)
                 self.intakeVelocity = 0
             if baselineFault - time.perf_counter() >= self.rollerFaultThreshold:
