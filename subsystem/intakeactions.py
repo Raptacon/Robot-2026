@@ -17,9 +17,10 @@ class IntakeSubsystem(commands2.SubsystemBase):
         self.hasSecondMotor = hasSecondMotor
         #Initialize Roller
         if self.hasSecondMotor:
-            self.rollerMotor = rev.SparkFlex(2, rev.SparkLowLevel.MotorType.kBrushless)
+            self.rollerMotor = rev.SparkMax(56, rev.SparkLowLevel.MotorType.kBrushless)
             self.rollerMotorEncoder = self.rollerMotor.getEncoder()
-            self.rollerMotorVelocity = self.rollerMotorEncoder.getVelocity()
+            self.rollerMotorEncoder.setPosition(0)
+            #self.rollerMotorVelocity = self.rollerMotorEncoder.getVelocity()
 
         #Initialize Break Beams
         self.frontBreakbeam = wpilib.DigitalInput(intakeConsts.kFrontBreakBeam)
@@ -34,10 +35,13 @@ class IntakeSubsystem(commands2.SubsystemBase):
         self.rollerFaultThreshold = 2 #Amount of time spent trying to operate rollers before fault condition is triggered
         self.jamTime = 3 #Amount of time to wait before assuming a ball inside the intake has gotten stuck
         self.jamFaultThreshold = 0 #Amount of attempts done trying to reverse rollers in the event of a jam before a fault condition is triggered
+        self.rollerDuration = 50 #Amount of rotations before stopping Roller Motor
 
         self.intakeVelocity = 0 #Leave at zero - any updating is to be done thru Network Table, Speed (in rpm) in which the intake motor will move upon deployment/stowing
         self.rollerVelocity = 0 #Leave at zero - any updating is to be done thru Network Table, Speed in which the roller motor will move upon deployment
         self.baselineFault = 0 #Leave at 0, provides baseline to compare to when determining faults
+        self.rollerOccurence = 0 #Leave at 0, provides reference for timed roller activation
+        self.rollerStop = 0 #Leave at 0, stores amount of rotations to stop at during timed roller activation
         self.baselineJam = 0 #Leave at 0, provides baseline to compare to when determining faults
         self.jamReversalCount = 0 #Leave at 0, stores amount of attempts in reversing motors in the event of a jam before a fault condition is triggered
 
@@ -48,30 +52,46 @@ class IntakeSubsystem(commands2.SubsystemBase):
 
             #Runs until Sensor returns deployment complete; Terminate program with ERR101 if fault condition is detected
             self.intakeMotor.set(self.intakeVelocity)
-            if self.intakeMotorEncoder.getPosition() >= self.intakeDeployed:
-                self.intakeMotor.set(0)
             if baselineFault - time.perf_counter() >= self.intakeFaultThreshold:
                 os._exit(101)
+        else:
+            self.intakeVelocity = 0
+            self.intakeMotor.set(0)
+
 
     def activateRoller(self):
         if self.hasSecondMotor:
             baselineFault = time.perf_counter() #Set Baseline for Fault Detection
             
             #Apply voltage to roller until it starts moving; Terminate program with ERR103 if fault condition is detected
-            while self.rollerMotorVelocity == 0:
-                self.rollerMotor.set(self.rollerVelocity)
-                if baselineFault - time.perf_counter() >= self.rollerFaultThreshold:
-                    os._exit(103)
+            self.rollerMotor.set(self.rollerVelocity)
+            if baselineFault - time.perf_counter() >= self.rollerFaultThreshold:
+                os._exit(103)
 
     def deactivateRoller(self):
         if self.hasSecondMotor:
             baselineFault = time.perf_counter() #Set Baseline for Fault Detection
         
             #Try to terminate voltage until motor stops moving; Terminate program with ERR103 if fault condition is detected
-            while self.rollerMotorVelocity != 0:
-                self.rollerMotor.set(0)
-                if baselineFault - time.perf_counter() >= self.rollerFaultThreshold:
-                    os._exit(103)
+            self.rollerMotor.set(0)
+            if baselineFault - time.perf_counter() >= self.rollerFaultThreshold:
+                os._exit(103)
+
+    def timedRollerActivation(self):
+        if self.hasSecondMotor:
+            if self.rollerOccurence == 0:
+                self.rollerStop == self.rollerMotorEncoder.getPosition() + self.rollerDuration
+                print("Roller Stop = " + str(self.rollerStop))
+                self.rollerOccurence == 1
+            if self.rollerMotorEncoder.getPosition() <= self.rollerStop:
+                self.rollerMotor.set(self.rollerVelocity)
+                print(self.rollerStop)
+            else:
+                self.rollerVelocity == 0
+                self.rollerOccurence == 0
+                self.rollerMotor.set(self.rollerVelocity)
+                print(self.rollerStop)
+
 
     def stowIntake(self):
         if self.intakeMotorEncoder.getPosition() >= self.intakeStowed:
@@ -79,11 +99,11 @@ class IntakeSubsystem(commands2.SubsystemBase):
 
             #Runs until Sensor returns stow complete; Terminate program with ERR102 if fault condition is detected
             self.intakeMotor.set(-self.intakeVelocity)
-            if self.intakeMotorEncoder.getPosition() <= self.intakeStowed:
-                wpilib.SmartDashboard.putNumber("Intake Velocity", 0)
-                self.intakeVelocity = 0
             if baselineFault - time.perf_counter() >= self.rollerFaultThreshold:
                 os._exit(102)
+        else:
+            self.intakeVelocity = 0
+            self.intakeMotor.set(0)
 
     def jamDetection(self):
         if self.hasSecondMotor:
@@ -110,3 +130,4 @@ class IntakeSubsystem(commands2.SubsystemBase):
 
     def periodic(self):
         wpilib.SmartDashboard.putNumber("Intake position", self.intakeMotorEncoder.getPosition())
+        wpilib.SmartDashboard.putNumber("Roller position", self.rollerMotorEncoder.getPosition())
