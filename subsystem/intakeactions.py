@@ -80,18 +80,14 @@ class IntakeSubsystem(commands2.SubsystemBase):
     def timedRollerActivation(self):
         if self.hasSecondMotor:
             if self.rollerOccurence == 0:
-                self.rollerStop == self.rollerMotorEncoder.getPosition() + self.rollerDuration
-                print("Roller Stop = " + str(self.rollerStop))
-                self.rollerOccurence == 1
+                self.rollerStop = float(self.rollerMotorEncoder.getPosition()) + float(self.rollerDuration)
+                self.rollerOccurence = 1
             if self.rollerMotorEncoder.getPosition() <= self.rollerStop:
                 self.rollerMotor.set(self.rollerVelocity)
-                print(self.rollerStop)
             else:
-                self.rollerVelocity == 0
-                self.rollerOccurence == 0
+                self.rollerVelocity = 0
+                self.rollerOccurence = 0
                 self.rollerMotor.set(self.rollerVelocity)
-                print(self.rollerStop)
-
 
     def stowIntake(self):
         if self.intakeMotorEncoder.getPosition() >= self.intakeStowed:
