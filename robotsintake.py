@@ -20,8 +20,8 @@ class RobotIntake:
 
         self.intakeController = wpilib.XboxController(0)
 
-        wpilib.SmartDashboard.putNumber("Intake Velocity", 0)
-        wpilib.SmartDashboard.putNumber("Roller Velocity", 0)
+        wpilib.SmartDashboard.putNumber("Intake Velocity", 0.2)
+        wpilib.SmartDashboard.putNumber("Roller Velocity", 0.2)
 
         self.intakeVelocity = 0
         self.rollerVelocity = 0
@@ -53,11 +53,11 @@ class RobotIntake:
         Trigger(self.intakeController.getAButtonPressed).onTrue(
             commands2.cmd.run(self.intake.deployIntake, self.intake)
         )
-        # Trigger(self.intakeController.getXButtonPressed).onTrue(
-        #     commands2.cmd.run(self.intake.deactivateRoller, self.intake)
-        # )
+        Trigger(self.intakeController.getXButtonPressed).onTrue(
+            commands2.cmd.run(self.intake.deactivateRoller, self.intake)
+        )
         Trigger(self.intakeController.getBButtonPressed).onTrue(
-            commands2.cmd.run(self.intake.timedRollerActivation, self.intake)
+            commands2.cmd.run(self.intake.activateRoller, self.intake)
         )
 
 
