@@ -5,6 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 
 FRC Team 3200 (Raptacon) robot code for the 2026 season. Written in Python using RobotPy (WPILib's Python bindings) with the Commands2 framework. The robot runs a 4-module MK4i swerve drivetrain with SparkMax motor controllers (REV NEO motors) and CTRE CANcoders.
+Note that wpilib is avaiable in C++, Java and python. Most resources are listed as C++ or java but almost all code transfers to python with minor updates to match python nuances and style.
 
 ## Build & Development Commands
 
@@ -41,6 +42,9 @@ flake8 . --count --select=E9,F6,F7,F8,F4,W1,W2,W4,W5,W6,E11 --ignore W293,W503 -
 make deploy             # Deploys libraries and code to the robot. (requires robot connection)
 python -m robotpy deploy
 ```
+
+**Style:**
+Follow major style guidelines from PEP8 based on what is configured for flake8.
 
 ## Architecture
 
