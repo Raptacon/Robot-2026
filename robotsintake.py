@@ -64,6 +64,7 @@ class RobotIntake:
     def teleopPeriodic(self):
         print("Intake Velocity: " + str(self.intake.intakeVelocity))
         print("Roller Velocity: " + str(self.intake.rollerVelocity))
+        print("Hall Effects Sensor: " + str(self.intake.HallEffectSensor.get()))
 
     def testInit(self):
         pass
