@@ -8,6 +8,7 @@ from subsystem.intakeactions import IntakeSubsystem
 import commands2
 import wpilib
 from commands2.button import Trigger
+from commands2.command import Command
 
 class RobotIntake:
     """

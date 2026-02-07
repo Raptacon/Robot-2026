@@ -4,7 +4,6 @@ import rev
 import time
 import os
 import ntcore
-
 from constants import CaptainPlanetConsts as intakeConsts
 
 class IntakeSubsystem(commands2.SubsystemBase):
@@ -88,6 +87,7 @@ class IntakeSubsystem(commands2.SubsystemBase):
                 self.rollerVelocity = 0
                 self.rollerOccurence = 0
                 self.rollerMotor.set(self.rollerVelocity)
+                commands2.CommandScheduler.getInstance().cancelAll()
 
     def stowIntake(self):
         if self.intakeMotorEncoder.getPosition() >= self.intakeStowed:
