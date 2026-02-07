@@ -27,6 +27,8 @@ class IntakeSubsystem(commands2.SubsystemBase):
         self.frontBeamBroken = not self.frontBreakbeam.get()
         self.backBeamBroken = not self.backBreakbeam.get()
 
+        self.HallEffectSensor = wpilib.DigitalInput(1)
+
         #Set Variables
         self.intakeDeployed = 100 #Minimum amount of rotations before assuming intake is deployed
         self.intakeStowed = 0 #Maximum amount of rotations before assuming intake is deployed
@@ -40,6 +42,7 @@ class IntakeSubsystem(commands2.SubsystemBase):
         self.rollerVelocity = 0 #Leave at zero - any updating is to be done thru Network Table, Speed in which the roller motor will move upon deployment
         self.baselineFault = 0 #Leave at 0, provides baseline to compare to when determining faults
         self.rollerOccurence = 0 #Leave at 0, provides reference for timed roller activation
+        self.intakeCondition = 0 #Leave at 0, provides reference for intake fault detection
         self.rollerStop = 0 #Leave at 0, stores amount of rotations to stop at during timed roller activation
         self.baselineJam = 0 #Leave at 0, provides baseline to compare to when determining faults
         self.jamReversalCount = 0 #Leave at 0, stores amount of attempts in reversing motors in the event of a jam before a fault condition is triggered
@@ -47,22 +50,22 @@ class IntakeSubsystem(commands2.SubsystemBase):
     def deployIntake(self):
         #Check Sensor for deployment, if not, deploy it.
         if self.intakeMotorEncoder.getPosition() <= self.intakeDeployed:
-            baselineFault = time.perf_counter() #Set Baseline for Fault Detection
-
-            #Runs until Sensor returns deployment complete; Terminate program with ERR101 if fault condition is detected
+            if self.intakeCondition <= 0:
+                baselineFault = time.perf_counter() #Set Baseline for Fault Detection
+                self.intakeCondition = 1
             self.intakeMotor.set(self.intakeVelocity)
             if baselineFault - time.perf_counter() >= self.intakeFaultThreshold:
                 os._exit(101)
         else:
             self.intakeVelocity = 0
-            self.intakeMotor.set(0)
+            self.intakeCondition = 0
+            self.intakeMotor.set(self.intakeVelocity)
 
 
     def activateRoller(self):
         if self.hasSecondMotor:
             baselineFault = time.perf_counter() #Set Baseline for Fault Detection
             
-            #Apply voltage to roller until it starts moving; Terminate program with ERR103 if fault condition is detected
             self.rollerMotor.set(self.rollerVelocity)
             if baselineFault - time.perf_counter() >= self.rollerFaultThreshold:
                 os._exit(103)
@@ -91,14 +94,15 @@ class IntakeSubsystem(commands2.SubsystemBase):
 
     def stowIntake(self):
         if self.intakeMotorEncoder.getPosition() >= self.intakeStowed:
-            baselineFault = time.perf_counter() #Set Baseline for Fault Detection
-
-            #Runs until Sensor returns stow complete; Terminate program with ERR102 if fault condition is detected
+            if self.intakeCondition >= 0:
+                baselineFault = time.perf_counter() #Set Baseline for Fault Detection     
+                self.intakeCondition = -1      
             self.intakeMotor.set(-self.intakeVelocity)
             if baselineFault - time.perf_counter() >= self.rollerFaultThreshold:
                 os._exit(102)
         else:
             self.intakeVelocity = 0
+            self.intakeCondition = 0
             self.intakeMotor.set(0)
 
     def jamDetection(self):
@@ -125,5 +129,6 @@ class IntakeSubsystem(commands2.SubsystemBase):
         self.rollerVelocity = newRollerVelocity
 
     def periodic(self):
-        wpilib.SmartDashboard.putNumber("Intake position", self.intakeMotorEncoder.getPosition())
-        wpilib.SmartDashboard.putNumber("Roller position", self.rollerMotorEncoder.getPosition())
+        wpilib.SmartDashboard.putNumber("Intake Position", self.intakeMotorEncoder.getPosition())
+        wpilib.SmartDashboard.putNumber("Roller Position", self.rollerMotorEncoder.getPosition())
+        wpilib.SmartDashboard.putString("Hall Effects Sensor", self.HallEffectSensor.get())
