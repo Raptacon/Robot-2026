@@ -30,16 +30,17 @@ class IntakeSubsystem(commands2.SubsystemBase):
         self.HallEffectSensor = wpilib.DigitalInput(6)
 
         #Set Variables
-        self.intakeDeployed = 100 #Minimum amount of rotations before assuming intake is deployed
         self.intakeStowed = 0 #Maximum amount of rotations before assuming intake is deployed
         self.intakeFaultThreshold = 20 #Amount of time spent trying to deploy/stow intake before fault condition is triggered
+        self.intakeMagnetFaultThreshold = 2 #Amount of time required for magnet to stop tripping hall effects sensors before fault condition is triggered
         self.rollerFaultThreshold = 20 #Amount of time spent trying to operate rollers before fault condition is triggered
         self.jamTime = 3 #Amount of time to wait before assuming a ball inside the intake has gotten stuck
         self.jamFaultThreshold = 0 #Amount of attempts done trying to reverse rollers in the event of a jam before a fault condition is triggered
         self.rollerDuration = 50 #Amount of rotations before stopping Roller Motor
 
-        self.intakeVelocity = 0 #Leave at zero - any updating is to be done thru Network Table, Speed (in rpm) in which the intake motor will move upon deployment/stowing
-        self.rollerVelocity = 0 #Leave at zero - any updating is to be done thru Network Table, Speed in which the roller motor will move upon deployment
+        self.intakeVelocity = 0 #Leave at 0 - any updating is to be done thru Network Table, Speed (in rpm) in which the intake motor will move upon deployment/stowing
+        self.rollerVelocity = 0 #Leave at 0 - any updating is to be done thru Network Table, Speed in which the roller motor will move upon deployment
+        self.intakeDeployed = 200 #Leave at 200 - it's a starting value - Hall Effect Sensor determines actual minimum amount of rotations before assuming intake is deployed
         self.baselineFault = 0 #Leave at 0, provides baseline to compare to when determining faults
         self.rollerOccurence = 0 #Leave at 0, provides reference for timed roller activation
         self.intakeCondition = 0 #Leave at 0, provides reference for intake fault detection
@@ -49,11 +50,18 @@ class IntakeSubsystem(commands2.SubsystemBase):
 
     def deployIntake(self):
         #Check Sensor for deployment, if not, deploy it.
-        if self.intakeMotorEncoder.getPosition() <= self.intakeDeployed:
-            if self.intakeCondition <= 0:
-                self.baselineFault = time.perf_counter() #Set Baseline for Fault Detection
-                self.intakeCondition = 1
+        if self.intakeCondition <= 0:
+                if self.intakeMotorEncoder.getPosition() <= self.intakeDeployed:
+                    self.baselineFault = time.perf_counter() #Set Baseline for Fault Detection
+                    self.intakeCondition = 1
+        if self.intakeCondition == 1:
             self.intakeMotor.set(self.intakeVelocity)
+            if self.intakeMotorEncoder.getPosition() >= self.intakeDeployed and self.HallEffectSensor == False:
+                print("Hall Effects Sensor indicates absence of magnet - Attempt to stow may result in crash")
+                self.intakeCondition = 0
+            if self.HallEffectSensor.get() == False:
+                self.intakeDeployed = self.intakeMotorEncoder.getPosition()
+                self.intakeCondition = 0
             if self.baselineFault - time.perf_counter() >= self.intakeFaultThreshold:
                 os._exit(101)
         else:
@@ -74,7 +82,6 @@ class IntakeSubsystem(commands2.SubsystemBase):
         if self.hasSecondMotor:
             self.baselineFault = time.perf_counter() #Set Baseline for Fault Detection
         
-            #Try to terminate voltage until motor stops moving; Terminate program with ERR103 if fault condition is detected
             self.rollerMotor.set(0)
             if self.baselineFault - time.perf_counter() >= self.rollerFaultThreshold:
                 os._exit(103)
@@ -93,17 +100,23 @@ class IntakeSubsystem(commands2.SubsystemBase):
                 commands2.CommandScheduler.getInstance().cancelAll()
 
     def stowIntake(self):
-        if self.intakeMotorEncoder.getPosition() >= self.intakeStowed:
-            if self.intakeCondition >= 0:
-                self.baselineFault = time.perf_counter() #Set Baseline for Fault Detection
-                self.intakeCondition = -1      
+        if self.intakeCondition <= 0:
+                if self.intakeMotorEncoder.getPosition() >= self.intakeDeployed:
+                    self.baselineFault = time.perf_counter() #Set Baseline for Fault Detection
+                    self.intakeCondition = -1
+        if self.intakeCondition == -1:
             self.intakeMotor.set(-self.intakeVelocity)
-            if self.baselineFault - time.perf_counter() >= self.rollerFaultThreshold:
-                os._exit(102)
+            if self.intakeMotorEncoder.getPosition() <= self.intakeStowed:
+                self.intakeCondition = 0
+            if self.baselineFault - time.perf_counter() >= self.intakeFaultThreshold:
+                os._exit(103)
+            if self.baselineFault - time.perf_counter() >= self.intakeMagnetFaultThreshold:
+                if self.HallEffectSensor == False:
+                    os._exit(112)
         else:
             self.intakeVelocity = 0
             self.intakeCondition = 0
-            self.intakeMotor.set(0)
+            self.intakeMotor.set(self.intakeVelocity)
 
     def jamDetection(self):
         if self.hasSecondMotor:
@@ -114,7 +127,6 @@ class IntakeSubsystem(commands2.SubsystemBase):
                     if self.baselineFault - time.perf_counter >= self.rollerFaultThreshold:
                         self.baselineFault = time.perf_counter() #Set Baseline for Fault Detection
             
-                        #Reverse voltage to motor until front sensors go off; Terminate program with ERR104 if fault condition is detected
                         while not self.frontBeamBroken:
                             if self.rollerMotorVelocity >= 0:
                                 jamReversalCount += 1
@@ -131,3 +143,4 @@ class IntakeSubsystem(commands2.SubsystemBase):
     def periodic(self):
         wpilib.SmartDashboard.putNumber("Intake Position", self.intakeMotorEncoder.getPosition())
         wpilib.SmartDashboard.putNumber("Roller Position", self.rollerMotorEncoder.getPosition())
+        wpilib.SmartDashboard.putNumber("Intake Deployed", self.intakeDeployed)
