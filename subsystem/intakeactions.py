@@ -27,7 +27,7 @@ class IntakeSubsystem(commands2.SubsystemBase):
         self.frontBeamBroken = not self.frontBreakbeam.get()
         self.backBeamBroken = not self.backBreakbeam.get()
 
-        self.HallEffectSensor = wpilib.DigitalInput(6)
+        self.HallEffectSensor = not wpilib.DigitalInput(6)
 
         #Set Variables
         self.intakeStowed = 0 #Maximum amount of rotations before assuming intake is deployed
@@ -54,8 +54,7 @@ class IntakeSubsystem(commands2.SubsystemBase):
                 self.baselineFault = time.perf_counter() #Set Baseline for Fault Detection
                 self.intakeCondition = 1
         if self.intakeCondition == 1:
-            self.intakeMotor.set(self.intakeVelocity)
-            if self.HallEffectSensor.get() == False:
+            if self.HallEffectSensor.get() == True:
                 self.intakeDeployed = self.intakeMotorEncoder.getPosition()
                 self.intakeCondition = 0
             if self.intakeMotorEncoder.getPosition() >= self.intakeDeployed:
@@ -64,9 +63,7 @@ class IntakeSubsystem(commands2.SubsystemBase):
                 print("INTAKE ERR101: Deployment of Intake doesn't appear to be working! Stopping code.")
                 os._exit(101)
         else:
-            self.intakeVelocity = 0
             self.intakeCondition = 0
-            self.intakeMotor.set(self.intakeVelocity)
 
 
     def activateRoller(self):
@@ -105,21 +102,17 @@ class IntakeSubsystem(commands2.SubsystemBase):
                 self.baselineFault = time.perf_counter() #Set Baseline for Fault Detection
                 self.intakeCondition = -1
         if self.intakeCondition == -1:
-            self.intakeMotor.set(-self.intakeVelocity)
             if self.intakeMotorEncoder.getPosition() <= self.intakeStowed:
                 self.intakeCondition = 0
             if self.baselineFault - time.perf_counter() >= self.intakeFaultThreshold:
                 print("INTAKE ERR102: Intake stow doesn't appear to be working! Stopping code.")
                 os._exit(102)
             if self.intakeMagnetFaultThreshold + 1 >= time.perf_counter() - self.baselineFault >= self.intakeMagnetFaultThreshold:
-                if self.HallEffectSensor.get() == False:
-                    self.intakeCondition = 0
+                if self.HallEffectSensor.get() == True:
                     print("INTAKE ERR112: Intake motor is engaged but the Intake doesn't appear to be moving! Stopping code.")
                     os._exit(112)
         else:
-            self.intakeVelocity = 0
             self.intakeCondition = 0
-            self.intakeMotor.set(self.intakeVelocity)
 
     def jamDetection(self):
         if self.hasSecondMotor:
@@ -144,13 +137,21 @@ class IntakeSubsystem(commands2.SubsystemBase):
     def updateRoller(self, newRollerVelocity):
         self.rollerVelocity = newRollerVelocity
 
-    def faultchecks(self):
+    def motorChecks(self):
         if self.intakeMotorEncoder.getPosition() >= self.intakeDeployed + 15 and self.intakeCondition == 1:
-            print("Intake Motor appears to be deploying outside of limits! Stopping Code.")
+            print("INTAKE ERR121: Intake Motor appears to be deploying outside of limits! Stopping Code.")
             os._exit(121)
         if self.intakeMotorEncoder.getPosition() <= self.intakeStowed - 15 and self.intakeCondition == -1:
-            print("Intake Motor appears to be stowing outside of limits! Stopping Code.")
+            print("INTAKE ERR122: Intake Motor appears to be stowing outside of limits! Stopping Code.")
             os._exit(122)
+        if self.intakeMotorEncoder.getPosition() >= self.intakeDeployed and self.intakeCondition == 1:
+            self.intakeCondition = 0
+        if self.intakeMotorEncoder.getPosition() <= self.intakeStowed and self.intakeCondition == -1:
+            self.intakeCondition = 0
+
+        if self.intakeCondition == 0:
+            self.intakeVelocity = 0
+        self.intakeMotor.set(self.intakeCondition * self.intakeVelocity)
 
     def periodic(self):
         wpilib.SmartDashboard.putNumber("Intake Position", self.intakeMotorEncoder.getPosition())
@@ -160,8 +161,5 @@ class IntakeSubsystem(commands2.SubsystemBase):
         wpilib.SmartDashboard.putNumber("Time", time.perf_counter())
         wpilib.SmartDashboard.putNumber("Baseline Fault", self.baselineFault)
         wpilib.SmartDashboard.putNumber("Intake Condition", self.intakeCondition)
-
-        if self.intakeCondition == 0:
-            self.intakeVelocity = 0
-            self.intakeMotor.set(self.intakeVelocity)
-        self.faultchecks()
+        
+        self.motorChecks()
