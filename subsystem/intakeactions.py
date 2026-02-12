@@ -22,35 +22,37 @@ jamReversalCount = 0 #Leave at 0, stores amount of attempts in reversing motors 
 class IntakeSubsystem(commands2.SubsystemBase):
     def __init__(self, hasSecondMotor = True):
         #Initialize Intake
-        self.intakeMotor = rev.SparkFlex(11, rev.SparkLowLevel.MotorType.kBrushless)
+        self.intakeMotor = rev.SparkFlex(intakeConsts.kIntakeMotorCanId, rev.SparkLowLevel.MotorType.kBrushless)
         self.intakeMotorEncoder = self.intakeMotor.getEncoder()
         #self.intakeMotorPosition = self.intakeMotorEncoder.getPosition()
 
         self.hasSecondMotor = hasSecondMotor
         #Initialize Roller
         if self.hasSecondMotor:
-            self.rollerMotor = rev.SparkMax(56, rev.SparkLowLevel.MotorType.kBrushless)
+            self.rollerMotor = rev.SparkMax(intakeConsts.kRollerMotorCanId, rev.SparkLowLevel.MotorType.kBrushless)
             self.rollerMotorEncoder = self.rollerMotor.getEncoder()
             self.rollerMotorVelocity = self.rollerMotorEncoder.getVelocity()
 
         #Initialize Break Beams
-        self.frontBreakbeam = wpilib.DigitalInput(intakeConsts.kFrontBreakBeam)
-        self.backBreakbeam = wpilib.DigitalInput(intakeConsts.kBackBreakBeam)
-        self.frontBeamBroken = not self.frontBreakbeam.get()
-        self.backBeamBroken = not self.backBreakbeam.get()
+        self.breakBeam = wpilib.DigitalInput(intakeConsts.kBreakBeam)
+        self.breakBeamBroken = not self.breakBeam.get()
+        #self.frontBreakbeam = wpilib.DigitalInput(intakeConsts.kFrontBreakBeam)
+        #self.backBreakbeam = wpilib.DigitalInput(intakeConsts.kBackBreakBeam)
+        #self.frontBeamBroken = not self.frontBreakbeam.get()
+        #self.backBeamBroken = not self.backBreakbeam.get()
 
-        self.HallEffectSensor = not wpilib.DigitalInput(6)
+        self.HallEffectSensor = wpilib.DigitalInput(intakeConsts.kHallEffectSensor)
 
         #Set Variables
         self.intakeDeployed = 200 #Minimum amount of rotations before assuming intake is deployed
         self.intakeStowed = 0 #Maximum amount of rotations before assuming intake is stowed
         self.intakeFaultThreshold = 2 #Amount of time spent trying to deploy/stow intake before fault condition is triggered
+        self.intakeMagnetFaultThreshold = 2 #Amount of time before magnets need to have stopped tripping hall effects sensor or fault condition is triggered
         self.rollerFaultThreshold = 2 #Amount of time spent trying to operate rollers before fault condition is triggered
         self.jamTime = 3 #Amount of time to wait before assuming a ball inside the intake has gotten stuck
         self.jamFaultThreshold = 0 #Amount of attempts done trying to reverse rollers in the event of a jam before a fault condition is triggered
-        self.intakeMagnetFaultThreshold = 2
 
-        self.intakeCondition = 0
+        self.intakeCondition = 0 #Leave at zero - provides reference to code on current intake status
         self.intakeVelocity = 0 #Leave at zero - any updating is to be done thru Network Table, Speed (in rpm) in which the intake motor will move upon deployment/stowing
         self.rollerVelocity = 0 #Leave at zero - any updating is to be done thru Network Table, Speed in which the roller motor will move upon deployment
         self.baselineFault = 0 #Leave at 0, provides baseline to compare to when determining faults
@@ -151,6 +153,12 @@ class IntakeSubsystem(commands2.SubsystemBase):
             self.intakeVelocity = 0
         self.intakeMotor.set(self.intakeCondition * self.intakeVelocity)
 
+    def automaticRollerActivation(self):
+        if self.breakBeamBroken:
+            self.activateRoller()
+        else:
+            self.deactivateRoller()
+    
     def periodic(self):
         wpilib.SmartDashboard.putNumber("Intake Position", self.intakeMotorEncoder.getPosition())
         wpilib.SmartDashboard.putNumber("Roller Position", self.rollerMotorEncoder.getPosition())
@@ -161,5 +169,4 @@ class IntakeSubsystem(commands2.SubsystemBase):
         wpilib.SmartDashboard.putNumber("Intake Condition", self.intakeCondition)
         
         self.motorChecks()
-
-        self.motorChecks()
+        self.automaticRollerActivation()
