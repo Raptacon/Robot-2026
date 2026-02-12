@@ -39,7 +39,7 @@ class IntakeSubsystem(commands2.SubsystemBase):
         self.frontBeamBroken = not self.frontBreakbeam.get()
         self.backBeamBroken = not self.backBreakbeam.get()
 
-        self.HallEffectSensor = wpilib.DigitalInput(6)
+        self.HallEffectSensor = not wpilib.DigitalInput(6)
 
         #Set Variables
         self.intakeDeployed = 200 #Minimum amount of rotations before assuming intake is deployed
@@ -160,4 +160,6 @@ class IntakeSubsystem(commands2.SubsystemBase):
         wpilib.SmartDashboard.putNumber("Baseline Fault", self.baselineFault)
         wpilib.SmartDashboard.putNumber("Intake Condition", self.intakeCondition)
         
+        self.motorChecks()
+
         self.motorChecks()
