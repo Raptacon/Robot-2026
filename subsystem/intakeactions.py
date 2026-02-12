@@ -51,7 +51,7 @@ class IntakeSubsystem(commands2.SubsystemBase):
     def deployIntake(self):
         #Check Sensor for deployment, if not, deploy it.
         if self.intakeCondition <= 0:
-                self.baselineFault = time.perf_counter() #Set Baseline for Fault Detection
+                self.baselineFault = time.perf_counter()
                 self.intakeCondition = 1
         if self.intakeCondition == 1:
             if self.HallEffectSensor.get() == True:
@@ -68,7 +68,7 @@ class IntakeSubsystem(commands2.SubsystemBase):
 
     def activateRoller(self):
         if self.hasSecondMotor:
-            self.baselineFault = time.perf_counter() #Set Baseline for Fault Detection
+            self.baselineFault = time.perf_counter()
             
             self.rollerMotor.set(self.rollerVelocity)
             if self.baselineFault - time.perf_counter() >= self.rollerFaultThreshold:
@@ -77,7 +77,7 @@ class IntakeSubsystem(commands2.SubsystemBase):
 
     def deactivateRoller(self):
         if self.hasSecondMotor:
-            self.baselineFault = time.perf_counter() #Set Baseline for Fault Detection
+            self.baselineFault = time.perf_counter()
         
             self.rollerMotor.set(0)
             if self.baselineFault - time.perf_counter() >= self.rollerFaultThreshold:
@@ -99,7 +99,7 @@ class IntakeSubsystem(commands2.SubsystemBase):
 
     def stowIntake(self):
         if self.intakeCondition >= 0:
-                self.baselineFault = time.perf_counter() #Set Baseline for Fault Detection
+                self.baselineFault = time.perf_counter()
                 self.intakeCondition = -1
         if self.intakeCondition == -1:
             if self.intakeMotorEncoder.getPosition() <= self.intakeStowed:
@@ -117,11 +117,11 @@ class IntakeSubsystem(commands2.SubsystemBase):
     def jamDetection(self):
         if self.hasSecondMotor:
             if self.frontBeamBroken:
-                baselineJam = time.perf_counter() #Set Baseline for Jam Detection
+                baselineJam = time.perf_counter()
                 while not self.backBeamBroken:
                     #If Ball appears to have jammed, reverse rollers
                     if self.baselineFault - time.perf_counter >= self.rollerFaultThreshold:
-                        self.baselineFault = time.perf_counter() #Set Baseline for Fault Detection
+                        self.baselineFault = time.perf_counter()
             
                         while not self.frontBeamBroken:
                             if self.rollerMotorVelocity >= 0:
