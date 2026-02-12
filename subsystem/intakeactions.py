@@ -35,7 +35,6 @@ class IntakeSubsystem(commands2.SubsystemBase):
 
         #Initialize Break Beams
         self.breakBeam = wpilib.DigitalInput(intakeConsts.kBreakBeam)
-        self.breakBeamBroken = not self.breakBeam.get()
         #self.frontBreakbeam = wpilib.DigitalInput(intakeConsts.kFrontBreakBeam)
         #self.backBreakbeam = wpilib.DigitalInput(intakeConsts.kBackBreakBeam)
         #self.frontBeamBroken = not self.frontBreakbeam.get()
@@ -49,6 +48,7 @@ class IntakeSubsystem(commands2.SubsystemBase):
         self.intakeFaultThreshold = 2 #Amount of time spent trying to deploy/stow intake before fault condition is triggered
         self.intakeMagnetFaultThreshold = 2 #Amount of time before magnets need to have stopped tripping hall effects sensor or fault condition is triggered
         self.rollerFaultThreshold = 2 #Amount of time spent trying to operate rollers before fault condition is triggered
+        self.rollerSensor = 0 #Ensures that the rollers are stopped only once, preventing obstruction of manual controls
         self.jamTime = 3 #Amount of time to wait before assuming a ball inside the intake has gotten stuck
         self.jamFaultThreshold = 0 #Amount of attempts done trying to reverse rollers in the event of a jam before a fault condition is triggered
 
@@ -154,10 +154,13 @@ class IntakeSubsystem(commands2.SubsystemBase):
         self.intakeMotor.set(self.intakeCondition * self.intakeVelocity)
 
     def automaticRollerActivation(self):
-        if self.breakBeamBroken:
+        if not self.breakBeam.get():
+            self.rollerSensor = 1
             self.activateRoller()
         else:
-            self.deactivateRoller()
+            if self.rollerSensor == 1:
+                self.deactivateRoller()
+                self.rollerSensor = 0
     
     def periodic(self):
         wpilib.SmartDashboard.putNumber("Intake Position", self.intakeMotorEncoder.getPosition())
@@ -167,6 +170,8 @@ class IntakeSubsystem(commands2.SubsystemBase):
         wpilib.SmartDashboard.putNumber("Time", time.perf_counter())
         wpilib.SmartDashboard.putNumber("Baseline Fault", self.baselineFault)
         wpilib.SmartDashboard.putNumber("Intake Condition", self.intakeCondition)
+        wpilib.SmartDashboard.putBoolean("Break Beam Sensor", self.breakBeam.get())
+        wpilib.SmartDashboard.putNumber("Roller Sensor", self.rollerSensor)
         
         self.motorChecks()
         self.automaticRollerActivation()
