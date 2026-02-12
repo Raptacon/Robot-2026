@@ -39,14 +39,18 @@ class IntakeSubsystem(commands2.SubsystemBase):
         self.frontBeamBroken = not self.frontBreakbeam.get()
         self.backBeamBroken = not self.backBreakbeam.get()
 
+        self.HallEffectSensor = wpilib.DigitalInput(6)
+
         #Set Variables
-        self.intakeDeployed = 100 #Minimum amount of rotations before assuming intake is deployed
+        self.intakeDeployed = 200 #Minimum amount of rotations before assuming intake is deployed
         self.intakeStowed = 0 #Maximum amount of rotations before assuming intake is stowed
         self.intakeFaultThreshold = 2 #Amount of time spent trying to deploy/stow intake before fault condition is triggered
         self.rollerFaultThreshold = 2 #Amount of time spent trying to operate rollers before fault condition is triggered
         self.jamTime = 3 #Amount of time to wait before assuming a ball inside the intake has gotten stuck
         self.jamFaultThreshold = 0 #Amount of attempts done trying to reverse rollers in the event of a jam before a fault condition is triggered
+        self.intakeMagnetFaultThreshold = 2
 
+        self.intakeCondition = 0
         self.intakeVelocity = 0 #Leave at zero - any updating is to be done thru Network Table, Speed (in rpm) in which the intake motor will move upon deployment/stowing
         self.rollerVelocity = 0 #Leave at zero - any updating is to be done thru Network Table, Speed in which the roller motor will move upon deployment
         self.baselineFault = 0 #Leave at 0, provides baseline to compare to when determining faults
@@ -55,59 +59,67 @@ class IntakeSubsystem(commands2.SubsystemBase):
 
     def deployIntake(self):
         #Check Sensor for deployment, if not, deploy it.
-        if self.intakeMotorEncoder.getPosition() <= self.intakeDeployed:
-            baselineFault = time.perf_counter() #Set Baseline for Fault Detection
-
-            #Runs until Sensor returns deployment complete; Terminate program with ERR101 if fault condition is detected
-            self.intakeMotor.set(self.intakeVelocity)
-
-            if baselineFault - time.perf_counter() >= self.intakeFaultThreshold:
+        if self.intakeCondition <= 0 and self.intakeMotorEncoder.getPosition() <= self.intakeDeployed:
+                self.baselineFault = time.perf_counter()
+                self.intakeCondition = 1
+        if self.intakeCondition == 1:
+            if self.HallEffectSensor.get() == False:
+                self.intakeDeployed = self.intakeMotorEncoder.getPosition()
+                self.intakeCondition = 0
+            if self.intakeMotorEncoder.getPosition() >= self.intakeDeployed:
+                self.intakeCondition = 0
+            if self.baselineFault - time.perf_counter() >= self.intakeFaultThreshold:
+                print("INTAKE ERR101: Deployment of Intake doesn't appear to be working! Stopping code.")
                 os._exit(101)
         else:
-            self.intakeVelocity = 0
-            self.intakeMotor.set(self.intakeVelocity)
+            self.intakeCondition = 0
 
     def activateRoller(self):
         if self.hasSecondMotor:
-            baselineFault = time.perf_counter() #Set Baseline for Fault Detection
+            #self.baselineFault = time.perf_counter()
             
             #Apply voltage to roller until it starts moving; Terminate program with ERR103 if fault condition is detected
-            while self.rollerMotorVelocity == 0:
-                self.rollerMotor.set(self.rollerVelocity)
-                if baselineFault - time.perf_counter() >= self.rollerFaultThreshold:
-                    os._exit(103)
+            #while self.rollerMotorEncoder.getVelocity() == 0:
+            self.rollerMotor.set(self.rollerVelocity)
+                #if baselineFault - time.perf_counter() >= self.rollerFaultThreshold:
+                    #os._exit(103)
 
     def deactivateRoller(self):
-        if self.hasSecondMotor:
-            baselineFault = time.perf_counter() #Set Baseline for Fault Detection
+        #if self.hasSecondMotor:
+            #self.baselineFault = time.perf_counter()
         
             #Try to terminate voltage until motor stops moving; Terminate program with ERR103 if fault condition is detected
-            while self.rollerMotorVelocity != 0:
-                self.rollerMotor.set(0)
-                if baselineFault - time.perf_counter() >= self.rollerFaultThreshold:
-                    os._exit(103)
+            #while self.rollerMotorEncoder.getVelocity() != 0:
+        self.rollerMotor.set(0)
+                #if baselineFault - time.perf_counter() >= self.rollerFaultThreshold:
+                    #os._exit(103)
 
     def stowIntake(self):
-        if self.intakeMotorEncoder.getPosition() >= self.intakeStowed:
-            baselineFault = time.perf_counter() #Set Baseline for Fault Detection
-
-            #Runs until Sensor returns stow complete; Terminate program with ERR102 if fault condition is detected
-            self.intakeMotor.set(-self.intakeVelocity)
-            if baselineFault - time.perf_counter() >= self.rollerFaultThreshold:
+        if self.intakeCondition >= 0 and self.intakeMotorEncoder.getPosition() >= self.intakeStowed:
+                self.baselineFault = time.perf_counter()
+                self.intakeCondition = -1
+        if self.intakeCondition == -1:
+            if self.intakeMotorEncoder.getPosition() <= self.intakeStowed:
+                self.intakeCondition = 0
+            if self.baselineFault - time.perf_counter() >= self.intakeFaultThreshold:
+                print("INTAKE ERR102: Intake stow doesn't appear to be working! Stopping code.")
                 os._exit(102)
+            if self.intakeMagnetFaultThreshold + 1 >= time.perf_counter() - self.baselineFault >= self.intakeMagnetFaultThreshold:
+                if self.HallEffectSensor.get() == False:
+                    print("INTAKE ERR112: Intake motor is engaged but the Intake doesn't appear to be moving! Stopping code.")
+                    os._exit(112)
         else:
-            self.intakeVelocity = 0
-            self.intakeMotor.set(self.intakeVelocity)
+            self.intakeCondition = 0
 
 
     def jamDetection(self):
         if self.hasSecondMotor:
             if self.frontBeamBroken:
-                baselineJam = time.perf_counter() #Set Baseline for Jam Detection
+                baselineJam = time.perf_counter()
                 while not self.backBeamBroken:
                     #If Ball appears to have jammed, reverse rollers
-                    if baselineFault - time.perf_counter >= self.rollerFaultThreshold:
-                        baselineFault = time.perf_counter() #Set Baseline for Fault Detection
+                    if self.baselineFault - time.perf_counter >= self.rollerFaultThreshold:
+                        self.baselineFault = time.perf_counter()
             
                         #Reverse voltage to motor until front sensors go off; Terminate program with ERR104 if fault condition is detected
                         while not self.frontBeamBroken:
@@ -123,5 +135,29 @@ class IntakeSubsystem(commands2.SubsystemBase):
     def updateRoller(self, newRollerVelocity):
         self.rollerVelocity = newRollerVelocity
 
+    def motorChecks(self):
+        if self.intakeMotorEncoder.getPosition() >= self.intakeDeployed + 15 and self.intakeCondition == 1:
+            print("INTAKE ERR121: Intake Motor appears to be deploying outside of limits! Stopping Code.")
+            os._exit(121)
+        if self.intakeMotorEncoder.getPosition() <= self.intakeStowed - 15 and self.intakeCondition == -1:
+            print("INTAKE ERR122: Intake Motor appears to be stowing outside of limits! Stopping Code.")
+            os._exit(122)
+        if self.intakeMotorEncoder.getPosition() >= self.intakeDeployed and self.intakeCondition == 1:
+            self.intakeCondition = 0
+        if self.intakeMotorEncoder.getPosition() <= self.intakeStowed and self.intakeCondition == -1:
+            self.intakeCondition = 0
+
+        if self.intakeCondition == 0:
+            self.intakeVelocity = 0
+        self.intakeMotor.set(self.intakeCondition * self.intakeVelocity)
+
     def periodic(self):
-        wpilib.SmartDashboard.putNumber("Intake position", self.intakeMotorEncoder.getPosition())
+        wpilib.SmartDashboard.putNumber("Intake Position", self.intakeMotorEncoder.getPosition())
+        wpilib.SmartDashboard.putNumber("Roller Position", self.rollerMotorEncoder.getPosition())
+        wpilib.SmartDashboard.putNumber("Intake Deployed", self.intakeDeployed)
+        wpilib.SmartDashboard.putBoolean("Hall Effects Sensor", self.HallEffectSensor.get())
+        wpilib.SmartDashboard.putNumber("Time", time.perf_counter())
+        wpilib.SmartDashboard.putNumber("Baseline Fault", self.baselineFault)
+        wpilib.SmartDashboard.putNumber("Intake Condition", self.intakeCondition)
+        
+        self.motorChecks()

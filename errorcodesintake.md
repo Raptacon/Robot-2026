@@ -5,3 +5,6 @@
 - ERR 102: Unsuccessful STOW OF INTAKE within expected time; Motor may not moving / failing to move within expected time
 - ERR 103: Unsuccessful ACTIVATION OF ROLLERS within expected time; Motor may not moving / failing to move within expected time
 - ERR 104: Unsuccessful REVERSAL OF ROLLERS CORRECTING JAMMED BALL within expected time; Motor may not moving / failing to move within expected time
+
+- ERR 112: Unsuccessful STOW OF INTAKE as Hall Effects sensors still indicate presence of magnet: Motor may not moving / failing to move within expected time
+    - May have been preceded with "Hall Effects Sensor indicates absence of magnet - Attempt to stow may result in crash"
