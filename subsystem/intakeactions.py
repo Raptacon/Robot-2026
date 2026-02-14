@@ -213,14 +213,16 @@ class IntakeSubsystem(commands2.SubsystemBase):
                         self.intakeRamped = 0
                         self.intakeCondition = 0
                         self.intakeRampedCondition = True
-        if self.intakeCondition == 1:
+        
+        if self.intakeCondition == 1 and self.intakeMotorEncoder.getPosition() >= self.intakeStowed:
             if self.intakeMotorEncoder.getVelocity() == 0:
                     self.intakeDeployed = self.intakeMotorEncoder.getPosition()
                     self.intakeCondition = 0
-        if self.intakeCondition == -1:
+        if self.intakeCondition == -1 and self.intakeMotorEncoder.getPosition() <= self.intakeDeployed:
             if self.intakeMotorEncoder.getVelocity() == 0:
                     self.intakeStowed = self.intakeMotorEncoder.getPosition()
                     self.intakeCondition = 0     
+        
         if self.intakeMotorEncoder.getPosition() >= self.intakeDeployed:
             self.intakeRamped = 0
         if self.intakeMotorEncoder.getPosition() <= self.intakeStowed:
