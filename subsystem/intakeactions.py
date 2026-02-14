@@ -58,6 +58,9 @@ class IntakeSubsystem(commands2.SubsystemBase):
         self.baselineFault = 0 #Leave at 0, provides baseline to compare to when determining faults
         self.baselineJam = 0 #Leave at 0, provides baseline to compare to when determining faults
         self.jamReversalCount = 0 #Leave at 0, stores amount of attempts in reversing motors in the event of a jam before a fault condition is triggered
+        self.intakeDifference = 0 #Leave at 0, rotations required to get from intake stowed position to intake deployed position is automatically calculated
+        self.remainingRotations = 0 #Leave at 0, rotations remaining to finish deploying/stowing intake is automatically calculated
+        self.intakeSlowdownPosition = 0 #Leave at 0, stores amount of intake motor rotations required to slow it down
 
     def deployIntake(self):
         #Check Sensor for deployment, if not, deploy it.
@@ -161,6 +164,21 @@ class IntakeSubsystem(commands2.SubsystemBase):
             if self.rollerSensor == 1:
                 self.deactivateRoller()
                 self.rollerSensor = 0
+
+    def intakeSlowdown(self):
+        self.intakeDifference = abs(self.intakeStowed) + abs(self.intakeDeployed)
+        #Slows down deployment of motor when slowdown position is reached
+        if self.intakeCondition == 1: 
+            self.remainingRotations = self.intakeDifference - (abs(self.intakeStowed) + abs(0 - self.intakeMotorEncoder.getPosition()))
+            self.intakeSlowdownPosition = self.intakeStowed + (self.intakeDifference * 0.85)
+            if self.intakeMotorEncoder.getPosition() >= self.intakeSlowdownPosition:
+                self.intakeVelocity = self.intakeVelocity * 0.99
+        #Slows down stowing of motor when slowdown position is reached
+        if self.intakeCondition == -1:
+            self.remainingRotations = self.intakeDifference - (self.intakeDeployed - self.intakeMotorEncoder.getPosition() - abs(self.intakeStowed))
+            self.intakeSlowdownPosition = self.intakeDeployed - (self.intakeDifference * 0.85)
+            if self.intakeMotorEncoder.getPosition() <= self.intakeSlowdownPosition:
+                self.intakeVelocity = self.intakeVelocity * 0.99
     
     def periodic(self):
         wpilib.SmartDashboard.putNumber("Intake Position", self.intakeMotorEncoder.getPosition())
@@ -175,3 +193,4 @@ class IntakeSubsystem(commands2.SubsystemBase):
         
         self.motorChecks()
         self.automaticRollerActivation()
+        self.intakeSlowdown()
