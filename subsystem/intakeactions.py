@@ -174,13 +174,13 @@ class IntakeSubsystem(commands2.SubsystemBase):
             self.remainingRotations = self.intakeDifference - (abs(self.intakeStowed) + abs(0 - self.intakeMotorEncoder.getPosition()))
             self.intakeSlowdownPosition = self.intakeStowed + (self.intakeDifference * 0.85)
             if self.intakeMotorEncoder.getPosition() >= self.intakeSlowdownPosition:
-                self.intakeVelocity = self.intakeVelocity * 0.99
+                self.intakeCondition = 0.5
         #Slows down stowing of motor when slowdown position is reached
         if self.intakeCondition == -1:
             self.remainingRotations = self.intakeDifference - (self.intakeDeployed - self.intakeMotorEncoder.getPosition() - abs(self.intakeStowed))
             self.intakeSlowdownPosition = self.intakeDeployed - (self.intakeDifference * 0.85)
             if self.intakeMotorEncoder.getPosition() <= self.intakeSlowdownPosition:
-                self.intakeVelocity = self.intakeVelocity * 0.99
+                self.intakeCondition = -0.5
 
     def rampIntake(self):
         self.intakeDifference = abs(self.intakeStowed) + abs(self.intakeDeployed)
