@@ -75,6 +75,9 @@ class IntakeSubsystem(commands2.SubsystemBase):
             if self.HallEffectSensor.get() == False:
                 self.intakeDeployed = self.intakeMotorEncoder.getPosition()
                 self.intakeCondition = 0
+            if self.intakeMotorEncoder.getVelocity() == 0:
+                self.intakeDeployed = self.intakeMotorEncoder.getPosition()
+                self.intakeCondition = 0
             if self.intakeMotorEncoder.getPosition() >= self.intakeDeployed:
                 self.intakeCondition = 0
             if self.baselineFault - time.perf_counter() >= self.intakeFaultThreshold:
@@ -109,6 +112,9 @@ class IntakeSubsystem(commands2.SubsystemBase):
                 self.intakeCondition = -1
         if self.intakeCondition <= 0:
             if self.intakeMotorEncoder.getPosition() <= self.intakeStowed:
+                self.intakeCondition = 0
+            if self.intakeMotorEncoder.getVelocity() == 0:
+                self.intakeDeployed = self.intakeMotorEncoder.getPosition()
                 self.intakeCondition = 0
             if self.baselineFault - time.perf_counter() >= self.intakeFaultThreshold:
                 print("INTAKE ERR102: Intake stow doesn't appear to be working! Stopping code.")
