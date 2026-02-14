@@ -10,6 +10,7 @@ import wpilib
 from commands2 import Command, Subsystem
 from commands2.sysid import SysIdRoutine
 from wpilib.sysid import SysIdRoutineLog
+from wpimath.controller import PIDController
 
 
 def GetSparkSignalsPositionControlConfig(
@@ -80,7 +81,7 @@ class Turret(Subsystem):
         (
             config.encoder
             .positionConversionFactor(position_conversion_factor)
-            .velocityConversionFactor(velocity_conversion_factor)
+            .velocityConversionFactor(position_conversion_factor)
         )
 
         (
@@ -103,6 +104,9 @@ class Turret(Subsystem):
             rev.ResetMode.kResetSafeParameters,
             rev.PersistMode.kNoPersistParameters
         )
+        
+        self.controller = PIDController(5.3402, 0.001, 0.65234)
+        self.controller.setIntegratorRange(-2, 2)
 
     def setMotorVoltage(self, output: float) -> None:
         if self._is_homing:
@@ -112,7 +116,8 @@ class Turret(Subsystem):
     def setPosition(self, position_degrees: float) -> None:
         if self._is_homing:
             return
-        self._target_position = position_degrees
+        if self._target_position != position_degrees:
+            self._target_position = position_degrees
 
     def getPosition(self) -> float:
         return self.encoder.getPosition()
@@ -129,14 +134,62 @@ class Turret(Subsystem):
         self.motor.stopMotor()
 
     def periodic(self) -> None:
+        if wpilib.DriverStation.isDisabled():
+            self._target_position = None
+            self.turretDisable()
+            return
         if self._is_homing:
             self.homingPeriodic()
         elif self._target_position is not None:
-            self.pid_controller.setReference(
-                self._target_position,
-                rev.SparkLowLevel.ControlType.kPosition,
-                rev.ClosedLoopSlot.kSlot0
-            )
+            position = self.motor.getEncoder().getPosition()
+            pidOutput = self.controller.calculate(
+                position, self._target_position)
+            if self.controller.atSetpoint():
+                self.motor.setVoltage(0)
+            else:
+                if abs(pidOutput) < 0.5 and abs(pidOutput) > 0.2:
+                        pidOutput = 0.5 * math.copysign(1, pidOutput)
+                self.motor.setVoltage(pidOutput)
+
+        # Publish telemetry
+        prefix = self.getName() + "/"
+        sd = wpilib.SmartDashboard
+        sd.putNumber(prefix + "position", self.encoder.getPosition())
+        sd.putNumber(prefix + "velocity", self.encoder.getVelocity())
+        sd.putNumber(
+            prefix + "appliedOutput", self.motor.getAppliedOutput()
+        )
+        sd.putNumber(prefix + "current", self.motor.getOutputCurrent())
+        sd.putNumber(
+            prefix + "busVoltage", self.motor.getBusVoltage()
+        )
+        sd.putNumber(
+            prefix + "temperature", self.motor.getMotorTemperature()
+        )
+        sd.putBoolean(prefix + "isHoming", self._is_homing)
+        target = self._target_position if self._target_position is not None else 0.0
+        sd.putNumber(prefix + "targetPosition", target)
+        sd.putBoolean(
+            prefix + "atTargetPosition",
+            self._target_position is not None
+        )
+        # Soft limits
+        sl = self.motor.configAccessor.softLimit
+        sd.putNumber(prefix + "minSoftLimit", sl.getReverseSoftLimit())
+        sd.putNumber(prefix + "maxSoftLimit", sl.getForwardSoftLimit())
+        # Limit switches
+        sd.putBoolean(
+            prefix + "forwardLimitHit",
+            self.motor.getForwardLimitSwitch().get()
+        )
+        sd.putBoolean(
+            prefix + "reverseLimitHit",
+            self.motor.getReverseLimitSwitch().get()
+        )
+        # PID parameters
+        sd.putNumber(prefix + "pid/p", self.controller.getP())
+        sd.putNumber(prefix + "pid/i", self.controller.getI())
+        sd.putNumber(prefix + "pid/d", self.controller.getD())
 
     def homingInit(
         self,
@@ -315,3 +368,6 @@ class Turret(Subsystem):
         sysIdRoutine: SysIdRoutine
     ) -> Command:
         return sysIdRoutine.dynamic(direction)
+    
+    def setPositionCommand(self, position_degrees: float) -> Command:
+        return Command(lambda: self.setPosition(position_degrees), [self])

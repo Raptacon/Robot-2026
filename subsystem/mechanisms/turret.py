@@ -201,7 +201,8 @@ class Turret(Subsystem):
         Subsystem periodic method called every cycle by the command scheduler.
 
         Manages turret state: runs homing routine if active, drives PID to
-        target position if set, or idles if disabled.
+        target position if set, or idles if disabled. Publishes telemetry
+        to SmartDashboard under the subsystem name prefix.
 
         Returns:
             None
@@ -214,6 +215,48 @@ class Turret(Subsystem):
                 rev.SparkLowLevel.ControlType.kPosition,
                 rev.ClosedLoopSlot.kSlot0
             )
+
+        # Publish telemetry
+        prefix = self.getName() + "/"
+        sd = wpilib.SmartDashboard
+        sd.putNumber(prefix + "position", self.encoder.getPosition())
+        sd.putNumber(prefix + "velocity", self.encoder.getVelocity())
+        sd.putNumber(
+            prefix + "appliedOutput", self.motor.getAppliedOutput()
+        )
+        sd.putNumber(prefix + "current", self.motor.getOutputCurrent())
+        sd.putNumber(
+            prefix + "busVoltage", self.motor.getBusVoltage()
+        )
+        sd.putNumber(
+            prefix + "temperature", self.motor.getMotorTemperature()
+        )
+        sd.putBoolean(prefix + "isHoming", self._is_homing)
+        target = self._target_position if self._target_position is not None else 0.0
+        sd.putNumber(prefix + "targetPosition", target)
+        sd.putBoolean(
+            prefix + "atTargetPosition",
+            self._target_position is not None
+        )
+        # Soft limits
+        sl = self.motor.configAccessor.softLimit
+        sd.putNumber(prefix + "minSoftLimit", sl.getReverseSoftLimit())
+        sd.putNumber(prefix + "maxSoftLimit", sl.getForwardSoftLimit())
+        # Limit switches
+        sd.putBoolean(
+            prefix + "forwardLimitHit",
+            self.motor.getForwardLimitSwitch().get()
+        )
+        sd.putBoolean(
+            prefix + "reverseLimitHit",
+            self.motor.getReverseLimitSwitch().get()
+        )
+        # PID parameters
+        cl = self.motor.configAccessor.closedLoop
+        sd.putNumber(prefix + "pid/p", cl.getP())
+        sd.putNumber(prefix + "pid/i", cl.getI())
+        sd.putNumber(prefix + "pid/d", cl.getD())
+        sd.putNumber(prefix + "pid/ff", cl.getFF())
 
     def homingInit(
         self,

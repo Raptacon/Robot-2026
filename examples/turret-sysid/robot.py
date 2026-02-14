@@ -6,15 +6,16 @@ import turret
 from commands2.sysid import SysIdRoutine
 from commands2.button import CommandXboxController
 from commands2 import TimedCommandRobot
+import commands2
 
 # Turret motor CAN ID
 kTurretMotorID = 40
 
 # Turret configuration
 # 100:1 gear ratio: 1 motor rotation = 3.6 degrees turret rotation
-kPositionConversionFactor = 3.6  # degrees per motor rotation
-kMinSoftLimit = -90.0  # degrees
-kMaxSoftLimit = 90.0   # degrees
+kPositionConversionFactor = 1/11 # degrees per motor rotation
+kMinSoftLimit = -0.5  # degrees
+kMaxSoftLimit = 0.5   # degrees
 
 
 class MyRobot(TimedCommandRobot):
@@ -41,7 +42,7 @@ class MyRobot(TimedCommandRobot):
 
         # Setup SysId routine
         # Config: ramp rate 2 V/s, step voltage 5V, timeout 10s
-        sysIdConfig = SysIdRoutine.Config(2, 5, 10.0, None)
+        sysIdConfig = SysIdRoutine.Config(0.5, 5, 10.0, None)
         sysIdMechanism = SysIdRoutine.Mechanism(
             self.turret.setMotorVoltage,
             self.turret.sysIdLog,
@@ -79,3 +80,41 @@ class MyRobot(TimedCommandRobot):
 
     def teleopPeriodic(self):
         super().teleopPeriodic()
+
+    def testInit(self):
+        super().testInit()
+        self.controller = CommandXboxController(0)
+        # A/B: Quasistatic forward/reverse
+        self.controller.a().onTrue(
+            commands2.cmd.run(lambda: self.turret.setPosition(-0.5), self.turret)
+        )
+
+        self.controller.b().onTrue(
+            commands2.cmd.run(lambda: self.turret.setPosition(0), self.turret)
+
+        )
+
+        # X/Y: Dynamic forward/reverse
+        self.controller.x().onTrue(
+            commands2.cmd.run(lambda: self.turret.setPosition(0.5), self.turret)
+        )
+        
+        self.setPositionMagic = 0.0
+        self.setPositionMagicSign = 1
+        self.setPositionMagicIncrement = 0.1
+        
+    def testPeriodic(self):
+        super().testPeriodic()
+        if self.controller._hid.getYButton():
+            self.setPositionMagic += (self.setPositionMagicSign * self.setPositionMagicIncrement)
+            if self.setPositionMagic > 0.5:
+                self.setPositionMagic = 0.5
+                self.setPositionMagicSign = -1
+            elif self.setPositionMagic < -0.5:
+                self.setPositionMagic = -0.5
+                self.setPositionMagicSign = 1
+            print(f"setPositionMagic: {self.setPositionMagic : .2f}")
+            self.turret.setPosition(self.setPositionMagic)
+            print("y button pressed")
+        
+    
