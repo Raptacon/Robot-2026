@@ -9,6 +9,8 @@ from data.telemetry import Telemetry
 from vision import Vision
 from commands.default_swerve_drive import DefaultDrive
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
+from commands.operate_ballpit import OperateBallPit
+from subsystem.ballpit import BallPitHopper as Hopper
 
 # Third-party imports
 import commands2
@@ -24,6 +26,7 @@ class RobotSwerve:
     """
     # forward declare critical types for editors
     drivetrain: SwerveDrivetrain
+    hopper: Hopper
 
     def __init__(self, is_disabled: Callable[[], bool]) -> None:
         # networktables setup
@@ -32,6 +35,7 @@ class RobotSwerve:
 
         # Subsystem instantiation
         self.drivetrain = SwerveDrivetrain()
+        self.hopper = Hopper()
         
         # Alliance instantiaion
         self.alliance = "red" if self.drivetrain.flip_to_red_alliance() else "blue"
@@ -146,6 +150,8 @@ class RobotSwerve:
     def teleopPeriodic(self):
         if self.driver_controller.getLeftTriggerAxis() > 0.5:
             commands2.CommandScheduler.getInstance().cancelAll()
+        if self.driver_controller.getRightTriggerAxis() > 0.5:
+            OperateBallPit(self.hopper, False)
         self.speedMultiplier = wpilib.SmartDashboard.getNumber("Drivetrain speed", 1)
         self.drivetrain.setSpeedMultiplier(self.speedMultiplier)
 
