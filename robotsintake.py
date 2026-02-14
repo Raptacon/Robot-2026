@@ -59,7 +59,7 @@ class RobotIntake:
             commands2.cmd.runOnce(self.intake.activateRoller, self.intake)
         )
         Trigger(self.intakeController.getStartButtonPressed).onTrue(
-            commands2.cmd.runOnce(self.intake.rampIntake, self.intake)
+            commands2.cmd.run(self.intake.rampIntake, self.intake)
         )
 
 
