@@ -69,6 +69,7 @@ class MyRobot(TimedCommandRobot):
         motor = rev.SparkFlex(10, rev.SparkLowLevel.MotorType.kBrushless)
         print(motor.configAccessor.signals.getPrimaryEncoderVelocityAlwaysOn())
         config = GetSparkConfig(rev.SparkBaseConfig())
+        config.encoder
         errror = motor.configure(config, rev.ResetMode.kResetSafeParameters, rev.PersistMode.kNoPersistParameters)
         print(errror)
         print(motor.configAccessor.signals.getPrimaryEncoderVelocityAlwaysOn())
