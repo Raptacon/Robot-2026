@@ -44,7 +44,7 @@ class IntakeSubsystem(commands2.SubsystemBase):
 
         #Set Variables
         self.intakeDeployed = 200 #Minimum amount of rotations before assuming intake is deployed
-        self.intakeStowed = 0 #Maximum amount of rotations before assuming intake is stowed
+        self.intakeStowed = 0 #Maximum amount of rotations before assuming intake is stowed 
         self.intakeFaultThreshold = 2 #Amount of time spent trying to deploy/stow intake before fault condition is triggered
         self.intakeMagnetFaultThreshold = 2 #Amount of time before magnets need to have stopped tripping hall effects sensor or fault condition is triggered
         self.rollerFaultThreshold = 2 #Amount of time spent trying to operate rollers before fault condition is triggered
@@ -61,6 +61,7 @@ class IntakeSubsystem(commands2.SubsystemBase):
         self.intakeDifference = 0 #Leave at 0, rotations required to get from intake stowed position to intake deployed position is automatically calculated
         self.remainingRotations = 0 #Leave at 0, rotations remaining to finish deploying/stowing intake is automatically calculated
         self.intakeSlowdownPosition = 0 #Leave at 0, stores amount of intake motor rotations required to slow it down
+        self.intakeRamp = 0 #Leave at 0, motor position for ramp is automatically calculated
 
     def deployIntake(self):
         #Check Sensor for deployment, if not, deploy it.
@@ -180,6 +181,31 @@ class IntakeSubsystem(commands2.SubsystemBase):
             self.intakeSlowdownPosition = self.intakeDeployed - (self.intakeDifference * 0.85)
             if self.intakeMotorEncoder.getPosition() <= self.intakeSlowdownPosition:
                 self.intakeVelocity = self.intakeVelocity * 0.99
+
+    def rampIntake(self):
+        self.intakeDifference = abs(self.intakeStowed) + abs(self.intakeDeployed)
+        self.intakeRamp = self.intakeStowed + (self.intakeDifference * 0.5)
+        if self.intakeMotorEncoder.getPosition() <= self.intakeRamp:
+            if self.intakeCondition != 10:
+                    self.baselineFault = time.perf_counter()
+                    self.intakeCondition = 10
+            if self.intakeCondition == 10:
+                if self.intakeMotorEncoder.getPosition() >= self.intakeRamp:
+                    self.intakeCondition = 0
+                if self.baselineFault - time.perf_counter() >= self.intakeFaultThreshold:
+                    print("INTAKE ERR105: Ramping of Intake doesn't appear to be working! Stopping code.")
+                    os._exit(105)
+        elif self.intakeMotorEncoder.getPosition() >= self.intakeRamp:
+            if self.intakeCondition != -10:
+                    self.baselineFault = time.perf_counter()
+                    self.intakeCondition = -10
+            if self.intakeCondition == -10:
+                if self.intakeMotorEncoder.getPosition() <= self.intakeRamp:
+                    self.intakeCondition = 0
+                if self.baselineFault - time.perf_counter() >= self.intakeFaultThreshold:
+                    print("INTAKE ERR105: Ramping of Intake doesn't appear to be working! Stopping code.")
+                    os._exit(105)
+
     
     def periodic(self):
         wpilib.SmartDashboard.putNumber("Intake Position", self.intakeMotorEncoder.getPosition())
