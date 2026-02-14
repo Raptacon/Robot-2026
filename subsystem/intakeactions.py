@@ -68,7 +68,7 @@ class IntakeSubsystem(commands2.SubsystemBase):
         if self.intakeCondition <= 0 and self.intakeMotorEncoder.getPosition() <= self.intakeDeployed:
                 self.baselineFault = time.perf_counter()
                 self.intakeCondition = 1
-        if self.intakeCondition == 1:
+        if self.intakeCondition >= 0:
             if self.HallEffectSensor.get() == False:
                 self.intakeDeployed = self.intakeMotorEncoder.getPosition()
                 self.intakeCondition = 0
@@ -104,7 +104,7 @@ class IntakeSubsystem(commands2.SubsystemBase):
         if self.intakeCondition >= 0 and self.intakeMotorEncoder.getPosition() >= self.intakeStowed:
                 self.baselineFault = time.perf_counter()
                 self.intakeCondition = -1
-        if self.intakeCondition == -1:
+        if self.intakeCondition <= 0:
             if self.intakeMotorEncoder.getPosition() <= self.intakeStowed:
                 self.intakeCondition = 0
             if self.baselineFault - time.perf_counter() >= self.intakeFaultThreshold:
@@ -142,16 +142,16 @@ class IntakeSubsystem(commands2.SubsystemBase):
         self.rollerVelocity = newRollerVelocity
 
     def motorChecks(self):
-        if self.intakeMotorEncoder.getPosition() >= self.intakeDeployed + 15 and self.intakeCondition == 1:
+        if self.intakeMotorEncoder.getPosition() >= self.intakeDeployed + 15 and self.intakeCondition >= 0:
             print("INTAKE ERR121: Intake Motor appears to be deploying outside of limits! Motor has been disabled.")
             self.intakeMotor.disable()
-        if self.intakeMotorEncoder.getPosition() <= self.intakeStowed - 15 and self.intakeCondition == -1:
+        if self.intakeMotorEncoder.getPosition() <= self.intakeStowed - 15 and self.intakeCondition <= 0:
             print("INTAKE ERR122: Intake Motor appears to be stowing outside of limits! Motor has been disabled.")
             self.intakeMotor.disable()
         
-        if self.intakeMotorEncoder.getPosition() >= self.intakeDeployed and self.intakeCondition == 1:
+        if self.intakeMotorEncoder.getPosition() >= self.intakeDeployed and self.intakeCondition >= 0:
             self.intakeCondition = 0
-        if self.intakeMotorEncoder.getPosition() <= self.intakeStowed and self.intakeCondition == -1:
+        if self.intakeMotorEncoder.getPosition() <= self.intakeStowed and self.intakeCondition <= 0:
             self.intakeCondition = 0
 
         if self.intakeCondition == 0:
@@ -172,13 +172,13 @@ class IntakeSubsystem(commands2.SubsystemBase):
         #Slows down deployment of motor when slowdown position is reached
         if self.intakeCondition == 1: 
             self.remainingRotations = self.intakeDifference - (abs(self.intakeStowed) + abs(0 - self.intakeMotorEncoder.getPosition()))
-            self.intakeSlowdownPosition = self.intakeStowed + (self.intakeDifference * 0.85)
+            self.intakeSlowdownPosition = self.intakeStowed + (self.intakeDifference * 0.75)
             if self.intakeMotorEncoder.getPosition() >= self.intakeSlowdownPosition:
                 self.intakeCondition = 0.5
         #Slows down stowing of motor when slowdown position is reached
         if self.intakeCondition == -1:
             self.remainingRotations = self.intakeDifference - (self.intakeDeployed - self.intakeMotorEncoder.getPosition() - abs(self.intakeStowed))
-            self.intakeSlowdownPosition = self.intakeDeployed - (self.intakeDifference * 0.85)
+            self.intakeSlowdownPosition = self.intakeDeployed - (self.intakeDifference * 0.75)
             if self.intakeMotorEncoder.getPosition() <= self.intakeSlowdownPosition:
                 self.intakeCondition = -0.5
 
