@@ -142,11 +142,11 @@ class IntakeSubsystem(commands2.SubsystemBase):
 
     def motorChecks(self):
         if self.intakeMotorEncoder.getPosition() >= self.intakeDeployed + 15 and self.intakeCondition == 1:
-            print("INTAKE ERR121: Intake Motor appears to be deploying outside of limits! Motor has been stopped.")
-            self.intakeMotor.stopMotor()
+            print("INTAKE ERR121: Intake Motor appears to be deploying outside of limits! Motor has been disabled.")
+            self.intakeMotor.disable()
         if self.intakeMotorEncoder.getPosition() <= self.intakeStowed - 15 and self.intakeCondition == -1:
-            print("INTAKE ERR122: Intake Motor appears to be stowing outside of limits! Motor has been stopped.")
-            self.intakeMotor.stopMotor()
+            print("INTAKE ERR122: Intake Motor appears to be stowing outside of limits! Motor has been disabled.")
+            self.intakeMotor.disable()
         
         if self.intakeMotorEncoder.getPosition() >= self.intakeDeployed and self.intakeCondition == 1:
             self.intakeCondition = 0
@@ -194,7 +194,6 @@ class IntakeSubsystem(commands2.SubsystemBase):
         wpilib.SmartDashboard.putNumber("Intake Difference", self.intakeDifference)
         wpilib.SmartDashboard.putNumber("Remaining Rotations", self.remainingRotations)
         wpilib.SmartDashboard.putNumber("Intake Slowdown Position", self.intakeSlowdownPosition)
-        wpilib.SmartDashboard.putNumber("Intake Voltage", self.intakeMotorEncoder.getOutputCurrent())
         
         self.motorChecks()
         self.automaticRollerActivation()
