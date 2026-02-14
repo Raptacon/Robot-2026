@@ -53,6 +53,7 @@ class IntakeSubsystem(commands2.SubsystemBase):
         self.jamFaultThreshold = 0 #Amount of attempts done trying to reverse rollers in the event of a jam before a fault condition is triggered
 
         self.intakeCondition = 0 #Leave at zero - provides reference to code on current intake status
+        self.intakeRamped = 0 #Leave at zero - provides reference to code on ramping intake status
         self.intakeVelocity = 0 #Leave at zero - any updating is to be done thru Network Table, Speed (in rpm) in which the intake motor will move upon deployment/stowing
         self.rollerVelocity = 0 #Leave at zero - any updating is to be done thru Network Table, Speed in which the roller motor will move upon deployment
         self.baselineFault = 0 #Leave at 0, provides baseline to compare to when determining faults
@@ -186,20 +187,28 @@ class IntakeSubsystem(commands2.SubsystemBase):
         self.intakeDifference = abs(self.intakeStowed) + abs(self.intakeDeployed)
         self.intakeRamp = self.intakeStowed + (self.intakeDifference * 0.5)
         if self.intakeMotorEncoder.getPosition() <= self.intakeRamp:
-            if self.intakeCondition != 10:
-                    self.baselineFault = time.perf_counter()
-                    self.intakeCondition = 10
-            if self.intakeCondition == 10:
+            if self.intakeRamped == -1:
+                    self.intakeRamped = 0
+                    self.intakeCondition = 0
+            elif self.intakeRamped == 0:
+                self.baselineFault = time.perf_counter()
+                self.intakeRamped = 1
+                self.intakeCondition = 1
+            elif self.intakeRamped == 1:
                 if self.intakeMotorEncoder.getPosition() >= self.intakeRamp:
                     self.intakeCondition = 0
                 if self.baselineFault - time.perf_counter() >= self.intakeFaultThreshold:
                     print("INTAKE ERR105: Ramping of Intake doesn't appear to be working! Stopping code.")
                     os._exit(105)
         elif self.intakeMotorEncoder.getPosition() >= self.intakeRamp:
-            if self.intakeCondition != -10:
+            if self.intakeRamped == 1:
+                self.intakeRamped = 0
+                self.intakeCondition = 0
+            elif self.intakeRamped == 0:
                     self.baselineFault = time.perf_counter()
-                    self.intakeCondition = -10
-            if self.intakeCondition == -10:
+                    self.intakeRamped = 1
+                    self.intakeCondition = -1
+            elif self.intakeRamped == -1:
                 if self.intakeMotorEncoder.getPosition() <= self.intakeRamp:
                     self.intakeCondition = 0
                 if self.baselineFault - time.perf_counter() >= self.intakeFaultThreshold:
@@ -220,6 +229,7 @@ class IntakeSubsystem(commands2.SubsystemBase):
         wpilib.SmartDashboard.putNumber("Intake Difference", self.intakeDifference)
         wpilib.SmartDashboard.putNumber("Remaining Rotations", self.remainingRotations)
         wpilib.SmartDashboard.putNumber("Intake Slowdown Position", self.intakeSlowdownPosition)
+        wpilib.SmartDashboard.putNumber("Intake Ramped", self.intakeRamped)
         
         self.motorChecks()
         self.automaticRollerActivation()
