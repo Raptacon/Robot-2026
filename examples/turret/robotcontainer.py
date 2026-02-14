@@ -8,8 +8,6 @@ import commands2
 import commands2.button
 import commands2.cmd
 
-import constants
-
 from subsystems.turretSubsystem import TurretSubsystem
 
 
@@ -27,18 +25,12 @@ class RobotContainer:
 
         # The driver's controller
         self.driver_controller = commands2.button.CommandXboxController(
-            constants.OIConstants.kDriverControllerPort
+            0
         )
 
         # Configure the button bindings
         self.configureButtonBindings()
 
-        # Set the default turret command to follow the left stick X
-        self.robot_turret.setDefaultCommand(
-            commands2.cmd.run(
-                self.robot_turret.setGoal(self.driver_controller.getLeftX())
-            )
-        )
 
     def configureButtonBindings(self) -> None:
         """
@@ -46,37 +38,17 @@ class RobotContainer:
         instantiating a :GenericHID or one of its subclasses (Joystick or XboxController),
         and then passing it to a JoystickButton.
         """
-
-        # Move the arm to 2 radians above horizontal when the 'A' button is pressed.
         self.driver_controller.a().onTrue(
-            commands2.cmd.run(lambda: self.moveArm(2), self.robot_arm)
+            commands2.cmd.run(lambda: self.moveTurret(0.5), self.robot_turret)
         )
-
-        # Move the arm to neutral position when the 'B' button is pressed
         self.driver_controller.b().onTrue(
-            commands2.cmd.run(
-                lambda: self.moveArm(constants.ArmConstants.kArmOffsetRads),
-                self.robot_arm,
-            )
-        )
-
-        # Disable the arm controller when Y is pressed
-        self.driver_controller.y().onTrue(
-            commands2.cmd.runOnce(lambda: self.robot_arm.disable())
-        )
-
-        # Drive at half speed when the bumper is held
-        self.driver_controller.rightTrigger().onTrue(
-            commands2.cmd.runOnce(lambda: self.robot_drive.setMaxOutput(0.5))
-        )
-        self.driver_controller.rightTrigger().onFalse(
-            commands2.cmd.runOnce(lambda: self.robot_drive.setMaxOutput(1.0))
+            commands2.cmd.run(lambda: self.moveTurret(-0.5), self.robot_turret)
         )
 
     def disablePIDSubsystems(self) -> None:
         """Disables all ProfiledPIDSubsystem and PIDSubsystem instances.
         This should be called on robot disable to prevent integral windup."""
-        self.robot_arm.disable()
+        self.robot_turret.disable()
 
     def getAutonomousCommand(self) -> commands2.Command:
         """Use this to pass the autonomous command to the main {@link Robot} class.
@@ -85,6 +57,6 @@ class RobotContainer:
         """
         return commands2.cmd.none()
 
-    def moveArm(self, radians: float) -> None:
-        self.robot_arm.setGoal(radians)
-        self.robot_arm.enable()
+    def moveTurret(self, rotations: float) -> None:
+        self.robot_turret.setGoal(rotations)
+        self.robot_turret.enable()

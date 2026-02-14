@@ -11,13 +11,13 @@ import wpimath.controller
 import wpimath.trajectory
 
 class TurretConstants:
-    kP = 0
-    kI = 0
+    kP = 3
+    kI = 0.0015
 
-    kMaxVelocityRadPerSecond = 3
-    kMotorCAN = 53
+    kMaxVelocityRPM = 1000
+    kMotorCAN = 40
     kMotorToTurretConversionFactor = 1/11
-    kMaxAccelerationRadPerSecSquared = 10
+    kMaxAccelerationRPMPM = 60000
 
 
 class TurretSubsystem(commands2.ProfiledPIDSubsystem):
@@ -30,8 +30,8 @@ class TurretSubsystem(commands2.ProfiledPIDSubsystem):
                 TurretConstants.kI,
                 0,
                 wpimath.trajectory.TrapezoidProfile.Constraints(
-                    TurretConstants.kMaxVelocityRadPerSecond,
-                    TurretConstants.kMaxAccelerationRadPerSecSquared,
+                    TurretConstants.kMaxVelocityRPM,
+                    TurretConstants.kMaxAccelerationRPMPM,
                 ),
             ),
             0,
@@ -39,11 +39,16 @@ class TurretSubsystem(commands2.ProfiledPIDSubsystem):
 
         config = rev.SparkMaxConfig()
         config.encoder.positionConversionFactor(TurretConstants.kMotorToTurretConversionFactor)
+        config.encoder.velocityConversionFactor(TurretConstants.kMotorToTurretConversionFactor)
         self.motor = rev.SparkMax(TurretConstants.kMotorCAN,rev.SparkLowLevel.MotorType.kBrushless)
         self.motor.configure(config, rev.ResetMode.kNoResetSafeParameters, rev.PersistMode.kNoPersistParameters)
         self.encoder = self.motor.getEncoder()
+        self.encoder.setPosition(0)
 
         self.setGoal(0)
+    
+    def useOutput(self, output, setpoint):
+        self.motor.setVoltage(output)
 
     def getMeasurement(self) -> float:
         """
