@@ -41,6 +41,7 @@ class RobotSwerve:
         pass
 
     def teleopInit(self):
+        # wpilib.SmartDashboard.putNumber("Conversion Factor", 0)
         pass
 
     def teleopPeriodic(self):
@@ -51,9 +52,12 @@ class RobotSwerve:
         self.topVelocity = self.shooter.topEncoder.getVelocity()
         self.bottomVelocity = self.shooter.bottomEncoder.getVelocity()
         
+        # self.shooter = wpilib.SmartDashboard.getNumber("Conversion Factor", 0)
+        
         wpilib.SmartDashboard.putNumber("In_Velocity", self.intakeVelocity)
-        wpilib.SmartDashboard.putNumber("T_Velocity", self.topVelocity)
-        wpilib.SmartDashboard.putNumber("B_Velocity", self.bottomVelocity)
+        wpilib.SmartDashboard.putNumber("Top_Velocity", self.topVelocity)
+        wpilib.SmartDashboard.putNumber("Bottom_Velocity", self.bottomVelocity)
+        
     def testInit(self):
         commands2.CommandScheduler.getInstance().cancelAll()
 
