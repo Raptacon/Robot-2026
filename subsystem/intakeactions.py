@@ -53,11 +53,11 @@ class IntakeSubsystem(commands2.SubsystemBase):
         self.jamThreshold = 75 #Minimum voltage before assuming a ball inside the intake has gotten stuck
 
 
-        self.intakeCondition = 0 #Leave at zero - provides reference to code on current intake status
-        self.intakeRamped = 0 #Leave at zero - provides reference to code on ramping intake status
-        self.intakeRampedCondition = 0 #Leave at zero - provides reference to code on whether ramping intake is finished
-        self.intakeVelocity = 0 #Leave at zero - any updating is to be done thru Network Table, Speed (in rpm) in which the intake motor will move upon deployment/stowing
-        self.rollerVelocity = 0 #Leave at zero - any updating is to be done thru Network Table, Speed in which the roller motor will move upon deployment
+        self.intakeCondition = 0 #Leave at 0, provides reference to code on current intake status
+        self.intakeRamped = 0 #Leave at 0, provides reference to code on ramping intake status
+        self.intakeRampedCondition = 0 #Leave at 0, provides reference to code on whether ramping intake is finished
+        self.intakeVelocity = 0 #Leave at 0, any updating is to be done thru Network Table, Speed (in rpm) in which the intake motor will move upon deployment/stowing
+        self.rollerVelocity = 0 #Leave at 0, any updating is to be done thru Network Table, Speed in which the roller motor will move upon deployment
         self.baselineFault = 0 #Leave at 0, provides baseline to compare to when determining faults
         self.baselineJam = 0 #Leave at 0, provides baseline to compare to when determining faults
         self.jamReversalCount = 0 #Leave at 0, stores amount of attempts in reversing motors in the event of a jam before a fault condition is triggered
@@ -69,12 +69,11 @@ class IntakeSubsystem(commands2.SubsystemBase):
         self.hardStopIndex = 0 #Leave at 0, provides index to code for hardstop checks
         self.jamOccurence = 0 #Leave at 0, provides baseline to compare to when determining jams
         self.baselineDetectedJam = 0 #Leave at 0, provides baseline to compare to when jam detection is activated
-        self.jamDetected = 0 #Leave at 0, jam status is updated through this variable
+        self.rollerCondition = 0 #Leave at 0, provides reference to code on current roller status
         self.rollerSensor = 0 #Leave at 0, ensures that the rollers are stopped only once, preventing obstruction of manual controls
 
 
         self.intakeMotorPositions = arr.array('f', [0,0,0,0,0]) #Leave with all zeros, for checking if intake motor stopped during deployment/stowing
-        self.rollerAppliedOutputs = arr.array('f', [0,0,0,0,0]) #Leave with all zeros, for keeping roller motor voltage in check
 
 
     def deployIntake(self):
@@ -100,7 +99,8 @@ class IntakeSubsystem(commands2.SubsystemBase):
             
             #Apply voltage to roller until it starts moving; Terminate program with ERR103 if fault condition is detected
             #while self.rollerMotorEncoder.getVelocity() == 0:
-            self.rollerMotor.set(self.rollerVelocity)
+            if self.rollerCondition != 1:
+                self.rollerCondition = 1
                 #if baselineFault - time.perf_counter() >= self.rollerFaultThreshold:
                     #os._exit(103)
 
@@ -110,7 +110,8 @@ class IntakeSubsystem(commands2.SubsystemBase):
         
             #Try to terminate voltage until motor stops moving; Terminate program with ERR103 if fault condition is detected
             #while self.rollerMotorEncoder.getVelocity() != 0:
-        self.rollerMotor.set(0)
+            if self.rollerCondition != 0:
+                self.rollerCondition = 0
                 #if baselineFault - time.perf_counter() >= self.rollerFaultThreshold:
                     #os._exit(103)
 
