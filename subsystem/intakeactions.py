@@ -223,7 +223,7 @@ class IntakeSubsystem(commands2.SubsystemBase):
         if self.intakeCondition == 0:
             self.intakeVelocity = 0
         self.intakeMotor.set(self.intakeCondition * self.intakeVelocity)
-        self.rollerMotor.set(self.jamDetected * self.rollerVelocity)
+        self.rollerMotor.set(self.rollerCondition * self.rollerVelocity)
 
         #Stop intake deployment motor if it is being ramped
         if self.intakeRampStatus == 1:
