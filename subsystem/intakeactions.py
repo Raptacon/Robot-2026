@@ -13,7 +13,6 @@ intakeMotorThreshold = 1 #Used to determine whether or not intake is deployed
 intakeFaultThreshold = 10 #Amount of time spent trying to deploy/stow intake before fault condition is triggered
 rollerVelocity = 0.3 #Speed in which the roller motor will move upon deployment
 rollerFaultThreshold = 10 #Amount of time spent trying to operate rollers before fault condition is triggered
-jamTime = 3 #Amount of time to wait before assuming a ball inside the intake has gotten stuck
 jamFaultThreshold = 10 #Amount of attempts done trying to reverse rollers in the event of a jam before a fault condition is triggered
 
 baselineFault = 0 #Leave at 0, provides baseline to compare to when determining faults
@@ -49,9 +48,10 @@ class IntakeSubsystem(commands2.SubsystemBase):
         self.intakeFaultThreshold = 2 #Amount of time spent trying to deploy/stow intake before fault condition is triggered
         self.intakeMagnetFaultThreshold = 2 #Amount of time before magnets need to have stopped tripping hall effects sensor or fault condition is triggered
         self.rollerFaultThreshold = 2 #Amount of time spent trying to operate rollers before fault condition is triggered
-        self.rollerSensor = 0 #Ensures that the rollers are stopped only once, preventing obstruction of manual controls
-        self.jamTime = 3 #Amount of time to wait before assuming a ball inside the intake has gotten stuck
         self.jamFaultThreshold = 0 #Amount of attempts done trying to reverse rollers in the event of a jam before a fault condition is triggered
+        self.jamTime = 0.5 #Amount of time to wait before assuming a ball inside the intake has gotten stuck
+        self.jamThreshold = 75 #Minimum voltage before assuming a ball inside the intake has gotten stuck
+
 
         self.intakeCondition = 0 #Leave at zero - provides reference to code on current intake status
         self.intakeRamped = 0 #Leave at zero - provides reference to code on ramping intake status
@@ -67,8 +67,14 @@ class IntakeSubsystem(commands2.SubsystemBase):
         self.intakeRamp = 0 #Leave at 0, motor position for ramp is automatically calculated
         self.intakeRampStatus = 0 #Leave at 0, provides reference to code on whether intake is moving to ramp
         self.hardStopIndex = 0 #Leave at 0, provides index to code for hardstop checks
+        self.jamOccurence = 0 #Leave at 0, provides baseline to compare to when determining jams
+        self.baselineDetectedJam = 0 #Leave at 0, provides baseline to compare to when jam detection is activated
+        self.jamDetected = 0 #Leave at 0, jam status is updated through this variable
+        self.rollerSensor = 0 #Leave at 0, ensures that the rollers are stopped only once, preventing obstruction of manual controls
+
 
         self.intakeMotorPositions = arr.array('f', [0,0,0,0,0]) #Leave with all zeros, for checking if intake motor stopped during deployment/stowing
+        self.rollerAppliedOutputs = arr.array('f', [0,0,0,0,0]) #Leave with all zeros, for keeping roller motor voltage in check
 
 
     def deployIntake(self):
@@ -125,23 +131,18 @@ class IntakeSubsystem(commands2.SubsystemBase):
         else:
             self.intakeCondition = 0
 
-
     def jamDetection(self):
         if self.hasSecondMotor:
-            if self.frontBeamBroken:
-                baselineJam = time.perf_counter()
-                while not self.backBeamBroken:
-                    #If Ball appears to have jammed, reverse rollers
-                    if self.baselineFault - time.perf_counter >= self.rollerFaultThreshold:
-                        self.baselineFault = time.perf_counter()
-            
-                        #Reverse voltage to motor until front sensors go off; Terminate program with ERR104 if fault condition is detected
-                        while not self.frontBeamBroken:
-                            if self.rollerMotorVelocity >= 0:
-                                jamReversalCount += 1
-                                self.rollerMotor.set(-self.rollerVelocity)
-                            elif jamReversalCount >= self.jamFaultThreshold:
-                                os._exit(104)  
+            if self.rollerMotor.getOutputCurrent() >= self.jamThreshold:
+                if self.jamOccurence == 0:
+                    self.baselineJam = time.perf_counter()
+                    self.jamOccurence = 1
+                else:
+                    if time.perf_counter - self.baselineJam >= self.jamTime:
+                        self.jamDetected = -1
+            else:
+                self.jamDetected = 1
+                self.jamOccurence = 0         
     
     def updateIntake(self, newIntakeVelocity):
         self.intakeVelocity = newIntakeVelocity
@@ -221,6 +222,7 @@ class IntakeSubsystem(commands2.SubsystemBase):
         if self.intakeCondition == 0:
             self.intakeVelocity = 0
         self.intakeMotor.set(self.intakeCondition * self.intakeVelocity)
+        self.rollerMotor.set(self.jamDetected * self.rollerVelocity)
 
         #Stop intake deployment motor if it is being ramped
         if self.intakeRampStatus == 1:
@@ -234,16 +236,6 @@ class IntakeSubsystem(commands2.SubsystemBase):
                         self.intakeRamped = 0
                         self.intakeCondition = 0
                         self.intakeRampedCondition = True
-        
-        #Stop intake deployment motor if it's velocity drops to 0
-        #if self.intakeCondition == 1 and self.intakeMotorEncoder.getPosition() >= self.intakeStowed + 15:
-            #if self.intakeMotorEncoder.getVelocity() == 0:
-                    #self.intakeDeployed = self.intakeMotorEncoder.getPosition()
-                    #self.intakeCondition = 0
-        #if self.intakeCondition == -1 and self.intakeMotorEncoder.getPosition() <= self.intakeDeployed - 15:
-            #if self.intakeMotorEncoder.getVelocity() == 0:
-                    #self.intakeStowed = self.intakeMotorEncoder.getPosition()
-                    #self.intakeCondition = 0    
         
         #Allows intake to be ramped even from deployed/stowed position
         if self.intakeMotorEncoder.getPosition() >= self.intakeDeployed:
@@ -277,3 +269,4 @@ class IntakeSubsystem(commands2.SubsystemBase):
         self.motorChecks()
         self.automaticRollerActivation()
         self.intakeSlowdown()
+        self.jamDetection()
