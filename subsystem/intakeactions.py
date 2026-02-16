@@ -244,13 +244,14 @@ class IntakeSubsystem(commands2.SubsystemBase):
         #Stop intake deployment motor if it's position does not change even when it is supposed to be moving
         self.intakeMotorPositions.pop(0)
         self.intakeMotorPositions.append(self.intakeMotorEncoder.getPosition())
-        if self.intakeMotorPositions.count(self.intakeMotorEncoder.getPosition()) == 5:
-                if self.intakeCondition == 1:
-                    self.intakeStowed = self.intakeMotorEncoder.getPosition()
-                    self.intakeCondition = 0
-                elif self.intakeCondition == -1:
-                    self.intakeDeployed = self.intakeMotorEncoder.getPosition()
-                    self.intakeCondition = 0
+        if self.intakeMotorEncoder.getPosition() >= self.intakeStowed or self.intakeMotorEncoder.getPosition() <= self.intakeDeployed:
+            if self.intakeMotorPositions.count(self.intakeMotorEncoder.getPosition()) == 5:
+                    if self.intakeCondition == 1:
+                        self.intakeStowed = self.intakeMotorEncoder.getPosition()
+                        self.intakeCondition = 0
+                    elif self.intakeCondition == -1:
+                        self.intakeDeployed = self.intakeMotorEncoder.getPosition()
+                        self.intakeCondition = 0
 
     def periodic(self):
         wpilib.SmartDashboard.putNumber("Intake Position", self.intakeMotorEncoder.getPosition())
