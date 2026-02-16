@@ -246,10 +246,10 @@ class IntakeSubsystem(commands2.SubsystemBase):
         self.intakeMotorPositions.append(self.intakeMotorEncoder.getPosition())
         if self.intakeMotorEncoder.getPosition() >= self.intakeStowed or self.intakeMotorEncoder.getPosition() <= self.intakeDeployed:
             if self.intakeMotorPositions.count(self.intakeMotorEncoder.getPosition()) == 5:
-                    if self.intakeCondition == 1:
+                    if self.intakeCondition == -1:
                         self.intakeStowed = self.intakeMotorEncoder.getPosition()
                         self.intakeCondition = 0
-                    elif self.intakeCondition == -1:
+                    elif self.intakeCondition == 1:
                         self.intakeDeployed = self.intakeMotorEncoder.getPosition()
                         self.intakeCondition = 0
 
@@ -270,6 +270,7 @@ class IntakeSubsystem(commands2.SubsystemBase):
         wpilib.SmartDashboard.putNumber("Intake Ramp Position", self.intakeRamp)
         wpilib.SmartDashboard.putBoolean("Intake Ramp Condition", self.intakeRampedCondition)
         wpilib.SmartDashboard.putNumberArray("Intake Positions", self.intakeMotorPositions)
+        wpilib.SmartDashboard.putNumber("Intake Stowed", self.intakeStowed)
         
         self.motorChecks()
         self.automaticRollerActivation()
