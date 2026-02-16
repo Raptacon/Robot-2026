@@ -205,6 +205,19 @@ class IntakeSubsystem(commands2.SubsystemBase):
         if self.intakeMotorEncoder.getPosition() <= self.intakeStowed and self.intakeCondition <= 0:
             self.intakeCondition = 0
 
+        
+        #Stop intake deployment motor if it's position does not change even when it is supposed to be moving
+        self.intakeMotorPositions.pop(0)
+        self.intakeMotorPositions.append(self.intakeMotorEncoder.getPosition())
+        if not self.intakeMotorEncoder.getPosition() <= self.intakeStowed and not self.intakeMotorEncoder.getPosition() >= self.intakeDeployed:
+            if self.intakeMotorPositions.count(self.intakeMotorEncoder.getPosition()) == 5:
+                    if self.intakeCondition == -1:
+                        self.intakeStowed = self.intakeMotorEncoder.getPosition() + 1
+                        self.intakeCondition = 0
+                    elif self.intakeCondition == 1:
+                        self.intakeDeployed = self.intakeMotorEncoder.getPosition() - 1
+                        self.intakeCondition = 0
+
         if self.intakeCondition == 0:
             self.intakeVelocity = 0
         self.intakeMotor.set(self.intakeCondition * self.intakeVelocity)
@@ -240,18 +253,7 @@ class IntakeSubsystem(commands2.SubsystemBase):
 
         if self.intakeCondition != 0:
             self.intakeRampedCondition = False
-        
-        #Stop intake deployment motor if it's position does not change even when it is supposed to be moving
-        self.intakeMotorPositions.pop(0)
-        self.intakeMotorPositions.append(self.intakeMotorEncoder.getPosition())
-        if self.intakeMotorEncoder.getPosition() >= self.intakeStowed or self.intakeMotorEncoder.getPosition() <= self.intakeDeployed:
-            if self.intakeMotorPositions.count(self.intakeMotorEncoder.getPosition()) == 5:
-                    if self.intakeCondition == -1:
-                        self.intakeStowed = self.intakeMotorEncoder.getPosition()
-                        self.intakeCondition = 0
-                    elif self.intakeCondition == 1:
-                        self.intakeDeployed = self.intakeMotorEncoder.getPosition()
-                        self.intakeCondition = 0
+
 
     def periodic(self):
         wpilib.SmartDashboard.putNumber("Intake Position", self.intakeMotorEncoder.getPosition())
