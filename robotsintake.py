@@ -15,7 +15,7 @@ class RobotIntake:
     """
 
     def __init__(self, is_disabled: Callable[[], bool]) -> None:
-        self.intake = IntakeSubsystem(hasSecondMotor=True)
+        self.intake = IntakeSubsystem(hasSecondMotor=True, alternateConfiguration=True)
 
         self.intakeController = wpilib.XboxController(0)
 

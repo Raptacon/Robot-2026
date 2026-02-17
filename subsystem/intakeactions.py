@@ -20,20 +20,30 @@ baselineJam = 0 #Leave at 0, provides baseline to compare to when determining fa
 jamReversalCount = 0 #Leave at 0, stores amount of attempts in reversing motors in the event of a jam before a fault condition is triggered
 
 class IntakeSubsystem(commands2.SubsystemBase):
-    def __init__(self, hasSecondMotor = True):
-        #Initialize Intake
-        self.intakeMotor = rev.SparkFlex(intakeConsts.kIntakeMotorCanId, rev.SparkLowLevel.MotorType.kBrushless)
-        self.intakeMotorEncoder = self.intakeMotor.getEncoder()
-        #self.intakeMotorPosition = self.intakeMotorEncoder.getPosition()
+    def __init__(self, hasSecondMotor = True, alternateConfiguration = False):
+        #Initializes all devices
+        #Alternate Configuration effectively just switches the motors used for intake deployment and rollers
+        if alternateConfiguration == True:
+            self.intakeMotor = rev.SparkMax(intakeConsts.kRollerMotorCanId, rev.SparkLowLevel.MotorType.kBrushless)
+            self.intakeMotorEncoder = self.intakeMotor.getEncoder()
+            #self.intakeMotorPosition = self.intakeMotorEncoder.getPosition()
 
-        self.hasSecondMotor = hasSecondMotor
-        #Initialize Roller
-        if self.hasSecondMotor:
-            self.rollerMotor = rev.SparkMax(intakeConsts.kRollerMotorCanId, rev.SparkLowLevel.MotorType.kBrushless)
-            self.rollerMotorEncoder = self.rollerMotor.getEncoder()
-            self.rollerMotorVelocity = self.rollerMotorEncoder.getVelocity()
+            self.hasSecondMotor = hasSecondMotor
+            if self.hasSecondMotor:
+                self.rollerMotor = rev.SparkFlex(intakeConsts.kIntakeMotorCanId, rev.SparkLowLevel.MotorType.kBrushless)
+                self.rollerMotorEncoder = self.rollerMotor.getEncoder()
+                self.rollerMotorVelocity = self.rollerMotorEncoder.getVelocity()
+        else:
+            self.intakeMotor = rev.SparkFlex(intakeConsts.kIntakeMotorCanId, rev.SparkLowLevel.MotorType.kBrushless)
+            self.intakeMotorEncoder = self.intakeMotor.getEncoder()
+            #self.intakeMotorPosition = self.intakeMotorEncoder.getPosition()
 
-        #Initialize Break Beams
+            self.hasSecondMotor = hasSecondMotor
+            if self.hasSecondMotor:
+                self.rollerMotor = rev.SparkMax(intakeConsts.kRollerMotorCanId, rev.SparkLowLevel.MotorType.kBrushless)
+                self.rollerMotorEncoder = self.rollerMotor.getEncoder()
+                self.rollerMotorVelocity = self.rollerMotorEncoder.getVelocity()
+
         self.breakBeam = wpilib.DigitalInput(intakeConsts.kBreakBeam)
         #self.frontBreakbeam = wpilib.DigitalInput(intakeConsts.kFrontBreakBeam)
         #self.backBreakbeam = wpilib.DigitalInput(intakeConsts.kBackBreakBeam)
@@ -149,8 +159,13 @@ class IntakeSubsystem(commands2.SubsystemBase):
                 if time.perf_counter() - self.baselineDetectedJam <= self.jamReversalTime:
                     self.rollerCondition = -1
                 else:
-                    self.rollerCondition = 1
-                    self.jamDetected = False
+                    if self.rollerSensor == 1:
+                        if self.breakBeam.get():
+                            self.deactivateRoller()
+                            self.rollerSensor = 0
+                    else:
+                        self.rollerCondition = 1
+                        self.jamDetected = False
 
     def updateIntake(self, newIntakeVelocity):
         self.intakeVelocity = newIntakeVelocity
