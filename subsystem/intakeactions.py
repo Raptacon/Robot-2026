@@ -272,6 +272,8 @@ class IntakeSubsystem(commands2.SubsystemBase):
         wpilib.SmartDashboard.putBoolean("Intake Ramp Condition", self.intakeRampedCondition)
         wpilib.SmartDashboard.putNumberArray("Intake Positions", self.intakeMotorPositions)
         wpilib.SmartDashboard.putNumber("Intake Stowed", self.intakeStowed)
+        wpilib.SmartDashboard.putNumber("Roller Condition", self.rollerCondition)
+        wpilib.SmartDashboard.putBoolean("Roller Jam", self.jamDetected)
         
         self.motorChecks()
         self.automaticRollerActivation()
