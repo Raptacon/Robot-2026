@@ -142,6 +142,7 @@ class IntakeSubsystem(commands2.SubsystemBase):
                         self.baselineJam = time.perf_counter()
                         self.jamOccurence = 1
                     else:
+                        if time.perf_counter() - self.baselineJam >= self.jamTime:
                             self.baselineDetectedJam = time.perf_counter()
                             self.jamDetected = True
             else:
