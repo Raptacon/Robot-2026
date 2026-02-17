@@ -159,13 +159,12 @@ class IntakeSubsystem(commands2.SubsystemBase):
                 if time.perf_counter() - self.baselineDetectedJam <= self.jamReversalTime:
                     self.rollerCondition = -1
                 else:
-                    if self.rollerSensor == 1:
-                        if self.breakBeam.get():
-                            self.deactivateRoller()
-                            self.rollerSensor = 0
+                    if self.rollerSensor == 0:
+                        self.deactivateRoller()
                     else:
                         self.rollerCondition = 1
-                        self.jamDetected = False
+                    self.jamOccurence = 0
+                    self.jamDetected = False
 
     def updateIntake(self, newIntakeVelocity):
         self.intakeVelocity = newIntakeVelocity
