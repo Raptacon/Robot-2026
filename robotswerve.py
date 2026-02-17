@@ -30,6 +30,9 @@ class RobotSwerve:
         self.field = wpilib.Field2d()
         wpilib.SmartDashboard.putData("Field", self.field)
 
+        #Camera Server Initialization
+        wpilib.CameraServer.launch()
+
         # Subsystem instantiation
         self.drivetrain = SwerveDrivetrain()
         
