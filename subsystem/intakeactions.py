@@ -51,6 +51,7 @@ class IntakeSubsystem(commands2.SubsystemBase):
         self.jamFaultThreshold = 0 #Amount of attempts done trying to reverse rollers in the event of a jam before a fault condition is triggered
         self.jamTime = 0.5 #Amount of time to wait before assuming a ball inside the intake has gotten stuck
         self.jamThreshold = 75 #Minimum voltage before assuming a ball inside the intake has gotten stuck
+        self.jamReversalTime = 0.5 #Amount of time to have motors reverse when a ball inside the intake has gotten stuck
 
 
         self.intakeCondition = 0 #Leave at 0, provides reference to code on current intake status
@@ -71,8 +72,9 @@ class IntakeSubsystem(commands2.SubsystemBase):
         self.baselineDetectedJam = 0 #Leave at 0, provides baseline to compare to when jam detection is activated
         self.rollerCondition = 0 #Leave at 0, provides reference to code on current roller status
         self.rollerSensor = 0 #Leave at 0, ensures that the rollers are stopped only once, preventing obstruction of manual controls
-
-
+        
+        
+        self.jamDetected = False #Leave at False
         self.intakeMotorPositions = arr.array('f', [0,0,0,0,0]) #Leave with all zeros, for checking if intake motor stopped during deployment/stowing
 
 
@@ -134,18 +136,21 @@ class IntakeSubsystem(commands2.SubsystemBase):
 
     def jamDetection(self):
         if self.hasSecondMotor:
-            if self.rollerMotor.getOutputCurrent() >= self.jamThreshold:
-                if self.jamOccurence == 0:
-                    self.baselineJam = time.perf_counter()
-                    self.jamOccurence = 1
-                else:
-                    if time.perf_counter() - self.baselineJam >= self.jamTime:
-                        self.rollerCondition = -1
+            if not self.jamDetected:
+                if self.rollerMotor.getOutputCurrent() >= self.jamThreshold:
+                    if self.jamOccurence == 0:
+                        self.baselineJam = time.perf_counter()
+                        self.jamOccurence = 1
+                    else:
+                            self.baselineDetectedJam = time.perf_counter()
+                            self.jamDetected = True
             else:
-                if self.rollerCondition == -1:
+                if time.perf_counter() - self.baselineDetectedJam <= self.jamReversalTime:
+                    self.rollerCondition = -1
+                else:
                     self.rollerCondition = 1
-                self.jamOccurence = 0         
-    
+                    self.jamDetected = False
+
     def updateIntake(self, newIntakeVelocity):
         self.intakeVelocity = newIntakeVelocity
 
