@@ -80,12 +80,14 @@ class TestTurret(unittest.TestCase):
 
     def test_set_position_and_periodic(self):
         """Test that setPosition stores target and periodic drives PID."""
+        self.turret.controller.setP(1.0)
         target_degrees = 45.0
         self.turret.setPosition(target_degrees)
-        # periodic() drives the PID controller
+        # periodic() drives the WPILib PID controller which sets motor voltage
         self.turret.periodic()
-        setpoint = self.motor_sim.getSetpoint()
-        self.assertAlmostEqual(setpoint, target_degrees, places=1)
+        applied = self.motor.get()
+        self.assertNotEqual(applied, 0.0)
+        self.turret.controller.setP(0.0)
 
     def test_get_position_with_simulated_encoder(self):
         """Test that getPosition returns the simulated encoder value."""
@@ -375,11 +377,13 @@ class TestTurret(unittest.TestCase):
 
     def test_periodic_drives_to_target(self):
         """Test that periodic drives PID to stored target position."""
+        self.turret.controller.setP(1.0)
         target = 30.0
         self.turret.setPosition(target)
         self.turret.periodic()
-        setpoint = self.motor_sim.getSetpoint()
-        self.assertAlmostEqual(setpoint, target, places=1)
+        applied = self.motor.get()
+        self.assertNotEqual(applied, 0.0)
+        self.turret.controller.setP(0.0)
 
     def test_periodic_calls_homing_when_active(self):
         """Test that periodic calls homingPeriodic when homing is active."""

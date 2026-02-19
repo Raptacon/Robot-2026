@@ -101,7 +101,7 @@ class MyRobot(TimedCommandRobot):
         
         self.setPositionMagic = 0.0
         self.setPositionMagicSign = 1
-        self.setPositionMagicIncrement = 0.1
+        self.setPositionMagicIncrement = 0.01
         
     def testPeriodic(self):
         super().testPeriodic()
@@ -116,5 +116,8 @@ class MyRobot(TimedCommandRobot):
             print(f"setPositionMagic: {self.setPositionMagic : .2f}")
             self.turret.setPosition(self.setPositionMagic)
             print("y button pressed")
+        if self.controller._hid.getStartButtonPressed():
+            print("start button pressed, cal started")
+            self.turret.homingInit(10, 0.1, 5, 0, 0.01)
         
     

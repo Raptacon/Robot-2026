@@ -7,6 +7,7 @@ import wpilib
 from commands2 import Command, Subsystem
 from commands2.sysid import SysIdRoutine
 from wpilib.sysid import SysIdRoutineLog
+from wpimath.controller import PIDController
 
 
 def GetSparkSignalsPositionControlConfig(
@@ -77,7 +78,7 @@ class Turret(Subsystem):
         super().__init__()
         self.motor = motor
         self.encoder = self.motor.getEncoder()
-        self.pid_controller = self.motor.getClosedLoopController()
+        self.controller = PIDController(0, 0, 0)
 
         self.min_soft_limit = min_soft_limit
         self.max_soft_limit = max_soft_limit
@@ -113,12 +114,6 @@ class Turret(Subsystem):
             .forwardSoftLimitEnabled(True)
             .reverseSoftLimit(min_soft_limit)
             .reverseSoftLimitEnabled(True)
-        )
-
-        # Closed loop feedback sensor
-        (
-            config.closedLoop
-            .setFeedbackSensor(rev.FeedbackSensor.kPrimaryEncoder)
         )
 
         # Telemetry signals at 20ms
@@ -210,11 +205,13 @@ class Turret(Subsystem):
         if self._is_homing:
             self.homingPeriodic()
         elif self._target_position is not None:
-            self.pid_controller.setReference(
-                self._target_position,
-                rev.SparkLowLevel.ControlType.kPosition,
-                rev.ClosedLoopSlot.kSlot0
-            )
+            position = self.encoder.getPosition()
+            pidOutput = self.controller.calculate(
+                position, self._target_position)
+            if self.controller.atSetpoint():
+                self.motor.setVoltage(0)
+            else:
+                self.motor.setVoltage(pidOutput)
 
         # Publish telemetry
         prefix = self.getName() + "/"
@@ -252,11 +249,9 @@ class Turret(Subsystem):
             self.motor.getReverseLimitSwitch().get()
         )
         # PID parameters
-        cl = self.motor.configAccessor.closedLoop
-        sd.putNumber(prefix + "pid/p", cl.getP())
-        sd.putNumber(prefix + "pid/i", cl.getI())
-        sd.putNumber(prefix + "pid/d", cl.getD())
-        sd.putNumber(prefix + "pid/ff", cl.getFF())
+        sd.putNumber(prefix + "pid/p", self.controller.getP())
+        sd.putNumber(prefix + "pid/i", self.controller.getI())
+        sd.putNumber(prefix + "pid/d", self.controller.getD())
 
     def homingInit(
         self,
