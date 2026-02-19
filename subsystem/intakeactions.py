@@ -59,10 +59,9 @@ class IntakeSubsystem(commands2.SubsystemBase):
         self.intakeMagnetFaultThreshold = 2 #Amount of time before magnets need to have stopped tripping hall effects sensor or fault condition is triggered
         self.rollerFaultThreshold = 2 #Amount of time spent trying to operate rollers before fault condition is triggered
         self.jamFaultThreshold = 0 #Amount of attempts done trying to reverse rollers in the event of a jam before a fault condition is triggered
-        self.jamTime = 0.5 #Amount of time to wait before assuming a ball inside the intake has gotten stuck
-        self.jamThreshold = 75 #Minimum voltage before assuming a ball inside the intake has gotten stuck
-        self.jamReversalTime = 0.5 #Amount of time to have motors reverse when a ball inside the intake has gotten stuck
-
+        self.jamTime = 1 #Amount of time to wait before assuming a ball inside the intake has gotten stuck
+        self.jamThreshold = 150 #Minimum voltage before assuming a ball inside the intake has gotten stuck
+        self.jamReversalTime = 1 #Amount of time to have motors reverse when a ball inside the intake has gotten stuck
 
         self.intakeCondition = 0 #Leave at 0, provides reference to code on current intake status
         self.intakeRamped = 0 #Leave at 0, provides reference to code on ramping intake status
@@ -83,10 +82,8 @@ class IntakeSubsystem(commands2.SubsystemBase):
         self.rollerCondition = 0 #Leave at 0, provides reference to code on current roller status
         self.rollerSensor = 0 #Leave at 0, ensures that the rollers are stopped only once, preventing obstruction of manual controls
         
-        
         self.jamDetected = False #Leave at False
         self.intakeMotorPositions = arr.array('f', [0,0,0,0,0]) #Leave with all zeros, for checking if intake motor stopped during deployment/stowing
-
 
     def deployIntake(self):
         #Check Sensor for deployment, if not, deploy it.
@@ -159,10 +156,10 @@ class IntakeSubsystem(commands2.SubsystemBase):
                 if time.perf_counter() - self.baselineDetectedJam <= self.jamReversalTime:
                     self.rollerCondition = -1
                 else:
-                    if self.rollerSensor == 0:
-                        self.deactivateRoller()
-                    else:
-                        self.rollerCondition = 1
+                    # if self.rollerSensor == 0:
+                    #     self.deactivateRoller()
+                    # else:
+                    self.rollerCondition = 1
                     self.jamOccurence = 0
                     self.jamDetected = False
 
@@ -183,13 +180,11 @@ class IntakeSubsystem(commands2.SubsystemBase):
 
     def intakeSlowdown(self):
         self.intakeDifference = abs(self.intakeStowed) + abs(self.intakeDeployed)
-        #Slows down deployment of motor when slowdown position is reached
         if self.intakeCondition == 1: 
             self.remainingRotations = self.intakeDifference - (abs(self.intakeStowed) + abs(0 - self.intakeMotorEncoder.getPosition()))
             self.intakeSlowdownPosition = self.intakeStowed + (self.intakeDifference * 0.75)
             if self.intakeMotorEncoder.getPosition() >= self.intakeSlowdownPosition:
                 self.intakeCondition = 0.5
-        #Slows down stowing of motor when slowdown position is reached
         if self.intakeCondition == -1:
             self.remainingRotations = self.intakeDifference - (self.intakeDeployed - self.intakeMotorEncoder.getPosition() - abs(self.intakeStowed))
             self.intakeSlowdownPosition = self.intakeDeployed - (self.intakeDifference * 0.75)
