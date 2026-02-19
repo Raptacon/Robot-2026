@@ -9,15 +9,17 @@ import rev
 import commands2
 import wpimath.controller
 import wpimath.trajectory
+from ntcore import NetworkTableInstance
 
 class TurretConstants:
-    kP = 3
-    kI = 0.0015
+    kP = 5
+    kI = 5
 
-    kMaxVelocityRPM = 1000
+    kMaxVelocityRPM = 10
     kMotorCAN = 40
-    kMotorToTurretConversionFactor = 1/11
-    kMaxAccelerationRPMPM = 60000
+    kMotorToTurretConversionFactor = 1/6.6
+    kMaxAccelerationRPMPM = 20000
+    kMaxVoltage = 1.5
 
 
 class TurretSubsystem(commands2.ProfiledPIDSubsystem):
@@ -36,6 +38,8 @@ class TurretSubsystem(commands2.ProfiledPIDSubsystem):
             ),
             0,
         )
+        self.networkTable = NetworkTableInstance.getDefault()
+        wpilib.SmartDashboard.putData("pid", self._controller)
 
         config = rev.SparkMaxConfig()
         config.encoder.positionConversionFactor(TurretConstants.kMotorToTurretConversionFactor)
@@ -48,6 +52,11 @@ class TurretSubsystem(commands2.ProfiledPIDSubsystem):
         self.setGoal(0)
     
     def useOutput(self, output, setpoint):
+        if abs(output) > TurretConstants.kMaxVoltage:
+            if output > -1*TurretConstants.kMaxVoltage:
+                output = TurretConstants.kMaxVoltage
+            elif output < -1*TurretConstants.kMaxVoltage:
+                output = -1*TurretConstants.kMaxVoltage
         self.motor.setVoltage(output)
 
     def getMeasurement(self) -> float:
