@@ -3,7 +3,7 @@ from typing import Tuple
 
 # Third-party imports
 from wpimath.geometry import Rotation2d
-
+import rev
 
 class OperatorRobotConfig:
     # Default start position for red alliance using always-blue-alliance coordinates
@@ -49,3 +49,9 @@ class OperatorRobotConfig:
     # Values to give are: max translation velocity (mps), max translation acceleration (mps^2),
     # max angular velocity (dps), max angular acceleration (dps^2).
     teleop_pathplan_constraints: Tuple[float] = (2.5, 2.0, 360.0, 360.0)
+
+    #Configs for shooter
+    intake_motor_pidf = (0, 0, 0, 0)
+    top_motor_pidf = (0, 0, 0, 0)
+    bottom_motor_pidf = (0, 0, 0, 0)
+    inverted = (True, False)

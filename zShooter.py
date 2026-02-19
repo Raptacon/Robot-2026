@@ -9,6 +9,7 @@ from data.telemetry import Telemetry
 from vision import Vision
 from commands.default_swerve_drive import DefaultDrive
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
+from config import OperatorRobotConfig
 
 # Third-party imports
 import commands2
@@ -41,23 +42,22 @@ class RobotSwerve:
         pass
 
     def teleopInit(self):
-        # wpilib.SmartDashboard.putNumber("Conversion Factor", 0)
         pass
 
     def teleopPeriodic(self):
-        self.shooter.setIntakeSpeed(0.1)
-        self.shooter.setTopShooterSpeed(0.1)
-        self.shooter.setBottomShooterSpeed(0.1)
+        if wpilib.XboxController(0).getAButtonPressed:
+            self.shooter.setMotorReference('intake', 1000)
+            self.shooter.setMotorReference('top', 1000)
+            self.shooter.setMotorReference('bottom', 1000)
+
         self.intakeVelocity = self.shooter.intakeEncoder.getVelocity()
         self.topVelocity = self.shooter.topEncoder.getVelocity()
         self.bottomVelocity = self.shooter.bottomEncoder.getVelocity()
-        
-        # self.shooter = wpilib.SmartDashboard.getNumber("Conversion Factor", 0)
-        
+
         wpilib.SmartDashboard.putNumber("In_Velocity", self.intakeVelocity)
         wpilib.SmartDashboard.putNumber("Top_Velocity", self.topVelocity)
         wpilib.SmartDashboard.putNumber("Bottom_Velocity", self.bottomVelocity)
-        
+
     def testInit(self):
         commands2.CommandScheduler.getInstance().cancelAll()
 
