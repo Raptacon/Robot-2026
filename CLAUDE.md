@@ -34,7 +34,7 @@ python -m robotpy coverage test     # Run tests with coverage (used by CI)
 ```bash
 make lint
 # Or directly:
-flake8 . --count --select=E9,F6,F7,F8,F4,W1,W2,W4,W5,W6,E11 --ignore W293,W503 --show-source --statistics --exclude */tests/pyfrc*,utils/yaml/*,.venv*/,venv*/
+flake8 . --count --select=E9,F6,F7,F8,F4,W1,W2,W4,W5,W6,E11 --ignore W293,W503 --show-source --statistics --exclude */tests/pyfrc*,utils/yaml/*,.venv*/,venv*/,examples/robotpy/*
 ```
 
 **Deploy to robot:**

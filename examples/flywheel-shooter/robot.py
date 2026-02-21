@@ -38,8 +38,8 @@ def GetSparkSignalsConfig(periodMs: int) -> rev.SignalsConfig:
     signalConfig.setpointPeriodMs(periodMs)
     return signalConfig
 
-def GetSparkConfig(inverted: bool = False, 
-                   periodMs: int = 20, 
+def GetSparkConfig(inverted: bool = False,
+                   periodMs: int = 20,
                    idleMode: rev.SparkBaseConfig.IdleMode = rev.SparkBaseConfig.IdleMode.kCoast ) -> rev.SparkBaseConfig:
     config = rev.SparkBaseConfig()
     config.inverted(inverted)

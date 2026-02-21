@@ -43,16 +43,6 @@ class PhysicsEngine:
         l_spark = self.l_motor.getAppliedOutput()
         r_spark = self.r_motor.getAppliedOutput()
         # Read motor output via .get() on the actual motor
-        #print(dir(self.l_motor))
-        l_get = self.l_motor.getAppliedOutput()
-        r_get = self.r_motor.getAppliedOutput()
-        # Read motor output via SimDeviceSim
-        #l_sim = self.l_sim_output.get()
-        #r_sim = self.r_sim_output.get()
-        l_sim = 0
-        r_sim = 0
-        #if abs(l_get) > 0.01 or abs(r_get) > 0.01 or abs(l_spark) > 0.01 or abs(l_sim) > 0.01 or True:
-        #    print(f"DEBUG: SparkSim l={l_spark:.3f} r={r_spark:.3f} | .get() l={l_get:.3f} r={r_get:.3f} | SimDevice l={l_sim:.3f} r={r_sim:.3f}")
-
+        
         transform = self.drivetrain.calculate(l_spark, r_spark, tm_diff)
         self.physics_controller.move_robot(transform)
