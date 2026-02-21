@@ -66,7 +66,7 @@ visionEntries = [
 ]
 
 intakeEntries = [
-    ["intakeSpeed", "intakespeed"],
+    # ["intakeSpeed", "intakespeed"],
     ["rollerSpeed", "rollerspeed"],
 ]
 
@@ -298,8 +298,8 @@ class Telemetry:
                 self.cameraRightPose.set(self.vision.cameraPoseEstimates[1])
     
     def getIntakeInputs(self):
-        if self.intake is not None:
-            self.intake.intakeVelocity = self.intakeSpeed.getEntry(getattr(self, "intakeSpeed"))
+        # if self.intake is not None:
+        #     self.intake.intakeVelocity = self.intakeSpeed.getEntry(getattr(self, "intakeSpeed"))
             self.intake.rollerVelocity = self.rollerSpeed.getEntry(getattr(self, "rollerSpeed"))
 
     def runDefaultDataCollections(self):
