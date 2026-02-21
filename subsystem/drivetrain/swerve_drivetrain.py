@@ -3,7 +3,7 @@ from typing import Tuple
 
 # Internal imports
 from config import OperatorRobotConfig
-from constants import SwerveDriveConsts
+from constants import SwerveDriveConsts, SwerveModuleMk4iL2Consts
 from .swerve_module import SwerveModuleMk4iSparkMaxNeoCanCoder
 
 # Third-party imports
@@ -35,6 +35,9 @@ class SwerveDrivetrain(Subsystem):
         self.invert_gyro = self.constants.invertGyro
         self.speedMultiplier = 1
 
+        self.front_right_constants = SwerveModuleMk4iL2Consts()
+        self.front_right_constants.maxTranslationMPS = 4.75
+
         # must give in front-left, front-right, back-left, back-right order
         self.swerve_modules = [
             SwerveModuleMk4iSparkMaxNeoCanCoder(
@@ -51,6 +54,7 @@ class SwerveDrivetrain(Subsystem):
                 OperatorRobotConfig.swerve_module_channels[1],
                 invert_drive=self.constants.moduleFrontRightInvertDrive,
                 invert_steer=self.constants.moduleFrontRightInvertSteer,
+                swerve_level_constants=self.front_right_constants,
                 encoder_calibration=OperatorRobotConfig.swerve_abs_encoder_calibrations[1]
             ),
             SwerveModuleMk4iSparkMaxNeoCanCoder(
@@ -448,8 +452,3 @@ class SwerveDrivetrain(Subsystem):
         (disabled, autonomous, teleoperated, test).
         """
         self.update_pose_estimator()
-        # TODO: delete prints
-        SmartDashboard.putNumber("top left drive", self.swerve_modules[0].drive_motor_encoder.getVelocity())
-        SmartDashboard.putNumber("top right drive", self.swerve_modules[1].drive_motor_encoder.getVelocity())
-        SmartDashboard.putNumber("bottom left drive", self.swerve_modules[2].drive_motor_encoder.getVelocity())
-        SmartDashboard.putNumber("bottom right drive", self.swerve_modules[3].drive_motor_encoder.getVelocity())

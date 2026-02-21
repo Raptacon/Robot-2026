@@ -151,10 +151,16 @@ class RobotSwerve:
 
     def testInit(self):
         commands2.CommandScheduler.getInstance().cancelAll()
-        self.drivetrain.swerve_modules[0].drive_motor.set(1)
-        self.drivetrain.swerve_modules[1].drive_motor.set(1)
-        self.drivetrain.swerve_modules[2].drive_motor.set(1)
-        self.drivetrain.swerve_modules[3].drive_motor.set(1)
+        self.drivetrain.setDefaultCommand(
+            DefaultDrive(
+                self.drivetrain,
+                lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftY(), 0.06),
+                lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftX(), 0.06),
+                lambda: wpimath.applyDeadband(-1 * self.driver_controller.getRightX(), 0.1),
+                lambda: not self.driver_controller.getRightBumperButton()
+            )
+        )
+        commands2.cmd.run(lambda: self.drivetrain.drive(2, 0, 0, False), self.drivetrain).withTimeout(5).schedule()
 
     def testPeriodic(self):
         pass
