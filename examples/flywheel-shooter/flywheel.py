@@ -1,7 +1,8 @@
 from commands2 import Command, Subsystem
 from commands2.sysid import SysIdRoutine
-from wpilib.sysid import SysIdRoutineLog
 import rev
+from typing import Callable
+
 class FlywheelSysId(Subsystem):
     def __init__(self, motors: list[rev.SparkMax]):
         super().__init__()

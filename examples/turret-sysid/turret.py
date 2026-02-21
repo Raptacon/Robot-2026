@@ -288,7 +288,7 @@ class Turret(Subsystem):
                 self.motor.setVoltage(0)
             else:
                 if abs(pidOutput) < 0.5 and abs(pidOutput) > 0.2:
-                        pidOutput = 0.5 * math.copysign(1, pidOutput)
+                    pidOutput = 0.5 * math.copysign(1, pidOutput)
                 self.motor.setVoltage(pidOutput)
 
         self.updateTelemetry()
