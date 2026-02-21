@@ -138,7 +138,7 @@ class IntakeSubsystem(commands2.SubsystemBase):
 
     def jamDetection(self):
         if not self.jamDetected:
-            if self.rollerMotorEncoder.getVelocity() <= self.jamThreshold:
+            if abs(self.rollerMotorEncoder.getVelocity()) <= self.jamThreshold and self.rollerMotor.getAppliedOutput() >= 1:
                 if self.jamOccurence == 0:
                     self.baselineJam = time.perf_counter()
                     self.jamOccurence = 1
