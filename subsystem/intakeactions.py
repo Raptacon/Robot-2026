@@ -2,6 +2,7 @@ import wpilib
 import commands2
 import rev
 import time
+import os
 # import array as arr
 
 from constants import CaptainPlanetConsts as intakeConsts
@@ -57,8 +58,8 @@ class IntakeSubsystem(commands2.SubsystemBase):
         self.rollerFaultThreshold = 2 #Amount of time spent trying to operate rollers before fault condition is triggered
         self.jamFaultThreshold = 0 #Amount of attempts done trying to reverse rollers in the event of a jam before a fault condition is triggered
         self.jamTime = 1 #Amount of time to wait before assuming a ball inside the intake has gotten stuck
-        self.jamThreshold = 1 #Maximum sustained rpm before assuming a ball inside the rollers has gotten stuck
-        self.jamReversalTime = 1 #Amount of time to have motors reverse when a ball inside the intake has gotten stuck
+        self.jamThreshold = 10 #Maximum sustained rpm before assuming a ball inside the rollers has gotten stuck
+        self.jamReversalTime = 3 #Amount of time to have motors reverse when a ball inside the intake has gotten stuck
 
         # self.intakeCondition = 0 #Leave at 0, provides reference to code on current intake status
         # self.intakeRamped = 0 #Leave at 0, provides reference to code on ramping intake status
@@ -138,7 +139,7 @@ class IntakeSubsystem(commands2.SubsystemBase):
 
     def jamDetection(self):
         if not self.jamDetected:
-            if abs(self.rollerMotorEncoder.getVelocity()) <= self.jamThreshold and self.rollerMotor.getAppliedOutput() >= 1:
+            if self.rollerMotorEncoder.getVelocity() <= self.jamThreshold and self.rollerCondition == 1:
                 if self.jamOccurence == 0:
                     self.baselineJam = time.perf_counter()
                     self.jamOccurence = 1
@@ -147,9 +148,12 @@ class IntakeSubsystem(commands2.SubsystemBase):
                         self.baselineDetectedJam = time.perf_counter()
                         self.jamDetected = True
         else:
-            if time.perf_counter() - self.baselineDetectedJam <= self.jamReversalTime:
+            if time.perf_counter() - self.baselineDetectedJam <= self.jamReversalTime or self.rollerMotorEncoder.getVelocity() <= self.jamThreshold:
                 self.rollerCondition = -1
             else:
+                if self.rollerMotorEncoder.getVelocity() <= self.jamThreshold:
+                    print("Jam Reversal Unsuccessful! Stopping code.")
+                    os._exit(104)
                 # if self.rollerSensor == 0:
                 #     self.deactivateRoller()
                 # else:
@@ -296,6 +300,7 @@ class IntakeSubsystem(commands2.SubsystemBase):
         # wpilib.SmartDashboard.putNumber("Intake Stowed", self.intakeStowed)
         wpilib.SmartDashboard.putNumber("Roller Condition", self.rollerCondition)
         wpilib.SmartDashboard.putBoolean("Roller Jam", self.jamDetected)
+        wpilib.SmartDashboard.putNumber("Actual Roller Velocity", self.rollerMotorEncoder.getVelocity())
         
         self.motorChecks()
         # self.automaticRollerActivation()
