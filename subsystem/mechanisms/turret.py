@@ -79,13 +79,30 @@ class Turret(Subsystem):
         self.motor = motor
         self.encoder = self.motor.getEncoder()
         self.controller = PIDController(0, 0, 0)
+        wpilib.SmartDashboard.putData(
+            self.getName() + "/pid", self.controller)
 
         self.min_soft_limit = min_soft_limit
         self.max_soft_limit = max_soft_limit
 
+        # Voltage output limits
+        self._min_output_voltage = -12.0
+        self._max_output_voltage = 12.0
+
         # Homing and position tracking state
         self._is_homing = False
         self._target_position = None
+
+        # Calibration state
+        self._hard_limit_min = None
+        self._hard_limit_max = None
+        self._is_calibrated = False
+        self._is_calibrating = False
+        self._calibration_phase = 0
+        self._soft_limit_margin = 0.05
+        self._position_offset = 0.0
+
+        self.configureMechanism2d()
 
         config = rev.SparkMaxConfig()
 
@@ -138,14 +155,15 @@ class Turret(Subsystem):
         Returns:
             None
         """
-        if self._is_homing:
+        if self._is_homing or self._is_calibrating:
             return
         self.motor.setVoltage(output)
 
     def setPosition(self, position_degrees: float) -> None:
         """
         Set the target turret position. The periodic method drives the PID
-        controller to this position each cycle. Blocked during homing for safety.
+        controller to this position each cycle. Blocked during homing and
+        calibration for safety.
 
         Args:
             position_degrees: the target turret position in degrees
@@ -153,9 +171,12 @@ class Turret(Subsystem):
         Returns:
             None
         """
-        if self._is_homing:
+        if self._is_homing or self._is_calibrating:
             return
-        self._target_position = position_degrees
+        self._target_position = max(
+            self.min_soft_limit,
+            min(self.max_soft_limit, position_degrees)
+        )
 
     def getPosition(self) -> float:
         """
@@ -191,6 +212,39 @@ class Turret(Subsystem):
         self._target_position = None
         self.motor.stopMotor()
 
+    def configureMechanism2d(self) -> None:
+        """
+        Create and publish a Mechanism2d widget for turret visualization.
+
+        Sets up a 2D canvas with:
+        - Red arm: current encoder position
+        - Green arm: target setpoint position
+        - Gray arms: static soft limit indicators
+
+        Returns:
+            None
+        """
+        self.mech2d = wpilib.Mechanism2d(200, 200)
+        pivot = self.mech2d.getRoot("turret_pivot", 100, 100)
+        self.mech_current_arm = pivot.appendLigament(
+            "current_position", 80, 0, 6,
+            wpilib.Color8Bit(wpilib.Color.kRed)
+        )
+        self.mech_target_arm = pivot.appendLigament(
+            "target_position", 80, 0, 4,
+            wpilib.Color8Bit(wpilib.Color.kGreen)
+        )
+        pivot.appendLigament(
+            "min_limit", 80, self.min_soft_limit, 2,
+            wpilib.Color8Bit(100, 100, 100)
+        )
+        pivot.appendLigament(
+            "max_limit", 80, self.max_soft_limit, 2,
+            wpilib.Color8Bit(100, 100, 100)
+        )
+        wpilib.SmartDashboard.putData(
+            self.getName() + "/mechanism", self.mech2d)
+
     def periodic(self) -> None:
         """
         Subsystem periodic method called every cycle by the command scheduler.
@@ -202,18 +256,28 @@ class Turret(Subsystem):
         Returns:
             None
         """
-        if self._is_homing:
+        if self._is_calibrating:
+            self.calibrationPeriodic()
+        elif self._is_homing:
             self.homingPeriodic()
         elif self._target_position is not None:
             position = self.encoder.getPosition()
             pidOutput = self.controller.calculate(
                 position, self._target_position)
+            pidOutput = max(self._min_output_voltage,
+                           min(self._max_output_voltage, pidOutput))
             if self.controller.atSetpoint():
                 self.motor.setVoltage(0)
             else:
                 self.motor.setVoltage(pidOutput)
 
-        # Publish telemetry
+        self.updateTelemetry()
+
+    def updateTelemetry(self) -> None:
+        """
+        Publish telemetry to SmartDashboard and read back tunable
+        parameters (PID gains and voltage limits) for live tuning.
+        """
         prefix = self.getName() + "/"
         sd = wpilib.SmartDashboard
         sd.putNumber(prefix + "position", self.encoder.getPosition())
@@ -248,10 +312,32 @@ class Turret(Subsystem):
             prefix + "reverseLimitHit",
             self.motor.getReverseLimitSwitch().get()
         )
-        # PID parameters
-        sd.putNumber(prefix + "pid/p", self.controller.getP())
-        sd.putNumber(prefix + "pid/i", self.controller.getI())
-        sd.putNumber(prefix + "pid/d", self.controller.getD())
+        # Voltage output limits (read back from dashboard)
+        self._min_output_voltage = sd.getNumber(
+            prefix + "pid/minOutputVoltage", self._min_output_voltage)
+        self._max_output_voltage = sd.getNumber(
+            prefix + "pid/maxOutputVoltage", self._max_output_voltage)
+        # Calibration telemetry
+        sd.putBoolean(prefix + "isCalibrated", self._is_calibrated)
+        sd.putBoolean(prefix + "isCalibrating", self._is_calibrating)
+        sd.putNumber(
+            prefix + "hardLimitMin",
+            self._hard_limit_min if self._hard_limit_min is not None
+            else 0.0
+        )
+        sd.putNumber(
+            prefix + "hardLimitMax",
+            self._hard_limit_max if self._hard_limit_max is not None
+            else 0.0
+        )
+        sd.putNumber(prefix + "positionOffset", self._position_offset)
+        sd.putNumber(prefix + "softLimitMargin", self._soft_limit_margin)
+        # Mechanism2d visualization
+        self.mech_current_arm.setAngle(self.encoder.getPosition())
+        self.mech_target_arm.setAngle(
+            self._target_position if self._target_position is not None
+            else 0.0
+        )
 
     def homingInit(
         self,
@@ -453,6 +539,224 @@ class Turret(Subsystem):
             self._homing_status_alert.set(False)
         else:
             self._homing_error_alert.set(False)
+
+    def calibrationInit(
+        self,
+        max_current: float,
+        max_power_pct: float,
+        max_homing_time: float,
+        min_velocity: float = None,
+        known_range: float = None
+    ) -> None:
+        """
+        Start a calibration routine that discovers the turret's mechanical range.
+
+        By default runs two phases:
+        Phase 1: Home negative to find the reverse hard limit (set as zero).
+        Phase 2: Home positive to find the forward hard limit (measured).
+
+        If known_range is provided, only phase 1 runs. The forward hard limit
+        is computed as known_range from the zero point. This is useful when
+        only one hard stop is safe to hit.
+
+        After calibration, hard limits are stored and soft limits are
+        computed with a configurable safety margin.
+
+        Args:
+            max_current: current limit in amps during calibration
+            max_power_pct: motor duty cycle during calibration (0.0-1.0)
+            max_homing_time: maximum time per phase before timeout
+            min_velocity: stall detection threshold in degrees/second
+            known_range: if provided, skip phase 2 and use this as the
+                full mechanical range in degrees from the zero point
+
+        Returns:
+            None
+        """
+        # Save motor settings for restoration after calibration
+        ca = self.motor.configAccessor
+        self._cal_saved_current_limit = ca.getSmartCurrentLimit()
+        self._cal_saved_current_free_limit = ca.getSmartCurrentFreeLimit()
+        self._cal_saved_current_rpm_limit = ca.getSmartCurrentRPMLimit()
+        self._cal_saved_fwd_soft_limit_enabled = (
+            ca.softLimit.getForwardSoftLimitEnabled()
+        )
+        self._cal_saved_rev_soft_limit_enabled = (
+            ca.softLimit.getReverseSoftLimitEnabled()
+        )
+        self._cal_saved_fwd_soft_limit = ca.softLimit.getForwardSoftLimit()
+        self._cal_saved_rev_soft_limit = ca.softLimit.getReverseSoftLimit()
+
+        # Disable both soft limits for free travel
+        disable_config = rev.SparkMaxConfig()
+        (
+            disable_config.softLimit
+            .forwardSoftLimitEnabled(False)
+            .reverseSoftLimitEnabled(False)
+        )
+        self.motor.configure(
+            disable_config,
+            rev.ResetMode.kNoResetSafeParameters,
+            rev.PersistMode.kNoPersistParameters
+        )
+
+        # Store calibration parameters for phase transitions
+        self._cal_max_current = max_current
+        self._cal_max_power_pct = max_power_pct
+        self._cal_max_homing_time = max_homing_time
+        self._cal_min_velocity = min_velocity
+        self._cal_known_range = known_range
+
+        self._is_calibrating = True
+        self._calibration_phase = 1
+        self._target_position = None
+
+        # Start phase 1: home negative
+        self.homingInit(
+            max_current, max_power_pct, max_homing_time,
+            homing_forward=False, min_velocity=min_velocity
+        )
+
+        self._cal_status_alert = wpilib.Alert(
+            "Turret: calibration phase 1 - homing negative",
+            wpilib.Alert.AlertType.kInfo
+        )
+        self._cal_status_alert.set(True)
+
+    def calibrationPeriodic(self) -> None:
+        """
+        Periodic calibration logic. Manages the two-phase calibration
+        state machine. Called by periodic() when calibrating.
+
+        Returns:
+            None
+        """
+        if not self._is_calibrating:
+            return
+
+        if self._calibration_phase == 1:
+            done = self.homingPeriodic()
+            if done:
+                if not self._is_homing:
+                    # Phase 1 complete - set encoder to 0
+                    self.encoder.setPosition(0.0)
+                    self._hard_limit_min = 0.0
+
+                    if self._cal_known_range is not None:
+                        # Single-direction: use known range
+                        self._hard_limit_max = self._cal_known_range
+                        self.calibrationEnd(abort=False)
+                    else:
+                        # Two-phase: start phase 2
+                        self._cal_status_alert.setText(
+                            "Turret: calibration phase 2 - homing positive"
+                        )
+                        self._calibration_phase = 2
+                        self.homingInit(
+                            self._cal_max_current,
+                            self._cal_max_power_pct,
+                            self._cal_max_homing_time,
+                            homing_forward=True,
+                            min_velocity=self._cal_min_velocity
+                        )
+                else:
+                    # Homing failed (timeout) - abort calibration
+                    self.calibrationEnd(abort=True)
+
+        elif self._calibration_phase == 2:
+            # Save position before homingPeriodic may reset it
+            measured_position = self.encoder.getPosition()
+            done = self.homingPeriodic()
+            if done:
+                if not self._is_homing:
+                    # Phase 2 complete - record max position
+                    self._hard_limit_max = measured_position
+                    self.calibrationEnd(abort=False)
+                else:
+                    # Homing failed - abort
+                    self.calibrationEnd(abort=True)
+
+    def calibrationEnd(self, abort: bool) -> None:
+        """
+        Clean up after calibration. Restores motor settings and, on
+        success, computes and applies soft limits.
+
+        Args:
+            abort: True if calibration failed, False on success
+
+        Returns:
+            None
+        """
+        self.motor.stopMotor()
+        self._is_calibrating = False
+        self._calibration_phase = 0
+        self._is_homing = False
+
+        if not abort and self._hard_limit_max is not None:
+            self._is_calibrated = True
+            self._cal_status_alert.setText(
+                "Turret: calibration complete"
+            )
+            # Apply soft limits with margin
+            self.setSoftLimitMargin(self._soft_limit_margin)
+        else:
+            # Restore original soft limits on abort
+            restore_config = rev.SparkMaxConfig()
+            restore_config.smartCurrentLimit(
+                int(self._cal_saved_current_limit),
+                int(self._cal_saved_current_free_limit),
+                int(self._cal_saved_current_rpm_limit)
+            )
+            (
+                restore_config.softLimit
+                .forwardSoftLimit(self._cal_saved_fwd_soft_limit)
+                .forwardSoftLimitEnabled(
+                    self._cal_saved_fwd_soft_limit_enabled)
+                .reverseSoftLimit(self._cal_saved_rev_soft_limit)
+                .reverseSoftLimitEnabled(
+                    self._cal_saved_rev_soft_limit_enabled)
+            )
+            self.motor.configure(
+                restore_config,
+                rev.ResetMode.kNoResetSafeParameters,
+                rev.PersistMode.kNoPersistParameters
+            )
+            self._cal_status_alert.setText(
+                "Turret: calibration aborted"
+            )
+
+    def setSoftLimitMargin(self, margin_pct: float) -> None:
+        """
+        Set the soft limit safety margin as a percentage of the full
+        calibrated range and apply to the motor controller.
+
+        Args:
+            margin_pct: safety margin as a fraction (e.g. 0.05 for 5%)
+
+        Returns:
+            None
+        """
+        if not self._is_calibrated:
+            return
+        self._soft_limit_margin = margin_pct
+        full_range = self._hard_limit_max - self._hard_limit_min
+        margin = full_range * margin_pct
+        self.min_soft_limit = self._hard_limit_min + margin
+        self.max_soft_limit = self._hard_limit_max - margin
+
+        limit_config = rev.SparkMaxConfig()
+        (
+            limit_config.softLimit
+            .forwardSoftLimit(self.max_soft_limit)
+            .forwardSoftLimitEnabled(True)
+            .reverseSoftLimit(self.min_soft_limit)
+            .reverseSoftLimitEnabled(True)
+        )
+        self.motor.configure(
+            limit_config,
+            rev.ResetMode.kNoResetSafeParameters,
+            rev.PersistMode.kNoPersistParameters
+        )
 
     def sysIdLog(self, sys_id_routine: SysIdRoutineLog) -> None:
         """

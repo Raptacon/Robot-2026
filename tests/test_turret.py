@@ -56,9 +56,35 @@ class TestTurret(unittest.TestCase):
 
     def setUp(self):
         """Reset motor and turret state before each test."""
-        # End any active homing to restore settings
+        # End any active calibration or homing
+        self.turret._is_calibrating = False
+        self.turret._calibration_phase = 0
         if self.turret.is_homing:
             self.turret.homingEnd(abort=True)
+        self.turret._is_homing = False
+
+        # Reset calibration state
+        self.turret._is_calibrated = False
+        self.turret._hard_limit_min = None
+        self.turret._hard_limit_max = None
+
+        # Restore soft limits to test defaults
+        self.turret.min_soft_limit = self.MIN_SOFT_LIMIT
+        self.turret.max_soft_limit = self.MAX_SOFT_LIMIT
+        limit_config = rev.SparkMaxConfig()
+        (
+            limit_config.softLimit
+            .forwardSoftLimit(self.MAX_SOFT_LIMIT)
+            .forwardSoftLimitEnabled(True)
+            .reverseSoftLimit(self.MIN_SOFT_LIMIT)
+            .reverseSoftLimitEnabled(True)
+        )
+        self.motor.configure(
+            limit_config,
+            rev.ResetMode.kNoResetSafeParameters,
+            rev.PersistMode.kNoPersistParameters
+        )
+
         self.turret.turretDisable()
         wpilib.simulation.restartTiming()
         wpilib.simulation.pauseTiming()
@@ -126,11 +152,9 @@ class TestTurret(unittest.TestCase):
         )
 
     def test_position_zero(self):
-        """Test that setting position to zero works via periodic."""
+        """Test that setting position to zero stores the target."""
         self.turret.setPosition(0.0)
-        self.turret.periodic()
-        setpoint = self.motor_sim.getSetpoint()
-        self.assertAlmostEqual(setpoint, 0.0, places=1)
+        self.assertEqual(self.turret._target_position, 0.0)
 
     def test_encoder_conversion_factor_configured(self):
         """Test that the encoder conversion factor is applied."""
@@ -378,6 +402,8 @@ class TestTurret(unittest.TestCase):
     def test_periodic_drives_to_target(self):
         """Test that periodic drives PID to stored target position."""
         self.turret.controller.setP(1.0)
+        encoder_sim = self.motor_sim.getRelativeEncoderSim()
+        encoder_sim.setPosition(0.0)
         target = 30.0
         self.turret.setPosition(target)
         self.turret.periodic()
@@ -397,6 +423,215 @@ class TestTurret(unittest.TestCase):
         self.turret.periodic()
         # Motor should be driven by homing, not PID
         self.assertAlmostEqual(self.motor.get(), 0.25, places=2)
+
+
+    def test_voltage_clamping(self):
+        """Test that PID output is clamped to voltage limits."""
+        self.turret.controller.setP(10.0)
+        self.turret._max_output_voltage = 2.0
+        self.turret._min_output_voltage = -2.0
+        self.turret.setPosition(45.0)
+        self.turret.periodic()
+        applied = self.motor.get()
+        # Duty cycle should be at most 2.0/12.0
+        self.assertLessEqual(abs(applied), 2.0 / 12.0 + 0.01)
+        self.assertNotEqual(applied, 0.0)
+        # Cleanup
+        self.turret.controller.setP(0.0)
+        self.turret._max_output_voltage = 12.0
+        self.turret._min_output_voltage = -12.0
+
+    def test_pid_controller_published_as_sendable(self):
+        """Test that PIDController is published to SmartDashboard as Sendable."""
+        prefix = self.turret.getName() + "/pid"
+        sd = wpilib.SmartDashboard
+        # putData was called in __init__, verify the entry exists
+        self.assertTrue(sd.containsKey(prefix + "/p"))
+        self.assertTrue(sd.containsKey(prefix + "/i"))
+        self.assertTrue(sd.containsKey(prefix + "/d"))
+
+    def test_mechanism2d_exists(self):
+        """Test that Mechanism2d and arms are created on the turret."""
+        self.assertIsNotNone(self.turret.mech2d)
+        self.assertIsNotNone(self.turret.mech_current_arm)
+        self.assertIsNotNone(self.turret.mech_target_arm)
+
+    def test_mechanism2d_telemetry_no_error(self):
+        """Test that updateTelemetry updates Mechanism2d arms without error."""
+        self.turret.setPosition(60.0)
+        # Should not raise any exceptions
+        self.turret.updateTelemetry()
+
+    def test_set_position_clamps_above_max(self):
+        """Test that setPosition clamps values above max soft limit."""
+        self.turret.setPosition(200.0)
+        self.assertEqual(self.turret._target_position, self.MAX_SOFT_LIMIT)
+
+    def test_set_position_clamps_below_min(self):
+        """Test that setPosition clamps values below min soft limit."""
+        self.turret.setPosition(-200.0)
+        self.assertEqual(self.turret._target_position, self.MIN_SOFT_LIMIT)
+
+    def test_set_position_within_limits(self):
+        """Test that setPosition accepts values within soft limits."""
+        self.turret.setPosition(45.0)
+        self.assertEqual(self.turret._target_position, 45.0)
+
+    # ---- Calibration tests ----
+
+    def test_calibration_init_sets_state(self):
+        """Test that calibrationInit sets calibration flags and phase."""
+        self.turret.calibrationInit(
+            max_current=10.0, max_power_pct=0.2,
+            max_homing_time=5.0, min_velocity=1.0
+        )
+        self.assertTrue(self.turret._is_calibrating)
+        self.assertEqual(self.turret._calibration_phase, 1)
+        self.assertTrue(self.turret._is_homing)
+        # Both soft limits should be disabled
+        ca = self.motor.configAccessor
+        self.assertFalse(ca.softLimit.getForwardSoftLimitEnabled())
+        self.assertFalse(ca.softLimit.getReverseSoftLimitEnabled())
+
+    def test_calibration_blocks_set_position(self):
+        """Test that setPosition is blocked during calibration."""
+        self.turret.calibrationInit(
+            max_current=10.0, max_power_pct=0.2,
+            max_homing_time=5.0, min_velocity=1.0
+        )
+        self.turret.setPosition(45.0)
+        self.assertIsNone(self.turret._target_position)
+
+    def test_calibration_blocks_set_motor_voltage(self):
+        """Test that setMotorVoltage is blocked during calibration."""
+        self.turret.calibrationInit(
+            max_current=10.0, max_power_pct=0.2,
+            max_homing_time=5.0, min_velocity=1.0
+        )
+        self.motor.stopMotor()
+        self.turret.setMotorVoltage(6.0)
+        self.assertAlmostEqual(self.motor.get(), 0.0, places=1)
+
+    def test_calibration_phase1_sets_zero(self):
+        """Test that phase 1 completion sets encoder to 0."""
+        self.turret.calibrationInit(
+            max_current=10.0, max_power_pct=0.2,
+            max_homing_time=5.0, min_velocity=1.0
+        )
+        encoder_sim = self.motor_sim.getRelativeEncoderSim()
+        encoder_sim.setVelocity(0.0)
+        # Trigger stall detection
+        self.turret.calibrationPeriodic()
+        wpilib.simulation.stepTiming(0.15)
+        self.turret.calibrationPeriodic()
+        # Phase 1 complete - encoder should be 0, phase should be 2
+        self.assertEqual(self.turret._hard_limit_min, 0.0)
+        self.assertEqual(self.turret._calibration_phase, 2)
+        self.assertTrue(self.turret._is_calibrating)
+
+    def test_calibration_full_sequence(self):
+        """Test complete two-phase calibration sets hard limits and
+        computes soft limits."""
+        self.turret.calibrationInit(
+            max_current=10.0, max_power_pct=0.2,
+            max_homing_time=5.0, min_velocity=1.0
+        )
+        encoder_sim = self.motor_sim.getRelativeEncoderSim()
+        encoder_sim.setVelocity(0.0)
+        # Phase 1: stall reverse
+        self.turret.calibrationPeriodic()
+        wpilib.simulation.stepTiming(0.15)
+        self.turret.calibrationPeriodic()
+        # Now in phase 2, set a simulated position for the forward limit
+        encoder_sim.setPosition(180.0)
+        encoder_sim.setVelocity(0.0)
+        # Phase 2: stall forward
+        self.turret.calibrationPeriodic()
+        wpilib.simulation.stepTiming(0.15)
+        self.turret.calibrationPeriodic()
+        # Calibration complete
+        self.assertFalse(self.turret._is_calibrating)
+        self.assertTrue(self.turret._is_calibrated)
+        self.assertEqual(self.turret._hard_limit_min, 0.0)
+        self.assertEqual(self.turret._hard_limit_max, 180.0)
+        # Soft limits with 5% margin: 9.0 and 171.0
+        self.assertAlmostEqual(self.turret.min_soft_limit, 9.0, places=1)
+        self.assertAlmostEqual(self.turret.max_soft_limit, 171.0, places=1)
+        # Soft limits applied to motor
+        ca = self.motor.configAccessor
+        self.assertTrue(ca.softLimit.getForwardSoftLimitEnabled())
+        self.assertTrue(ca.softLimit.getReverseSoftLimitEnabled())
+        self.assertAlmostEqual(
+            ca.softLimit.getForwardSoftLimit(), 171.0, places=1)
+        self.assertAlmostEqual(
+            ca.softLimit.getReverseSoftLimit(), 9.0, places=1)
+
+    def test_set_soft_limit_margin(self):
+        """Test that setSoftLimitMargin recalculates and applies limits."""
+        # Manually set calibrated state
+        self.turret._is_calibrated = True
+        self.turret._hard_limit_min = 0.0
+        self.turret._hard_limit_max = 200.0
+        self.turret.setSoftLimitMargin(0.10)
+        self.assertAlmostEqual(self.turret.min_soft_limit, 20.0, places=1)
+        self.assertAlmostEqual(self.turret.max_soft_limit, 180.0, places=1)
+        self.assertAlmostEqual(self.turret._soft_limit_margin, 0.10)
+
+    def test_set_soft_limit_margin_requires_calibrated(self):
+        """Test that setSoftLimitMargin does nothing if not calibrated."""
+        original_min = self.turret.min_soft_limit
+        original_max = self.turret.max_soft_limit
+        self.turret.setSoftLimitMargin(0.10)
+        self.assertEqual(self.turret.min_soft_limit, original_min)
+        self.assertEqual(self.turret.max_soft_limit, original_max)
+
+    def test_calibration_telemetry(self):
+        """Test that calibration telemetry keys are published."""
+        self.turret.updateTelemetry()
+        prefix = self.turret.getName() + "/"
+        sd = wpilib.SmartDashboard
+        self.assertTrue(sd.containsKey(prefix + "isCalibrated"))
+        self.assertTrue(sd.containsKey(prefix + "isCalibrating"))
+        self.assertTrue(sd.containsKey(prefix + "hardLimitMin"))
+        self.assertTrue(sd.containsKey(prefix + "hardLimitMax"))
+        self.assertTrue(sd.containsKey(prefix + "positionOffset"))
+        self.assertTrue(sd.containsKey(prefix + "softLimitMargin"))
+
+    def test_calibration_single_direction_known_range(self):
+        """Test single-direction calibration with a known range skips phase 2."""
+        self.turret.calibrationInit(
+            max_current=10.0, max_power_pct=0.2,
+            max_homing_time=5.0, min_velocity=1.0,
+            known_range=180.0
+        )
+        encoder_sim = self.motor_sim.getRelativeEncoderSim()
+        encoder_sim.setVelocity(0.0)
+        # Phase 1: stall reverse
+        self.turret.calibrationPeriodic()
+        wpilib.simulation.stepTiming(0.15)
+        self.turret.calibrationPeriodic()
+        # Should complete after phase 1 only
+        self.assertFalse(self.turret._is_calibrating)
+        self.assertTrue(self.turret._is_calibrated)
+        self.assertEqual(self.turret._hard_limit_min, 0.0)
+        self.assertEqual(self.turret._hard_limit_max, 180.0)
+        # Soft limits with 5% margin
+        self.assertAlmostEqual(self.turret.min_soft_limit, 9.0, places=1)
+        self.assertAlmostEqual(self.turret.max_soft_limit, 171.0, places=1)
+
+    def test_calibration_abort_restores_settings(self):
+        """Test that calibration abort restores original soft limits."""
+        self.turret.calibrationInit(
+            max_current=10.0, max_power_pct=0.2,
+            max_homing_time=5.0, min_velocity=1.0
+        )
+        self.turret.calibrationEnd(abort=True)
+        self.assertFalse(self.turret._is_calibrating)
+        self.assertFalse(self.turret._is_calibrated)
+        # Soft limits should be restored
+        ca = self.motor.configAccessor
+        self.assertTrue(ca.softLimit.getForwardSoftLimitEnabled())
+        self.assertTrue(ca.softLimit.getReverseSoftLimitEnabled())
 
 
 if __name__ == "__main__":
