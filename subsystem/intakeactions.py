@@ -7,6 +7,7 @@ import ntcore
 import array as arr
 
 from constants import CaptainPlanetConsts as intakeConsts
+from config import OperatorRobotConfig 
 
 intakeVelocity = 0.3 #Speed (in rpm) in which the intake motor will move upon deployment/stowing
 intakeMotorThreshold = 1 #Used to determine whether or not intake is deployed
@@ -26,6 +27,8 @@ class IntakeSubsystem(commands2.SubsystemBase):
         if alternateConfiguration == True:
             self.intakeMotor = rev.SparkMax(intakeConsts.kRollerMotorCanId, rev.SparkLowLevel.MotorType.kBrushless)
             self.intakeMotorEncoder = self.intakeMotor.getEncoder()
+            self.intakeMotorConfig = rev.SparkMaxConfig()
+            self.tuningMotors()
             #self.intakeMotorPosition = self.intakeMotorEncoder.getPosition()
 
             self.hasSecondMotor = hasSecondMotor
@@ -60,7 +63,7 @@ class IntakeSubsystem(commands2.SubsystemBase):
         self.rollerFaultThreshold = 2 #Amount of time spent trying to operate rollers before fault condition is triggered
         self.jamFaultThreshold = 0 #Amount of attempts done trying to reverse rollers in the event of a jam before a fault condition is triggered
         self.jamTime = 1 #Amount of time to wait before assuming a ball inside the intake has gotten stuck
-        self.jamThreshold = 150 #Minimum voltage before assuming a ball inside the intake has gotten stuck
+        self.jamThreshold = 1 #Maximum sustained rpm before assuming a ball inside the rollers has gotten stuck
         self.jamReversalTime = 1 #Amount of time to have motors reverse when a ball inside the intake has gotten stuck
 
         self.intakeCondition = 0 #Leave at 0, provides reference to code on current intake status
@@ -144,7 +147,7 @@ class IntakeSubsystem(commands2.SubsystemBase):
     def jamDetection(self):
         if self.hasSecondMotor:
             if not self.jamDetected:
-                if self.rollerMotor.getOutputCurrent() >= self.jamThreshold:
+                if self.rollerMotorEncoder.getVelocity() <= self.jamThreshold:
                     if self.jamOccurence == 0:
                         self.baselineJam = time.perf_counter()
                         self.jamOccurence = 1
@@ -238,8 +241,11 @@ class IntakeSubsystem(commands2.SubsystemBase):
 
         if self.intakeCondition == 0:
             self.intakeVelocity = 0
-        self.intakeMotor.set(self.intakeCondition * self.intakeVelocity)
         self.rollerMotor.set(self.rollerCondition * self.rollerVelocity)
+        
+        self.intakeMotorPID.setReference(
+            self.intakeCondition * self.intakeVelocity, rev.SparkLowLevel.ControlType.kVelocity, rev.ClosedLoopSlot.kSlot0
+        )
 
         #Stop intake deployment motor if it is being ramped
         if self.intakeRampStatus == 1:
@@ -262,6 +268,21 @@ class IntakeSubsystem(commands2.SubsystemBase):
 
         if self.intakeCondition != 0:
             self.intakeRampedCondition = False
+
+    def tuningMotors(self):
+        configUse = (
+            self.intakeMotorConfig.closedLoop
+            .setFeedbackSensor(rev.FeedbackSensor.kPrimaryEncoder)
+            .pidf(*OperatorRobotConfig.intake_pid)
+        )
+
+        self.intakeMotor.configure(
+            configUse, rev.ResetMode.kNoResetSafeParemeters,
+            rev.PersistMode.kPersistParameters
+        )
+
+        self.intakeMotorPID = self.intakeMotor.getClosedLoopController()
+        self.state_speed = 0
 
 
     def periodic(self):
