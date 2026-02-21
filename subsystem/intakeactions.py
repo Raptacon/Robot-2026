@@ -148,7 +148,7 @@ class IntakeSubsystem(commands2.SubsystemBase):
                         self.baselineDetectedJam = time.perf_counter()
                         self.jamDetected = True
         else:
-            if time.perf_counter() - self.baselineDetectedJam <= self.jamReversalTime or self.rollerMotorEncoder.getVelocity() <= self.jamThreshold:
+            if time.perf_counter() - self.baselineDetectedJam <= self.jamReversalTime or abs(self.rollerMotorEncoder.getVelocity()) <= self.jamThreshold:
                 self.rollerCondition = -1
             else:
                 if self.rollerMotorEncoder.getVelocity() <= self.jamThreshold:
