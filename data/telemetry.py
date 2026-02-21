@@ -300,7 +300,7 @@ class Telemetry:
     def getIntakeInputs(self):
         # if self.intake is not None:
         #     self.intake.intakeVelocity = self.intakeSpeed.getEntry(getattr(self, "intakeSpeed"))
-            self.intake.rollerVelocity = self.rollerSpeed.getEntry(getattr(self, "rollerSpeed"))
+        self.intake.rollerVelocity = self.rollerSpeed.getEntry(getattr(self, "rollerSpeed"))
 
     def runDefaultDataCollections(self):
         self.getDriverControllerInputs()
