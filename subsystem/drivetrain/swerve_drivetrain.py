@@ -35,6 +35,9 @@ class SwerveDrivetrain(Subsystem):
         self.invert_gyro = self.constants.invertGyro
         self.speedMultiplier = 1
 
+        self.front_right_constants = SwerveModuleMk4iL2Consts()
+        self.front_right_constants.maxTranslationMPS = 4.75
+
         # must give in front-left, front-right, back-left, back-right order
         self.swerve_modules = [
             SwerveModuleMk4iSparkMaxNeoCanCoder(
