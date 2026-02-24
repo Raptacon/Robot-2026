@@ -20,6 +20,8 @@ from commands2.button import Trigger
 from pathplannerlib.auto import AutoBuilder
 from pathplannerlib.path import PathPlannerPath
 from subsystem.z_Shooter import zShooter as Shooter
+import typing
+
 class RobotSwerve:
     """
     Container to hold the main robot code
@@ -29,6 +31,7 @@ class RobotSwerve:
     
     def __init__(self, is_disabled: Callable[[], bool]) -> None:
         self.shooter = Shooter()
+        self.configs = rev.SparkBaseConfig()
     def robotPeriodic(self):
         pass
     def disabledInit(self):
@@ -42,21 +45,44 @@ class RobotSwerve:
         pass
 
     def teleopInit(self):
-        pass
+        # For tuning
+        wpilib.SmartDashboard.putNumberArray("Intake PIDF", [0, 0, 0, 0])
+        wpilib.SmartDashboard.putNumberArray("Top PIDF", [0, 0, 0, 0])
+        wpilib.SmartDashboard.putNumberArray("Bottom PIDF", [0, 0, 0, 0])
 
     def teleopPeriodic(self):
+        wpilib.SmartDashboard.putNumber("In_Velocity", self.shooter.getVelocity('intake'))
+        wpilib.SmartDashboard.putNumber("Top_Velocity", self.shooter.getVelocity('top'))
+        wpilib.SmartDashboard.putNumber("Bottom_Velocity", self.shooter.getVelocity('bottom'))
+
+        # For tuning robot
+        if wpilib.XboxController(0).getXButtonPressed:
+            self.shooter.setMotorReference('intake', 0)
+            self.shooter.setMotorReference('top', 0)
+            self.shooter.setMotorReference('bottom', 0)
+
         if wpilib.XboxController(0).getAButtonPressed:
-            self.shooter.setMotorReference('intake', 1000)
-            self.shooter.setMotorReference('top', 1000)
-            self.shooter.setMotorReference('bottom', 1000)
+            self.shooter.setMotorReference('intake', 3000)
+            self.shooter.setMotorReference('top', 3000)
+            self.shooter.setMotorReference('bottom', 3000)
 
-        self.intakeVelocity = self.shooter.intakeEncoder.getVelocity()
-        self.topVelocity = self.shooter.topEncoder.getVelocity()
-        self.bottomVelocity = self.shooter.bottomEncoder.getVelocity()
+        if wpilib.XboxController(0).getBButtonPressed:
+            self.shooter.setMotorReference('intake', 4500)
+            self.shooter.setMotorReference('top', 4500)
+            self.shooter.setMotorReference('bottom', 4500)
 
-        wpilib.SmartDashboard.putNumber("In_Velocity", self.intakeVelocity)
-        wpilib.SmartDashboard.putNumber("Top_Velocity", self.topVelocity)
-        wpilib.SmartDashboard.putNumber("Bottom_Velocity", self.bottomVelocity)
+        self.intakeMotorPIDF: typing.Tuple[float, float, float, float] = wpilib.SmartDashboard.getNumberArray("Intake PIDF", [0, 0, 0, 0])
+        self.topMotorPIDF: typing.Tuple[float, float, float, float] = wpilib.SmartDashboard.getNumberArray("Top PIDF", [0, 0, 0, 0])
+        self.bottomMotorPIDF: typing.Tuple[float, float, float, float] = wpilib.SmartDashboard.getNumberArray("Bottom PIDF", [0, 0, 0, 0])
+
+        self.configs.closedLoop.pidf(*self.intakeMotorPIDF, rev.ClosedLoopSlot.kSlot0)
+        self.shooter.intakeMotor.configure(self.configs, rev.ResetMode.kNoResetSafeParameters, rev.PersistMode.kNoPersistParameters)
+        
+        self.configs.closedLoop.pidf(*self.topMotorPIDF, rev.ClosedLoopSlot.kSlot0)
+        self.shooter.topMotor.configure(self.configs, rev.ResetMode.kNoResetSafeParameters, rev.PersistMode.kNoPersistParameters)
+        
+        self.configs.closedLoop.pidf(*self.bottomMotorPIDF, rev.ClosedLoopSlot.kSlot0)
+        self.shooter.bottomMotor.configure(self.configs, rev.ResetMode.kNoResetSafeParameters, rev.PersistMode.kNoPersistParameters)
 
     def testInit(self):
         commands2.CommandScheduler.getInstance().cancelAll()

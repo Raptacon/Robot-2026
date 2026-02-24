@@ -50,8 +50,9 @@ class OperatorRobotConfig:
     # max angular velocity (dps), max angular acceleration (dps^2).
     teleop_pathplan_constraints: Tuple[float] = (2.5, 2.0, 360.0, 360.0)
 
-    #Configs for shooter
+    # Configs for shooter
     intake_motor_pidf = (0, 0, 0, 0)
     top_motor_pidf = (0, 0, 0, 0)
     bottom_motor_pidf = (0, 0, 0, 0)
     inverted = (True, False)
+    rangeInterval = 0.2
