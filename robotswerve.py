@@ -16,7 +16,6 @@ import wpilib
 import wpimath
 from commands2.button import Trigger
 from pathplannerlib.auto import AutoBuilder
-from pathplannerlib.path import PathPlannerPath
 
 class RobotSwerve:
     """
@@ -58,11 +57,6 @@ class RobotSwerve:
         self.auto_command = None
         self.auto_chooser = AutoBuilder.buildAutoChooser()
         wpilib.SmartDashboard.putData("Select auto routine", self.auto_chooser)
-
-        self.teleop_stem_paths = {
-            start_location: PathPlannerPath.fromPathFile(start_location)
-            for start_location in [f"Stem_Reef_F{n}" for n in range(1, 7)] + [f"Stem_Reef_N{n}" for n in range(1, 7)]
-        }
 
         # Telemetry setup
         wpilib.SmartDashboard.putNumber("Drivetrain speed", 1)
@@ -131,7 +125,6 @@ class RobotSwerve:
         self.alliance = "blue"
         if self.drivetrain.flip_to_red_alliance():
             self.alliance = "red"
-        self.teleop_auto_command = None
 
         self.drivetrain.setDefaultCommand(
             DefaultDrive(
