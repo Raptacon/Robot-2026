@@ -9,6 +9,8 @@ from constants import SwerveModuleMk4iConsts, SwerveModuleMk4iL2Consts
 # Third-party imports
 import phoenix6
 import rev
+import wpilib
+from commands2 import Subsystem
 from wpimath.controller import SimpleMotorFeedforwardMeters
 from wpimath.kinematics import SwerveModulePosition, SwerveModuleState
 from wpimath.geometry import Rotation2d, Translation2d
@@ -87,7 +89,11 @@ def configureSparkMaxCanRates(
 
 # end sparkMaxUtils
 
-class SwerveModuleMk4iSparkMaxNeoCanCoder:
+_MECH_ARM_MIN_LEN = 15   # pixels at zero/low speed
+_MECH_ARM_MAX_LEN = 80   # pixels at max speed
+
+
+class SwerveModuleMk4iSparkMaxNeoCanCoder(Subsystem):
     """
     Module for Mk4i with 2 brushless Falcon 500s and a CANcoder swerve drive
     """
@@ -126,6 +132,9 @@ class SwerveModuleMk4iSparkMaxNeoCanCoder:
         Returns
             None: class initialization executed upon construction
         """
+        super().__init__()
+        self.setName(name)
+
         # Overall instantiation
         self.constants = swerve_level_constants
         setattr(self.constants, "encoder_calibration", encoder_calibration)
@@ -188,6 +197,14 @@ class SwerveModuleMk4iSparkMaxNeoCanCoder:
         # Drive motor configuration
         self.instantiate_drive_config(invert_drive)
         self.apply_motor_config(to_drive=True, burn_flash=True)
+
+        # Mechanism2d state
+        self._last_commanded_state = SwerveModuleState(0, Rotation2d())
+        self._mech_actual_arm = None
+        self._mech_commanded_arm = None
+        self._mech_max_speed = 1.0
+        self._mech_speed_threshold_key = ""
+        self._mech_angle_offset = 0.0
 
         # Baseline relative encoders
         self.baseline_relative_encoders()
@@ -330,7 +347,7 @@ class SwerveModuleMk4iSparkMaxNeoCanCoder:
             The steer motor's current absolute rotation position, in degrees with domain [0, 360).
         """
         steer_position = self.current_raw_absolute_encoder_value()
-        if steer_position:
+        if steer_position is not None:
             steer_position = steer_position * 360
         else:
             steer_position = self.steer_motor_encoder.getPosition()
@@ -379,6 +396,7 @@ class SwerveModuleMk4iSparkMaxNeoCanCoder:
 
         encoder_rotation = Rotation2d.fromDegrees(self.current_raw_absolute_steer_position())
         state.optimize(encoder_rotation)
+        
         state_degrees = state.angle.degrees()
         state_speed = state.speed
 
@@ -388,11 +406,118 @@ class SwerveModuleMk4iSparkMaxNeoCanCoder:
                 cosine_scaler = 1
             state_speed *= cosine_scaler
 
+        self._last_commanded_state = SwerveModuleState(
+            state_speed, Rotation2d.fromDegrees(state_degrees)
+        )
+
         self.steer_motor_pid.setReference(state_degrees, rev.SparkLowLevel.ControlType.kPosition, rev.ClosedLoopSlot.kSlot0)
         self.drive_motor_pid.setReference(
             state_speed, rev.SparkLowLevel.ControlType.kVelocity, rev.ClosedLoopSlot.kSlot0,
             self.drive_motor_feedforward.calculate(current_speed, state_speed)
         )
+
+    def configure_mechanism2d(
+        self,
+        root,
+        max_speed: float,
+        sd_threshold_key: str,
+        angle_offset: float = 0.0
+    ) -> None:
+        """
+        Create ligaments on the given Mechanism2d root for this module's visualization.
+
+        Two arms are created:
+        - actual: current steer angle, scaled to drive speed (green/red based on threshold)
+        - commanded: commanded steer angle, scaled to commanded speed (purple)
+
+        Args:
+            root: the MechanismRoot2d to attach ligaments to
+            max_speed: the maximum drive speed in m/s, used for arm length scaling
+            sd_threshold_key: SmartDashboard key for the low-speed color threshold
+            angle_offset: additional degrees added to both arm angles. Defaults to 0.
+                Pass a non-zero value if a module's physical mounting requires a
+                fixed rotational correction to the displayed angles.
+
+        Returns:
+            None
+        """
+        self._mech_max_speed = max_speed
+        self._mech_speed_threshold_key = sd_threshold_key
+        self._mech_angle_offset = angle_offset
+        # Publish default threshold if not already set
+        wpilib.SmartDashboard.putNumber(
+            sd_threshold_key,
+            wpilib.SmartDashboard.getNumber(sd_threshold_key, max_speed * 0.10)
+        )
+        self._mech_actual_arm = root.appendLigament(
+            "actual", _MECH_ARM_MIN_LEN, 0, 6,
+            wpilib.Color8Bit(wpilib.Color.kRed)
+        )
+        self._mech_commanded_arm = root.appendLigament(
+            "commanded", _MECH_ARM_MIN_LEN, 0, 4,
+            wpilib.Color8Bit(wpilib.Color.kPurple)
+        )
+
+    def update_mechanism2d(self) -> None:
+        """
+        Update the Mechanism2d arm angles and lengths based on current and commanded states.
+        Called each cycle via periodic().
+
+        Returns:
+            None
+        """
+        if self._mech_actual_arm is None:
+            return
+
+        threshold = wpilib.SmartDashboard.getNumber(
+            self._mech_speed_threshold_key, self._mech_max_speed * 0.10
+        )
+
+        # Actual arm — green when moving, red when below threshold
+        actual_speed = abs(self.drive_motor_encoder.getVelocity())
+        actual_angle = self.current_raw_absolute_steer_position()
+        if actual_speed < threshold:
+            actual_len = _MECH_ARM_MIN_LEN
+            self._mech_actual_arm.setColor(wpilib.Color8Bit(wpilib.Color.kRed))
+        else:
+            actual_len = max(
+                _MECH_ARM_MIN_LEN,
+                min(_MECH_ARM_MAX_LEN,
+                    actual_speed / self._mech_max_speed * _MECH_ARM_MAX_LEN)
+            )
+            self._mech_actual_arm.setColor(wpilib.Color8Bit(wpilib.Color.kGreen))
+        # +90 converts robot convention (0=forward) to canvas convention (0=right, 90=up)
+        self._mech_actual_arm.setAngle(actual_angle + 90 + self._mech_angle_offset)
+        self._mech_actual_arm.setLength(actual_len)
+
+        # Commanded arm — always purple, scaled to commanded speed
+        cmd_speed = self._last_commanded_state.speed
+        cmd_angle = self._last_commanded_state.angle.degrees()
+
+        # Normalize commanded angle to [0°, 180°) to match the physics
+        # simulation's normalization.  optimize() may flip the state to
+        # {-v, θ} when the equivalent {+v, θ+180°} was requested; both
+        # represent the same physical wheel orientation.  Normalizing here
+        # ensures the commanded arm always agrees with the actual arm.
+        cmd_angle = cmd_angle % 360.0
+        if cmd_angle >= 180.0:
+            cmd_angle -= 180.0
+        cmd_len = max(
+            _MECH_ARM_MIN_LEN,
+            min(_MECH_ARM_MAX_LEN,
+                abs(cmd_speed) / self._mech_max_speed * _MECH_ARM_MAX_LEN)
+        )
+        self._mech_commanded_arm.setAngle(cmd_angle + 90 + self._mech_angle_offset)
+        self._mech_commanded_arm.setLength(cmd_len)
+
+    def periodic(self) -> None:
+        """
+        Subsystem periodic method. Updates Mechanism2d visualization each cycle.
+
+        Returns:
+            None
+        """
+        self.update_mechanism2d()
 
     def set_motor_stop_mode(self, to_drive: bool, to_break: bool) -> None:
         """

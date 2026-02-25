@@ -1,8 +1,6 @@
 # Internal imports
 from config import OperatorRobotConfig
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
-from vision import Vision
-
 # Third-party imports
 import wpilib
 from ntcore import NetworkTableInstance
@@ -59,12 +57,6 @@ driverStationEntries = [
     ["enabled", BooleanLogEntry, "enabled"],
 ]
 
-visionEntries = [
-    ["cameraLeftPose", "cameraleftpose"],
-    ["cameraRightPose", "camerarightpose"],
-]
-
-
 class Telemetry:
 
     def __init__(
@@ -72,8 +64,7 @@ class Telemetry:
         driverController: wpilib.XboxController = None,
         mechController: wpilib.XboxController = None,
         driveTrain: SwerveDrivetrain = None,
-        driverStation: wpilib.DriverStation = None,
-        vision: Vision = None
+        driverStation: wpilib.DriverStation = None
     ):
         self.driverController = driverController
         self.mechController = mechController
@@ -81,7 +72,6 @@ class Telemetry:
         self.driveTrain = driveTrain
         self.swerveModules = driveTrain.swerve_modules
         self.driverStation = driverStation
-        self.vision = vision
 
         self.networkTable = NetworkTableInstance.getDefault()
         for entryname, logname in telemetryOdometryEntries:
@@ -114,15 +104,6 @@ class Telemetry:
                         "swervedrivetrain/" + logname, entrytype
                     ).publish(),
                 )
-        for entryname, logname in visionEntries:
-            setattr(
-                self,
-                entryname,
-                self.networkTable.getStructTopic(
-                    "vision/" + logname, Pose2d
-                ).publish(),
-            )
-
         self.datalog = wpilib.DataLogManager.getLog()
         for entryname, entrytype, logname in telemetryButtonEntries:
             setattr(
@@ -274,20 +255,12 @@ class Telemetry:
             self.test.append(self.driverStation.isTest())
             self.enabled.append(self.driverStation.isEnabled())
 
-    def getVisionInputs(self):
-        if self.vision is not None:
-            if self.vision.cameraPoseEstimates[0]:
-                self.cameraLeftPose.set(self.vision.cameraPoseEstimates[0])
-            if self.vision.cameraPoseEstimates[1]:
-                self.cameraRightPose.set(self.vision.cameraPoseEstimates[1])
-
     def runDefaultDataCollections(self):
         self.getDriverControllerInputs()
         self.getMechControllerInputs()
         self.getOdometryInputs()
         self.getFullSwerveState()
         self.getRawSwerveInputs()
-        self.getVisionInputs()
         self.getDriverStationInputs()
 
     def logAdditionalOdometry(

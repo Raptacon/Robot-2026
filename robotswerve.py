@@ -6,7 +6,6 @@ from typing import Callable
 
 # Internal imports
 from data.telemetry import Telemetry
-from vision import Vision
 from commands.default_swerve_drive import DefaultDrive
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
 
@@ -36,15 +35,6 @@ class RobotSwerve:
         # Alliance instantiaion
         self.alliance = "red" if self.drivetrain.flip_to_red_alliance() else "blue"
 
-        # Vision setup
-        try:
-            self.vision = Vision(self.drivetrain)
-        except Exception:
-            self.vision = None
-            wpilib.reportError("Unable to load vision class", printTrace=True)
-        self.alignmentTagId = None
-        self.caughtPeriodicVisionError = False
-
         # Initialize timer
         self.timer = wpilib.Timer()
         self.timer.start()
@@ -69,7 +59,7 @@ class RobotSwerve:
         self.enableTelemetry = wpilib.SmartDashboard.getBoolean("enableTelemetry", True)
         if self.enableTelemetry:
             self.telemetry = Telemetry(
-                driveTrain=self.drivetrain, vision=self.vision
+                driveTrain=self.drivetrain
             )
 
         wpilib.SmartDashboard.putString("Robot Version", self.getDeployInfo("git-hash"))
@@ -97,15 +87,6 @@ class RobotSwerve:
             self.telemetry.runDefaultDataCollections()
 
         self.field.setRobotPose(self.drivetrain.current_pose())
-
-        if self.vision is not None:
-            try:
-                self.vision.getCamEstimates(specificTagId=lambda: self.alignmentTagId)
-                self.vision.showTargetData()
-            except Exception:
-                if not self.caughtPeriodicVisionError:
-                    self.caughtPeriodicVisionError = True
-                    wpilib.reportError("Retrieval of vision info failed in periodic", printTrace=True)
 
     def disabledInit(self):
         self.drivetrain.set_motor_stop_modes(to_drive=True, to_break=True, all_motor_override=True, burn_flash=False)
@@ -183,7 +164,3 @@ class RobotSwerve:
         except json.JSONDecodeError:
             return "bad json in deploy file check for unescaped "
 
-    def setAlignmentTag(self, alignmentTagId: int | None) -> None:
-        """
-        """
-        self.alignmentTagId = alignmentTagId
