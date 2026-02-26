@@ -115,7 +115,7 @@ class RobotSwerve:
         pass
 
     def autonomousInit(self):
-            self.auto_command = self.auto_chooser.getSelected()
+        self.auto_command = self.auto_chooser.getSelected()
         if self.auto_command:
             self.auto_command.schedule()
         else:
