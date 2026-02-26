@@ -32,6 +32,8 @@ class RobotSwerve:
     def __init__(self, is_disabled: Callable[[], bool]) -> None:
         self.shooter = Shooter()
         self.configs = rev.SparkBaseConfig()
+        self.robotConfigs = OperatorRobotConfig()
+        self.xbox = commands2.button.CommandXboxController(0)
     def robotPeriodic(self):
         pass
     def disabledInit(self):
@@ -55,21 +57,33 @@ class RobotSwerve:
         wpilib.SmartDashboard.putNumber("Top_Velocity", self.shooter.getVelocity('top'))
         wpilib.SmartDashboard.putNumber("Bottom_Velocity", self.shooter.getVelocity('bottom'))
 
+        # Offset RPM by +100
+        self.xbox.povUp().onTrue(commands2.cmd.runOnce(lambda: self.shooter.increaseOffset, self.shooter))
+        # Offset RPM by -100
+        self.xbox.povDown().onTrue(commands2.cmd.runOnce(lambda: self.shooter.decreaseOffset, self.shooter))
+
+    def testInit(self):
+        commands2.CommandScheduler.getInstance().cancelAll()
+
+    def testPeriodic(self):
         # For tuning robot
-        if wpilib.XboxController(0).getXButtonPressed:
-            self.shooter.setMotorReference('intake', 0)
-            self.shooter.setMotorReference('top', 0)
-            self.shooter.setMotorReference('bottom', 0)
+        self.xbox.x().onTrue(commands2.cmd.parallel(           
+            commands2.cmd.runOnce(lambda: self.shooter.setMotorReference('intake', 0), self.shooter),
+            commands2.cmd.runOnce(lambda: self.shooter.setMotorReference('top', 0), self.shooter),
+            commands2.cmd.runOnce(lambda: self.shooter.setMotorReference('bottom', 0), self.shooter))
+        )
 
-        if wpilib.XboxController(0).getAButtonPressed:
-            self.shooter.setMotorReference('intake', 3000)
-            self.shooter.setMotorReference('top', 3000)
-            self.shooter.setMotorReference('bottom', 3000)
+        self.xbox.x().onTrue(commands2.cmd.parallel(            
+            commands2.cmd.runOnce(lambda: self.shooter.setMotorReference('intake', 3000), self.shooter),
+            commands2.cmd.runOnce(lambda: self.shooter.setMotorReference('top', 3000), self.shooter),
+            commands2.cmd.runOnce(lambda: self.shooter.setMotorReference('bottom', 3000), self.shooter))
+        )
 
-        if wpilib.XboxController(0).getBButtonPressed:
-            self.shooter.setMotorReference('intake', 4500)
-            self.shooter.setMotorReference('top', 4500)
-            self.shooter.setMotorReference('bottom', 4500)
+        self.xbox.x().onTrue(commands2.cmd.parallel(            
+            commands2.cmd.runOnce(lambda: self.shooter.setMotorReference('intake', 4000), self.shooter),
+            commands2.cmd.runOnce(lambda: self.shooter.setMotorReference('top', 4500), self.shooter),
+            commands2.cmd.runOnce(lambda: self.shooter.setMotorReference('bottom', 4500), self.shooter))
+        )
 
         self.intakeMotorPIDF: typing.Tuple[float, float, float, float] = wpilib.SmartDashboard.getNumberArray("Intake PIDF", [0, 0, 0, 0])
         self.topMotorPIDF: typing.Tuple[float, float, float, float] = wpilib.SmartDashboard.getNumberArray("Top PIDF", [0, 0, 0, 0])
@@ -83,12 +97,6 @@ class RobotSwerve:
         
         self.configs.closedLoop.pidf(*self.bottomMotorPIDF, rev.ClosedLoopSlot.kSlot0)
         self.shooter.bottomMotor.configure(self.configs, rev.ResetMode.kNoResetSafeParameters, rev.PersistMode.kNoPersistParameters)
-
-    def testInit(self):
-        commands2.CommandScheduler.getInstance().cancelAll()
-
-    def testPeriodic(self):
-        pass
 
     def getDeployInfo(self, key: str) -> str:
         """Gets the Git SHA of the deployed robot by parsing ~/deploy.json and returning the git-hash from the JSON key OR if deploy.json is unavailable will return "unknown"

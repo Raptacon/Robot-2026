@@ -56,3 +56,5 @@ class OperatorRobotConfig:
     bottom_motor_pidf = (0, 0, 0, 0)
     inverted = (True, False)
     rangeInterval = 0.2
+    offsetIncrement = 100
+    offsetDecrement = -100

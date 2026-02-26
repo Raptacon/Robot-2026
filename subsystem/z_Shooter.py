@@ -11,6 +11,9 @@ class zShooter():
         super().__init__()
         self.robotConfigs = OperatorRobotConfig()
         self.configs = rev.SparkBaseConfig()
+
+        self.offsetAmount = 0
+
         # Create lookup table of 100 elements (index 0-99)
         self.lookupTable = ([1000]*25) + ([2000]*25) + ([3000]*25) + ([4000]*25)
 
@@ -127,7 +130,7 @@ class zShooter():
             RPM or angle the ball needs to be at to travel a certain distance
         """
         self.inputs = -(a) + sqrt(a**2 - 4(a)(distance)) / 2*b
-        return self.inputs
+        return self.inputs + self.offsetAmount
 
     # def calculate_RPM(self, a, b, c, d, distance, angle):
     #     self.angle = -(a) + sqrt(a**2 - ((4*b)*(c*angle + d*angle**2)) + 4*b*distance ) / 2*b
@@ -144,10 +147,60 @@ class zShooter():
             RPM needed to hit distance target
         """
         # Get an index number from the distance given
-        lookupIndex = int(floor(distance / self.robotConfigs.rangeInterval))
+        lookupIndex = abs(int(floor(distance / self.robotConfigs.rangeInterval)))
         # Check if index number has exceeded the length of the list, else set RPM as 0
         if lookupIndex < len(self.lookupTable):
-            self.RPM = self.lookupTable[lookupIndex]
+            self.RPM = self.lookupTable[lookupIndex] + self.offsetAmount
         else:
-            self.RPM = 0
-        return self.RPM
+            if len(self.lookupTable) > 0:
+                self.RPM = self.lookupTable[-1] + self.offsetAmount
+            else:
+                self.RPM = 0
+
+    def increaseOffset(self):
+        """
+        Increase the RPM by a set amount if it is inaccurate
+        
+        Args:
+            None
+        
+        Returns:
+            None
+        """
+        self.offsetAmount = self.offsetAmount + self.robotConfigs.offsetIncrement
+
+    def decreaseOffset(self):
+        """
+        Decrease the RPM by a set amount if it is inaccurate
+        
+        Args:
+            None
+        
+        Returns:
+            None
+        """
+        self.offsetAmount = self.offsetAmount + self.robotConfigs.offsetDecrement
+
+    def resetOffset(self):
+        """
+        Reset the RPM offset
+        
+        Args:
+            None
+        
+        Returns:
+            None
+        """
+        self.offsetAmount = 0
+
+    def getOffset(self):
+        """
+        Get the RPM offset
+        
+        Args:
+            None
+        
+        Returns:
+            None
+        """
+        return self.offsetAmount
