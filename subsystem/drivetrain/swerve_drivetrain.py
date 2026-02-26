@@ -33,6 +33,7 @@ class SwerveDrivetrain(Subsystem):
         self.constants = SwerveDriveConsts()
         self.invert_gyro = self.constants.invertGyro
         self.speedMultiplier = 1
+        self.flip_to_red_alliance = False
 
         self.front_right_constants = SwerveModuleMk4iL2Consts()
         self.front_right_constants.maxTranslationMPS = 4.75
@@ -182,7 +183,7 @@ class SwerveDrivetrain(Subsystem):
 
         if field_relative:
             field_invert = 1
-            if self.flip_to_red_alliance():
+            if self.flip_to_red_alliance:
                 field_invert = -1
 
             chassis_speeds = ChassisSpeeds.fromFieldRelativeSpeeds(
@@ -302,7 +303,7 @@ class SwerveDrivetrain(Subsystem):
             default_starting_pose: the assumed starting pose given no other information
         """
         default_starting_pose = OperatorRobotConfig.blue_default_start_pose
-        if self.flip_to_red_alliance():
+        if self.flip_to_red_alliance:
             default_starting_pose = OperatorRobotConfig.red_default_start_pose
 
         default_starting_pose = Pose2d(
@@ -352,19 +353,20 @@ class SwerveDrivetrain(Subsystem):
                 swerve_module.set_motor_stop_mode(to_drive=not to_drive, to_break=to_break)
                 swerve_module.apply_motor_config(to_drive=not to_drive, burn_flash=burn_flash)
 
-    def flip_to_red_alliance(self) -> bool:
+    def update_alliance_flag(self, alliance: DriverStation.Alliance) -> None:
         """
         Determine whether to flip autonomous routines and field-relative drive for the red alliance.
         Because alliance choice can change, this method should be called as part of code executed on
-        periodic clock ticks.
+        mode change events.
+
+        Args:
+            alliance: the current alliance as read from the driver station 
 
         Returns:
-            True if we should make flips for the red alliance, False otherwise
+            None: alliance flip attribute updated in-place
         """
-        alliance = DriverStation.getAlliance()
         if alliance:
-            return alliance == DriverStation.Alliance.kRed
-        return False
+            self.flip_to_red_alliance = alliance == DriverStation.Alliance.kRed
 
     def gen_path_planner_config(self) -> RobotConfig:
         """
@@ -435,7 +437,7 @@ class SwerveDrivetrain(Subsystem):
                 PIDConstants(*OperatorRobotConfig.pathplanner_rotation_pid)
             ),
             config,
-            self.flip_to_red_alliance,
+            lambda: self.flip_to_red_alliance,
             self
         )
 

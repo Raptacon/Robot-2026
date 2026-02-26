@@ -31,9 +31,9 @@ class RobotSwerve:
 
         # Subsystem instantiation
         self.drivetrain = SwerveDrivetrain()
-        
-        # Alliance instantiaion
-        self.alliance = "red" if self.drivetrain.flip_to_red_alliance() else "blue"
+
+        # Alliance instantiation
+        self.updateAlliance()
 
         # Vision setup
         try:
@@ -102,6 +102,7 @@ class RobotSwerve:
                     wpilib.reportError("Retrieval of vision info failed in periodic", printTrace=True)
 
     def disabledInit(self):
+        self.updateAlliance()
         self.drivetrain.set_motor_stop_modes(to_drive=True, to_break=True, all_motor_override=True, burn_flash=False)
         self.drivetrain.stop_driving()
 
@@ -109,6 +110,7 @@ class RobotSwerve:
         pass
 
     def autonomousInit(self):
+        self.updateAlliance()
         self.auto_command = self.auto_chooser.getSelected()
         if self.auto_command:
             self.auto_command.schedule()
@@ -119,12 +121,12 @@ class RobotSwerve:
         pass
 
     def teleopInit(self):
+        self.updateAlliance()
         if self.auto_command:
             self.auto_command.cancel()
 
-        self.alliance = "blue"
-        if self.drivetrain.flip_to_red_alliance():
-            self.alliance = "red"
+        self.alliance = wpilib.DriverStation.getAlliance()
+        self.drivetrain.update_alliance_flag(self.alliance)
 
         self.drivetrain.setDefaultCommand(
             DefaultDrive(
@@ -143,6 +145,7 @@ class RobotSwerve:
         self.drivetrain.setSpeedMultiplier(self.speedMultiplier)
 
     def testInit(self):
+        self.updateAlliance()
         commands2.CommandScheduler.getInstance().cancelAll()
         self.drivetrain.setDefaultCommand(
             DefaultDrive(
@@ -185,6 +188,13 @@ class RobotSwerve:
             return "unknown"
         except json.JSONDecodeError:
             return "bad json in deploy file check for unescaped "
+
+    def updateAlliance(self) -> None:
+        """
+        Update the alliance the robot is on
+        """
+        self.alliance = wpilib.DriverStation.getAlliance()
+        self.drivetrain.update_alliance_flag(self.alliance)
 
     def setAlignmentTag(self, alignmentTagId: int | None) -> None:
         """
