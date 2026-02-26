@@ -4,7 +4,7 @@ import typing
 import inspect
 import commands2
 
-from robotsintake import RobotIntake
+from robotsintake import RobotSwerve
 import wpilib
 import logging
 
@@ -32,7 +32,7 @@ class MyRobot(commands2.TimedCommandRobot):
         if not hasattr(self, "container"):
             # to work around sim creating motors during tests, assign to class and if already created keep using created robot class for tests.
             # during robot running, this is only every called once
-            MyRobot.container = RobotIntake(lambda: self.isDisabled)
+            MyRobot.container = RobotSwerve(lambda: self.isDisabled)
 
     def robotInit(self) -> None:
         """
@@ -74,7 +74,7 @@ class MyRobot(commands2.TimedCommandRobot):
     def testPeriodic(self) -> None:
         self.container.testPeriodic()
 
-    def getRobot(self) -> RobotIntake:
+    def getRobot(self) -> RobotSwerve:
         return self.container
 
     def __callAndCatch(self, func: typing.Callable[[], None]) -> None:
