@@ -96,8 +96,8 @@ class IntakeSubsystem(commands2.SubsystemBase):
     #         if self.intakeMotorEncoder.getPosition() >= self.intakeDeployed:
     #             self.intakeCondition = 0
     #         if self.baselineFault - time.perf_counter() >= self.intakeFaultThreshold:
-    #             print("INTAKE ERR101: Deployment of Intake doesn't appear to be working! Stopping code.")
-    #             os._exit(101)
+    #             wpilib.Alert("INTAKE ERR101: Deployment of intake dosen't appear to be working! Stopped activation.", wpilib.Alert.AlertType.kError)
+    #             return
     #     else:
     #         self.intakeCondition = 0
 
@@ -109,7 +109,8 @@ class IntakeSubsystem(commands2.SubsystemBase):
         if self.rollerCondition != 1:
             self.rollerCondition = 1
         #   if baselineFault - time.perf_counter() >= self.rollerFaultThreshold:
-        #   os._exit(103)
+        #       wpilib.Alert("INTAKE ERR103: Activation of rollers don't appear to be working! Stopped activation.", wpilib.Alert.AlertType.kError)
+        #       return
 
     def deactivateRoller(self):
         # self.baselineFault = time.perf_counter()
@@ -118,8 +119,9 @@ class IntakeSubsystem(commands2.SubsystemBase):
         # while self.rollerMotorEncoder.getVelocity() != 0:
         if self.rollerCondition != 0:
             self.rollerCondition = 0
-            # if baselineFault - time.perf_counter() >= self.rollerFaultThreshold:
-            #   os._exit(103)
+        #       if baselineFault - time.perf_counter() >= self.rollerFaultThreshold:
+        #           wpilib.Alert("INTAKE ERR103: Activation of rollers don't appear to be working! Stopped activation.", wpilib.Alert.AlertType.kError)
+        #           return
 
     # def stowIntake(self):
     #     if self.intakeCondition >= 0 and self.intakeMotorEncoder.getPosition() >= self.intakeStowed:
@@ -129,12 +131,12 @@ class IntakeSubsystem(commands2.SubsystemBase):
     #         if self.intakeMotorEncoder.getPosition() <= self.intakeStowed:
     #             self.intakeCondition = 0
     #         if self.baselineFault - time.perf_counter() >= self.intakeFaultThreshold:
-    #             print("INTAKE ERR102: Intake stow doesn't appear to be working! Stopping code.")
-    #             os._exit(102)
+    #             wpilib.Alert("INTAKE ERR112: Intake Stow doesn't appear to be working! Stopping activation.", wpilib.Alert.AlertType.kError)
+    #             return
     #         if self.intakeMagnetFaultThreshold + 1 >= time.perf_counter() - self.baselineFault >= self.intakeMagnetFaultThreshold:
     #             if self.HallEffectSensor.get() == False:
-    #                 print("INTAKE ERR112: Intake motor is engaged but the Intake doesn't appear to be moving! Stopping code.")
-    #                 os._exit(112)
+    #                   wpilib.Alert("INTAKE ERR112: Intake motor is engaged but the Intake doesn't appear to be moving! Stopping code.", wpilib.Alert.AlertType.kError)
+    #                   return
     #     else:
     #         self.intakeCondition = 0
 
@@ -155,8 +157,8 @@ class IntakeSubsystem(commands2.SubsystemBase):
                     self.jamOccurence = 0
             else:
                 if self.rollerMotorEncoder.getVelocity() <= self.unjam:
-                    print("Jam Reversal Unsuccessful! Stopping code.")
-                    os._exit(104)
+                    wpilib.Alert("Jam reversal unsuccessful! Stopping motor.", wpilib.Alert.AlertType.kError)
+                    self.rollerMotor.disable()
                 # if self.rollerSensor == 0:
                 #     self.deactivateRoller()
                 # else:
@@ -212,11 +214,13 @@ class IntakeSubsystem(commands2.SubsystemBase):
     def motorChecks(self):
         #Check if intake deployment motor is deploying without limits
         # if self.intakeMotorEncoder.getPosition() >= self.intakeDeployed + 15 and self.intakeCondition >= 0:
-        #     print("INTAKE ERR121: Intake Motor appears to be deploying outside of limits! Motor has been disabled.")
+        #     wpilib.Alert("INTAKE ERR122: Intake Motor appears to be deploying outside of limits! Motor has been disabled.", wpilib.Alert.AlertType.kError)
         #     self.intakeMotor.disable()
+
         # if self.intakeMotorEncoder.getPosition() <= self.intakeStowed - 15 and self.intakeCondition <= 0:
-        #     print("INTAKE ERR122: Intake Motor appears to be stowing outside of limits! Motor has been disabled.")
+        #     wpilib.Alert("INTAKE ERR122: Intake Motor appears to be stowing outside of limits! Motor has been disabled.", wpilib.Alert.AlertType.kError)
         #     self.intakeMotor.disable()
+
         
         #Stop intake deployment motor if it reaches limits
         # if self.intakeMotorEncoder.getPosition() >= self.intakeDeployed and self.intakeCondition >= 0:
