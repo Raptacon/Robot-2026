@@ -2,7 +2,6 @@ import wpilib
 import commands2
 import rev
 import time
-import os
 # import array as arr
 
 from constants import CaptainPlanetConsts as intakeConsts
