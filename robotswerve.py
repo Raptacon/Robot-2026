@@ -125,9 +125,6 @@ class RobotSwerve:
         if self.auto_command:
             self.auto_command.cancel()
 
-        self.alliance = wpilib.DriverStation.getAlliance()
-        self.drivetrain.update_alliance_flag(self.alliance)
-
         self.drivetrain.setDefaultCommand(
             DefaultDrive(
                 self.drivetrain,
