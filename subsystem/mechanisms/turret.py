@@ -172,8 +172,8 @@ class Turret(Subsystem):
         # Step 1: Create calibration with no callbacks
         cal = PositionCalibration(
             name=self.getName(),
-            default_min_soft_limit=min_soft_limit,
-            default_max_soft_limit=max_soft_limit,
+            fallback_min=min_soft_limit,
+            fallback_max=max_soft_limit,
         )
 
         # Step 2: Build callbacks from the SparkMax motor and encoder.
@@ -225,8 +225,8 @@ class Turret(Subsystem):
         #
         #     cal = PositionCalibration(
         #         name=self.getName(),
-        #         default_min_soft_limit=min_soft_limit,
-        #         default_max_soft_limit=max_soft_limit,
+        #         fallback_min=min_soft_limit,
+        #         fallback_max=max_soft_limit,
         #         motor=self.motor,
         #         encoder=self.encoder,
         #     )

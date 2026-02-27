@@ -300,7 +300,7 @@ class TestTurret(unittest.TestCase):
         self.assertFalse(self.turret.is_homing)
 
     def test_homing_resets_encoder_forward(self):
-        """Test that encoder is reset to max_soft_limit when homing
+        """Test that encoder is reset to home_position (0.0) when homing
         forward completes."""
         self.turret.calibration.homing_init(
             max_current=10.0, max_power_pct=0.2,
@@ -316,10 +316,10 @@ class TestTurret(unittest.TestCase):
         self.turret.calibration._homing_periodic()
 
         position = self.turret.getPosition()
-        self.assertAlmostEqual(position, self.MAX_SOFT_LIMIT, places=1)
+        self.assertAlmostEqual(position, 0.0, places=1)
 
     def test_homing_resets_encoder_reverse(self):
-        """Test that encoder is reset to min_soft_limit when homing
+        """Test that encoder is reset to home_position (0.0) when homing
         reverse completes."""
         self.turret.calibration.homing_init(
             max_current=10.0, max_power_pct=0.2,
@@ -335,7 +335,7 @@ class TestTurret(unittest.TestCase):
         self.turret.calibration._homing_periodic()
 
         position = self.turret.getPosition()
-        self.assertAlmostEqual(position, self.MIN_SOFT_LIMIT, places=1)
+        self.assertAlmostEqual(position, 0.0, places=1)
 
     def test_homing_end_restores_settings(self):
         """Test that homing end restores current limit and soft limits."""
@@ -630,6 +630,53 @@ class TestTurret(unittest.TestCase):
             self.turret.calibration.min_soft_limit, 9.0, places=1)
         self.assertAlmostEqual(
             self.turret.calibration.max_soft_limit, 171.0, places=1)
+
+    def test_homing_applies_persisted_soft_limits(self):
+        """Test that homing applies persisted soft limits to motor hardware
+        after successful homing when calibration data exists."""
+        # Manually set calibration data
+        self.turret.calibration._is_calibrated = True
+        self.turret.calibration._hard_limit_min = 0.0
+        self.turret.calibration._hard_limit_max = 180.0
+        self.turret.calibration._soft_limit_margin = 0.05
+        # Compute soft limits in memory (as _load_from_nt would)
+        self.turret.calibration._min_soft_limit = 9.0
+        self.turret.calibration._max_soft_limit = 171.0
+
+        # Reset motor soft limits to defaults for test
+        limit_config = rev.SparkMaxConfig()
+        (
+            limit_config.softLimit
+            .forwardSoftLimit(self.MAX_SOFT_LIMIT)
+            .forwardSoftLimitEnabled(True)
+            .reverseSoftLimit(self.MIN_SOFT_LIMIT)
+            .reverseSoftLimitEnabled(True)
+        )
+        self.motor.configure(
+            limit_config,
+            rev.ResetMode.kNoResetSafeParameters,
+            rev.PersistMode.kNoPersistParameters
+        )
+
+        # Home the turret
+        self.turret.calibration.homing_init(
+            max_current=10.0, max_power_pct=0.2,
+            max_homing_time=5.0, homing_forward=False,
+            min_velocity=1.0
+        )
+        encoder_sim = self.motor_sim.getRelativeEncoderSim()
+        encoder_sim.setVelocity(0.0)
+
+        self.turret.calibration._homing_periodic()
+        wpilib.simulation.stepTiming(0.15)
+        self.turret.calibration._homing_periodic()
+
+        # Soft limits should now be applied to hardware
+        ca = self.motor.configAccessor
+        self.assertAlmostEqual(
+            ca.softLimit.getForwardSoftLimit(), 171.0, places=1)
+        self.assertAlmostEqual(
+            ca.softLimit.getReverseSoftLimit(), 9.0, places=1)
 
     def test_calibration_abort_restores_settings(self):
         """Test that calibration abort restores original soft limits."""

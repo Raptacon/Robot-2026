@@ -99,14 +99,14 @@ class PositionCalibration:
 
         self.calibration = PositionCalibration(
             name="Turret",
-            default_min_soft_limit=-90, default_max_soft_limit=90,
+            fallback_min=-90, fallback_max=90,
             motor=self.motor, encoder=self.encoder)
 
     Pure callbacks with stall detection only::
 
         self.calibration = PositionCalibration(
             name="Elevator",
-            default_min_soft_limit=0.0, default_max_soft_limit=1.5,
+            fallback_min=0.0, fallback_max=1.5,
             set_motor_output=lambda pct: motor.set(pct),
             stop_motor=lambda: motor.stopMotor(),
             set_position=lambda v: encoder.setPosition(v),
@@ -116,7 +116,7 @@ class PositionCalibration:
 
         self.calibration = PositionCalibration(
             name="Arm",
-            default_min_soft_limit=0.0, default_max_soft_limit=90.0,
+            fallback_min=0.0, fallback_max=90.0,
             set_motor_output=lambda pct: motor.set(pct),
             stop_motor=lambda: motor.stopMotor(),
             set_position=lambda v: encoder.setPosition(v),
@@ -127,7 +127,7 @@ class PositionCalibration:
 
         cal = PositionCalibration(
             name="Wrist",
-            default_min_soft_limit=-45, default_max_soft_limit=45)
+            fallback_min=-45, fallback_max=45)
         # ... later, once hardware is ready ...
         cal.set_callbacks(
             set_motor_output=motor.set,
@@ -139,8 +139,8 @@ class PositionCalibration:
     def __init__(
         self,
         name: str,
-        default_min_soft_limit: float,
-        default_max_soft_limit: float,
+        fallback_min: float,
+        fallback_max: float,
         *,
         motor=None,
         encoder=None,
@@ -151,8 +151,12 @@ class PositionCalibration:
 
         Args:
             name: mechanism name used for NT paths and alerts (e.g. "Turret")
-            default_min_soft_limit: default reverse soft limit in user units
-            default_max_soft_limit: default forward soft limit in user units
+            fallback_min: reverse soft limit used before calibration data
+                exists. Once calibrated, the persisted hard limits are used
+                instead. The caller is responsible for the far end of travel
+                if only homing (not full calibration) is performed.
+            fallback_max: forward soft limit used before calibration data
+                exists. See fallback_min for details.
             motor: (optional) rev.SparkMax for convenience callback generation
             encoder: (optional) rev.RelativeEncoder (defaults to motor.getEncoder())
             **kwargs: callback overrides (see _VALID_CALLBACKS for valid keys)
@@ -190,13 +194,10 @@ class PositionCalibration:
 
         self._name = name
 
-        # Default soft limits (used before calibration)
-        self._default_min_soft_limit = default_min_soft_limit
-        self._default_max_soft_limit = default_max_soft_limit
-
-        # Current soft limits
-        self._min_soft_limit = default_min_soft_limit
-        self._max_soft_limit = default_max_soft_limit
+        # Soft limits — initialized to defaults, overwritten by
+        # _load_from_nt() if persisted calibration data exists
+        self._min_soft_limit = fallback_min
+        self._max_soft_limit = fallback_max
 
         # Calibration state
         self._hard_limit_min = None
@@ -342,7 +343,8 @@ class PositionCalibration:
         max_power_pct: float,
         max_homing_time: float,
         homing_forward: bool,
-        min_velocity: float = None
+        min_velocity: float = None,
+        home_position: float = 0.0
     ) -> None:
         """
         Initialize the sensorless or sensor homing routine.
@@ -358,6 +360,8 @@ class PositionCalibration:
             homing_forward: True to home toward forward limit, False for reverse
             min_velocity: stall detection threshold in user units/second.
                 Defaults to 5% of soft limit range over 2 seconds.
+            home_position: encoder value to set when the hard stop is
+                found (default 0.0)
         """
         # Validate callbacks before starting
         self._validate_homing(homing_forward)
@@ -388,6 +392,7 @@ class PositionCalibration:
         self._max_power_pct = max_power_pct
         self._min_velocity = min_velocity
         self._max_homing_time = max_homing_time
+        self._home_position = home_position
 
         # Set homing state
         self._is_homing = True
@@ -613,10 +618,7 @@ class PositionCalibration:
 
         # Check for limit switch hit
         if limit_hit:
-            home_position = (
-                self._max_soft_limit if self._homing_forward
-                else self._min_soft_limit
-            )
+            home_position = self._home_position
             self._cb_set_position(home_position)
             if self._cb_on_limit_detected is not None:
                 direction = (
@@ -638,10 +640,7 @@ class PositionCalibration:
                     self._stall_detected = True
                     self._stall_timer.restart()
                 elif self._stall_timer.hasElapsed(0.1):
-                    home_position = (
-                        self._max_soft_limit if self._homing_forward
-                        else self._min_soft_limit
-                    )
+                    home_position = self._home_position
                     self._cb_set_position(home_position)
                     if self._cb_on_limit_detected is not None:
                         direction = (
@@ -693,6 +692,14 @@ class PositionCalibration:
             self._homing_status_alert.set(False)
         else:
             self._homing_error_alert.set(False)
+            # After successful homing, if calibration data exists, the
+            # encoder is now aligned so soft limits can be applied to
+            # hardware
+            if (not self._is_calibrating
+                    and self._is_calibrated
+                    and self._cb_set_soft_limits is not None):
+                self._cb_set_soft_limits(
+                    self._min_soft_limit, self._max_soft_limit)
 
     def _calibration_periodic(self) -> None:
         """Manage the two-phase calibration state machine."""
@@ -783,4 +790,9 @@ class PositionCalibration:
             self._hard_limit_max = nt_max
             self._soft_limit_margin = self._nt_soft_limit_margin
             self._is_calibrated = True
-            self.set_soft_limit_margin(self._soft_limit_margin)
+            # Compute soft limits in memory only — don't push to hardware
+            # because encoder position is unknown until homing completes
+            full_range = self._hard_limit_max - self._hard_limit_min
+            margin = full_range * self._soft_limit_margin
+            self._min_soft_limit = self._hard_limit_min + margin
+            self._max_soft_limit = self._hard_limit_max - margin

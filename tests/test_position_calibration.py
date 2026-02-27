@@ -82,8 +82,8 @@ class TestPositionCalibration(unittest.TestCase):
             name="TestMech",
             motor=self.motor,
             encoder=self.encoder,
-            default_min_soft_limit=self.MIN_SOFT_LIMIT,
-            default_max_soft_limit=self.MAX_SOFT_LIMIT,
+            fallback_min=self.MIN_SOFT_LIMIT,
+            fallback_max=self.MAX_SOFT_LIMIT,
         )
         # Restore soft limits on motor
         limit_config = rev.SparkMaxConfig()
@@ -212,7 +212,7 @@ class TestPositionCalibration(unittest.TestCase):
             self.motor.configAccessor.softLimit.getForwardSoftLimitEnabled())
 
     def test_homing_sets_encoder_forward(self):
-        """Test encoder reset to max_soft_limit on forward homing complete."""
+        """Test encoder reset to home_position on forward homing complete."""
         self.cal.homing_init(
             max_current=10.0, max_power_pct=0.2,
             max_homing_time=5.0, homing_forward=True,
@@ -225,10 +225,10 @@ class TestPositionCalibration(unittest.TestCase):
         self.cal._homing_periodic()
 
         self.assertAlmostEqual(
-            self.encoder.getPosition(), self.MAX_SOFT_LIMIT, places=1)
+            self.encoder.getPosition(), 0.0, places=1)
 
     def test_homing_sets_encoder_reverse(self):
-        """Test encoder reset to min_soft_limit on reverse homing complete."""
+        """Test encoder reset to home_position on reverse homing complete."""
         self.cal.homing_init(
             max_current=10.0, max_power_pct=0.2,
             max_homing_time=5.0, homing_forward=False,
@@ -241,7 +241,7 @@ class TestPositionCalibration(unittest.TestCase):
         self.cal._homing_periodic()
 
         self.assertAlmostEqual(
-            self.encoder.getPosition(), self.MIN_SOFT_LIMIT, places=1)
+            self.encoder.getPosition(), 0.0, places=1)
 
     # ---- Calibration tests ----
 
@@ -384,8 +384,8 @@ class TestPositionCalibration(unittest.TestCase):
             name="TestMech",
             motor=self.motor,
             encoder=self.encoder,
-            default_min_soft_limit=self.MIN_SOFT_LIMIT,
-            default_max_soft_limit=self.MAX_SOFT_LIMIT,
+            fallback_min=self.MIN_SOFT_LIMIT,
+            fallback_max=self.MAX_SOFT_LIMIT,
         )
         self.assertTrue(cal2.is_calibrated)
         self.assertEqual(cal2.min_limit, 5.0)
@@ -398,8 +398,8 @@ class TestPositionCalibration(unittest.TestCase):
             name="NoData",
             motor=self.motor,
             encoder=self.encoder,
-            default_min_soft_limit=-45.0,
-            default_max_soft_limit=45.0,
+            fallback_min=-45.0,
+            fallback_max=45.0,
         )
         self.assertFalse(cal.is_calibrated)
         self.assertIsNone(cal.min_limit)
@@ -563,8 +563,8 @@ class TestPositionCalibrationCallbacks(unittest.TestCase):
         cbs = self._make_callbacks()
         cal = PositionCalibration(
             name="CbTest",
-            default_min_soft_limit=self.MIN_SOFT_LIMIT,
-            default_max_soft_limit=self.MAX_SOFT_LIMIT,
+            fallback_min=self.MIN_SOFT_LIMIT,
+            fallback_max=self.MAX_SOFT_LIMIT,
             **cbs
         )
         self.assertFalse(cal.is_busy)
@@ -574,8 +574,8 @@ class TestPositionCalibrationCallbacks(unittest.TestCase):
         """Test that missing core callbacks raise ValueError at homing."""
         cal = PositionCalibration(
             name="CbTest",
-            default_min_soft_limit=self.MIN_SOFT_LIMIT,
-            default_max_soft_limit=self.MAX_SOFT_LIMIT,
+            fallback_min=self.MIN_SOFT_LIMIT,
+            fallback_max=self.MAX_SOFT_LIMIT,
             get_velocity=lambda: 10.0,
         )
         with self.assertRaises(ValueError) as ctx:
@@ -589,8 +589,8 @@ class TestPositionCalibrationCallbacks(unittest.TestCase):
         """Test ValueError when no detection method for homing direction."""
         cal = PositionCalibration(
             name="CbTest",
-            default_min_soft_limit=self.MIN_SOFT_LIMIT,
-            default_max_soft_limit=self.MAX_SOFT_LIMIT,
+            fallback_min=self.MIN_SOFT_LIMIT,
+            fallback_max=self.MAX_SOFT_LIMIT,
             set_motor_output=self._set_motor_output,
             stop_motor=self._stop_motor,
             set_position=self._set_position,
@@ -608,8 +608,8 @@ class TestPositionCalibrationCallbacks(unittest.TestCase):
         del cbs['get_position']
         cal = PositionCalibration(
             name="CbTest",
-            default_min_soft_limit=self.MIN_SOFT_LIMIT,
-            default_max_soft_limit=self.MAX_SOFT_LIMIT,
+            fallback_min=self.MIN_SOFT_LIMIT,
+            fallback_max=self.MAX_SOFT_LIMIT,
             **cbs
         )
         with self.assertRaises(ValueError) as ctx:
@@ -623,8 +623,8 @@ class TestPositionCalibrationCallbacks(unittest.TestCase):
         """Test that callbacks can be set after construction."""
         cal = PositionCalibration(
             name="CbEmpty",
-            default_min_soft_limit=self.MIN_SOFT_LIMIT,
-            default_max_soft_limit=self.MAX_SOFT_LIMIT,
+            fallback_min=self.MIN_SOFT_LIMIT,
+            fallback_max=self.MAX_SOFT_LIMIT,
         )
         cal.set_callbacks(
             set_motor_output=self._set_motor_output,
@@ -644,8 +644,8 @@ class TestPositionCalibrationCallbacks(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             PositionCalibration(
                 name="CbTest",
-                default_min_soft_limit=self.MIN_SOFT_LIMIT,
-                default_max_soft_limit=self.MAX_SOFT_LIMIT,
+                fallback_min=self.MIN_SOFT_LIMIT,
+                fallback_max=self.MAX_SOFT_LIMIT,
                 not_a_real_callback=lambda: None,
             )
         self.assertIn("not_a_real_callback", str(ctx.exception))
@@ -654,8 +654,8 @@ class TestPositionCalibrationCallbacks(unittest.TestCase):
         """Test that set_callbacks rejects unknown keys."""
         cal = PositionCalibration(
             name="CbTest",
-            default_min_soft_limit=self.MIN_SOFT_LIMIT,
-            default_max_soft_limit=self.MAX_SOFT_LIMIT,
+            fallback_min=self.MIN_SOFT_LIMIT,
+            fallback_max=self.MAX_SOFT_LIMIT,
         )
         with self.assertRaises(ValueError):
             cal.set_callbacks(bogus=lambda: None)
@@ -670,8 +670,8 @@ class TestPositionCalibrationCallbacks(unittest.TestCase):
         del cbs['on_limit_detected']
         cal = PositionCalibration(
             name="CbTest",
-            default_min_soft_limit=self.MIN_SOFT_LIMIT,
-            default_max_soft_limit=self.MAX_SOFT_LIMIT,
+            fallback_min=self.MIN_SOFT_LIMIT,
+            fallback_max=self.MAX_SOFT_LIMIT,
             **cbs
         )
         cal.homing_init(
@@ -690,7 +690,7 @@ class TestPositionCalibrationCallbacks(unittest.TestCase):
         self.assertTrue(result)
         self.assertFalse(cal.is_homing)
         self.assertAlmostEqual(
-            self._position, self.MIN_SOFT_LIMIT, places=1)
+            self._position, 0.0, places=1)
 
     def test_homing_with_limit_switch_only(self):
         """Test homing via limit switch, no velocity callback."""
@@ -698,8 +698,8 @@ class TestPositionCalibrationCallbacks(unittest.TestCase):
         del cbs['get_velocity']
         cal = PositionCalibration(
             name="CbTest",
-            default_min_soft_limit=self.MIN_SOFT_LIMIT,
-            default_max_soft_limit=self.MAX_SOFT_LIMIT,
+            fallback_min=self.MIN_SOFT_LIMIT,
+            fallback_max=self.MAX_SOFT_LIMIT,
             **cbs
         )
         cal.homing_init(
@@ -716,15 +716,15 @@ class TestPositionCalibrationCallbacks(unittest.TestCase):
         self.assertTrue(result)
         self.assertFalse(cal.is_homing)
         self.assertAlmostEqual(
-            self._position, self.MAX_SOFT_LIMIT, places=1)
+            self._position, 0.0, places=1)
 
     def test_homing_with_both_limit_switch_takes_priority(self):
         """Test that limit switch fires before stall when both present."""
         cbs = self._make_callbacks()
         cal = PositionCalibration(
             name="CbTest",
-            default_min_soft_limit=self.MIN_SOFT_LIMIT,
-            default_max_soft_limit=self.MAX_SOFT_LIMIT,
+            fallback_min=self.MIN_SOFT_LIMIT,
+            fallback_max=self.MAX_SOFT_LIMIT,
             **cbs
         )
         cal.homing_init(
@@ -747,8 +747,8 @@ class TestPositionCalibrationCallbacks(unittest.TestCase):
         cbs = self._make_callbacks()
         cal = PositionCalibration(
             name="CbTest",
-            default_min_soft_limit=self.MIN_SOFT_LIMIT,
-            default_max_soft_limit=self.MAX_SOFT_LIMIT,
+            fallback_min=self.MIN_SOFT_LIMIT,
+            fallback_max=self.MAX_SOFT_LIMIT,
             **cbs
         )
         cal.homing_init(
@@ -763,7 +763,7 @@ class TestPositionCalibrationCallbacks(unittest.TestCase):
 
         self.assertEqual(len(self._limit_detected_calls), 1)
         pos, direction = self._limit_detected_calls[0]
-        self.assertAlmostEqual(pos, self.MIN_SOFT_LIMIT, places=1)
+        self.assertAlmostEqual(pos, 0.0, places=1)
         self.assertEqual(direction, "reverse")
 
     def test_on_limit_detected_not_required(self):
@@ -772,8 +772,8 @@ class TestPositionCalibrationCallbacks(unittest.TestCase):
         del cbs['on_limit_detected']
         cal = PositionCalibration(
             name="CbTest",
-            default_min_soft_limit=self.MIN_SOFT_LIMIT,
-            default_max_soft_limit=self.MAX_SOFT_LIMIT,
+            fallback_min=self.MIN_SOFT_LIMIT,
+            fallback_max=self.MAX_SOFT_LIMIT,
             **cbs
         )
         cal.homing_init(
@@ -794,8 +794,8 @@ class TestPositionCalibrationCallbacks(unittest.TestCase):
         cbs = self._make_callbacks()
         cal = PositionCalibration(
             name="CbTest",
-            default_min_soft_limit=self.MIN_SOFT_LIMIT,
-            default_max_soft_limit=self.MAX_SOFT_LIMIT,
+            fallback_min=self.MIN_SOFT_LIMIT,
+            fallback_max=self.MAX_SOFT_LIMIT,
             **cbs
         )
         cal.calibration_init(
@@ -832,8 +832,8 @@ class TestPositionCalibrationCallbacks(unittest.TestCase):
         del cbs['restore_config']
         cal = PositionCalibration(
             name="CbTest",
-            default_min_soft_limit=self.MIN_SOFT_LIMIT,
-            default_max_soft_limit=self.MAX_SOFT_LIMIT,
+            fallback_min=self.MIN_SOFT_LIMIT,
+            fallback_max=self.MAX_SOFT_LIMIT,
             **cbs
         )
         cal.homing_init(
@@ -854,8 +854,8 @@ class TestPositionCalibrationCallbacks(unittest.TestCase):
         del cbs['set_current_limit']
         cal = PositionCalibration(
             name="CbTest",
-            default_min_soft_limit=self.MIN_SOFT_LIMIT,
-            default_max_soft_limit=self.MAX_SOFT_LIMIT,
+            fallback_min=self.MIN_SOFT_LIMIT,
+            fallback_max=self.MAX_SOFT_LIMIT,
             **cbs
         )
         cal.homing_init(
@@ -877,8 +877,8 @@ class TestPositionCalibrationCallbacks(unittest.TestCase):
         custom_output = []
         cal = PositionCalibration(
             name="CbOverride",
-            default_min_soft_limit=self.MIN_SOFT_LIMIT,
-            default_max_soft_limit=self.MAX_SOFT_LIMIT,
+            fallback_min=self.MIN_SOFT_LIMIT,
+            fallback_max=self.MAX_SOFT_LIMIT,
             motor=motor,
             set_motor_output=lambda p: custom_output.append(p),
         )
@@ -898,8 +898,8 @@ class TestPositionCalibrationCallbacks(unittest.TestCase):
         cbs = self._make_callbacks()
         cal = PositionCalibration(
             name="CbTest",
-            default_min_soft_limit=self.MIN_SOFT_LIMIT,
-            default_max_soft_limit=self.MAX_SOFT_LIMIT,
+            fallback_min=self.MIN_SOFT_LIMIT,
+            fallback_max=self.MAX_SOFT_LIMIT,
             **cbs
         )
         cal.homing_init(
@@ -915,6 +915,113 @@ class TestPositionCalibrationCallbacks(unittest.TestCase):
         self.assertTrue(self._motor_stopped)
         self.assertIsNotNone(self._restored)
         self.assertEqual(self._restored, {'marker': True})
+
+    # ---- home_position parameter ----
+
+    def test_homing_with_custom_home_position(self):
+        """Test that home_position overrides the default 0.0 encoder value."""
+        cbs = self._make_callbacks()
+        cal = PositionCalibration(
+            name="CbTest",
+            fallback_min=self.MIN_SOFT_LIMIT,
+            fallback_max=self.MAX_SOFT_LIMIT,
+            **cbs
+        )
+        cal.homing_init(
+            max_current=10.0, max_power_pct=0.2,
+            max_homing_time=5.0, homing_forward=True,
+            min_velocity=1.0, home_position=90.0
+        )
+        self._velocity = 0.0
+        cal._homing_periodic()
+        wpilib.simulation.stepTiming(0.15)
+        cal._homing_periodic()
+
+        self.assertAlmostEqual(self._position, 90.0, places=1)
+
+    # ---- _load_from_nt memory-only soft limits ----
+
+    def test_load_from_nt_no_hardware_soft_limits(self):
+        """Test that _load_from_nt computes soft limits in memory but
+        does NOT apply them to motor hardware."""
+        cbs = self._make_callbacks()
+        cal = PositionCalibration(
+            name="CbTest",
+            fallback_min=self.MIN_SOFT_LIMIT,
+            fallback_max=self.MAX_SOFT_LIMIT,
+            **cbs
+        )
+        # Simulate persisting calibration data
+        cal._is_calibrated = True
+        cal._hard_limit_min = 0.0
+        cal._hard_limit_max = 200.0
+        cal._soft_limit_margin = 0.05
+        cal._save_to_nt()
+
+        # Reset soft limits tracker
+        self._soft_limits = None
+
+        # Create new instance — should load persisted data
+        _calibration_classes.pop("CbTest", None)
+        cal2 = PositionCalibration(
+            name="CbTest",
+            fallback_min=self.MIN_SOFT_LIMIT,
+            fallback_max=self.MAX_SOFT_LIMIT,
+            **self._make_callbacks()
+        )
+        # Soft limits should be computed in memory
+        self.assertTrue(cal2.is_calibrated)
+        self.assertAlmostEqual(cal2.min_soft_limit, 10.0, places=1)
+        self.assertAlmostEqual(cal2.max_soft_limit, 190.0, places=1)
+        # But NOT applied to hardware via set_soft_limits callback
+        self.assertIsNone(self._soft_limits)
+
+    def test_homing_applies_soft_limits_when_calibrated(self):
+        """Test that after homing, if calibrated data exists, soft limits
+        are applied to motor hardware."""
+        cbs = self._make_callbacks()
+        cal = PositionCalibration(
+            name="CbTest",
+            fallback_min=self.MIN_SOFT_LIMIT,
+            fallback_max=self.MAX_SOFT_LIMIT,
+            **cbs
+        )
+        # Simulate persisting calibration data
+        cal._is_calibrated = True
+        cal._hard_limit_min = 0.0
+        cal._hard_limit_max = 200.0
+        cal._soft_limit_margin = 0.05
+        cal._save_to_nt()
+
+        # Reset soft limits tracker
+        self._soft_limits = None
+
+        # Create new instance — loads persisted data (memory only)
+        _calibration_classes.pop("CbTest", None)
+        cal2 = PositionCalibration(
+            name="CbTest",
+            fallback_min=self.MIN_SOFT_LIMIT,
+            fallback_max=self.MAX_SOFT_LIMIT,
+            **self._make_callbacks()
+        )
+        self.assertIsNone(self._soft_limits)
+
+        # Now home — after homing completes, soft limits should
+        # be applied to hardware
+        cal2.homing_init(
+            max_current=10.0, max_power_pct=0.2,
+            max_homing_time=5.0, homing_forward=False,
+            min_velocity=1.0
+        )
+        self._velocity = 0.0
+        cal2._homing_periodic()
+        wpilib.simulation.stepTiming(0.15)
+        cal2._homing_periodic()
+
+        self.assertFalse(cal2.is_homing)
+        self.assertIsNotNone(self._soft_limits)
+        self.assertAlmostEqual(self._soft_limits[0], 10.0, places=1)
+        self.assertAlmostEqual(self._soft_limits[1], 190.0, places=1)
 
     # ---- Valid callbacks constant ----
 
@@ -937,8 +1044,8 @@ class TestPositionCalibrationCallbacks(unittest.TestCase):
         cbs = self._make_callbacks()
         cal = PositionCalibration(
             name="CbTest",
-            default_min_soft_limit=self.MIN_SOFT_LIMIT,
-            default_max_soft_limit=self.MAX_SOFT_LIMIT,
+            fallback_min=self.MIN_SOFT_LIMIT,
+            fallback_max=self.MAX_SOFT_LIMIT,
             **cbs
         )
         result = cal.get_callbacks()
@@ -950,8 +1057,8 @@ class TestPositionCalibrationCallbacks(unittest.TestCase):
         """Test get_callbacks returns None for unset callbacks."""
         cal = PositionCalibration(
             name="CbTest",
-            default_min_soft_limit=self.MIN_SOFT_LIMIT,
-            default_max_soft_limit=self.MAX_SOFT_LIMIT,
+            fallback_min=self.MIN_SOFT_LIMIT,
+            fallback_max=self.MAX_SOFT_LIMIT,
             set_motor_output=self._set_motor_output,
             stop_motor=self._stop_motor,
         )
@@ -965,8 +1072,8 @@ class TestPositionCalibrationCallbacks(unittest.TestCase):
         """Test get_callbacks updates after set_callbacks is called."""
         cal = PositionCalibration(
             name="CbTest",
-            default_min_soft_limit=self.MIN_SOFT_LIMIT,
-            default_max_soft_limit=self.MAX_SOFT_LIMIT,
+            fallback_min=self.MIN_SOFT_LIMIT,
+            fallback_max=self.MAX_SOFT_LIMIT,
         )
         self.assertIsNone(cal.get_callbacks()['get_velocity'])
         cal.set_callbacks(get_velocity=lambda: 0.0)
@@ -979,8 +1086,8 @@ class TestPositionCalibrationCallbacks(unittest.TestCase):
         cbs = self._make_callbacks()
         cal = PositionCalibration(
             name="CbTest",
-            default_min_soft_limit=self.MIN_SOFT_LIMIT,
-            default_max_soft_limit=self.MAX_SOFT_LIMIT,
+            fallback_min=self.MIN_SOFT_LIMIT,
+            fallback_max=self.MAX_SOFT_LIMIT,
             **cbs
         )
         for cb_name in _VALID_CALLBACKS:
@@ -991,8 +1098,8 @@ class TestPositionCalibrationCallbacks(unittest.TestCase):
         """Test NT booleans are False for unset callbacks."""
         cal = PositionCalibration(
             name="CbTest",
-            default_min_soft_limit=self.MIN_SOFT_LIMIT,
-            default_max_soft_limit=self.MAX_SOFT_LIMIT,
+            fallback_min=self.MIN_SOFT_LIMIT,
+            fallback_max=self.MAX_SOFT_LIMIT,
             set_motor_output=self._set_motor_output,
             stop_motor=self._stop_motor,
             get_velocity=lambda: 0.0,
@@ -1007,8 +1114,8 @@ class TestPositionCalibrationCallbacks(unittest.TestCase):
         """Test NT booleans update when set_callbacks is called."""
         cal = PositionCalibration(
             name="CbTest",
-            default_min_soft_limit=self.MIN_SOFT_LIMIT,
-            default_max_soft_limit=self.MAX_SOFT_LIMIT,
+            fallback_min=self.MIN_SOFT_LIMIT,
+            fallback_max=self.MAX_SOFT_LIMIT,
         )
         self.assertFalse(cal._nt_cb_get_velocity)
         cal.set_callbacks(get_velocity=lambda: 0.0)
@@ -1021,8 +1128,8 @@ class TestPositionCalibrationCallbacks(unittest.TestCase):
         cbs = self._make_callbacks()
         cal = PositionCalibration(
             name="CbTest",
-            default_min_soft_limit=self.MIN_SOFT_LIMIT,
-            default_max_soft_limit=self.MAX_SOFT_LIMIT,
+            fallback_min=self.MIN_SOFT_LIMIT,
+            fallback_max=self.MAX_SOFT_LIMIT,
             **cbs
         )
         self.assertIsNotNone(cal.get_callbacks()['get_forward_limit_switch'])
@@ -1042,8 +1149,8 @@ class TestPositionCalibrationCallbacks(unittest.TestCase):
         )
         cal = PositionCalibration(
             name="CbTest",
-            default_min_soft_limit=self.MIN_SOFT_LIMIT,
-            default_max_soft_limit=self.MAX_SOFT_LIMIT,
+            fallback_min=self.MIN_SOFT_LIMIT,
+            fallback_max=self.MAX_SOFT_LIMIT,
             motor=motor,
         )
         # Limit switches are auto-assigned by SparkMaxCallbacks
