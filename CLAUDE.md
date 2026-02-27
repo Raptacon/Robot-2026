@@ -138,3 +138,7 @@ See `examples/nt-persistence-test/` for a comparison of persistence approaches.
 
 ## Commit messages
  - Leave off Claude coauthor for main files
+
+## Claude.md updates
+If Claude sees an area that would benifit for remembering or having instructions in the future Claude should suggest adding it to CLAUDE.md
+
