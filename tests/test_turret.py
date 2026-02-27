@@ -222,9 +222,9 @@ class TestTurret(unittest.TestCase):
         self.assertTrue(
             self.motor.configAccessor.softLimit.getReverseSoftLimitEnabled()
         )
-        # Cleanup: verify original current was saved
+        # Cleanup: verify original current was saved (now in _saved_config dict)
         self.assertAlmostEqual(
-            self.turret.calibration._saved_current_limit,
+            self.turret.calibration._saved_config['current_limit'],
             original_current, places=0
         )
 

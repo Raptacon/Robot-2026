@@ -11,6 +11,7 @@ from wpimath.controller import PIDController
 
 # Internal imports
 from utils.position_calibration import PositionCalibration
+from utils.spark_max_callbacks import SparkMaxCallbacks
 
 
 def GetSparkSignalsPositionControlConfig(
@@ -99,14 +100,9 @@ class Turret(Subsystem):
         # Position tracking state
         self._target_position = None
 
-        # Calibration controller
-        self.calibration = PositionCalibration(
-            name=self.getName(),
-            motor=self.motor,
-            encoder=self.encoder,
-            default_min_soft_limit=min_soft_limit,
-            default_max_soft_limit=max_soft_limit,
-        )
+        # Calibration controller (callbacks set up in setupCalibration)
+        self.calibration = self.setupCalibration(
+            min_soft_limit, max_soft_limit)
 
         self.configureMechanism2d()
 
@@ -148,6 +144,94 @@ class Turret(Subsystem):
             rev.ResetMode.kResetSafeParameters,
             rev.PersistMode.kNoPersistParameters
         )
+
+    def setupCalibration(
+        self,
+        min_soft_limit: float,
+        max_soft_limit: float,
+    ) -> PositionCalibration:
+        """
+        Create and configure the calibration controller for this turret.
+
+        Creates a PositionCalibration with no callbacks, then sets them
+        up using set_callbacks(). This keeps __init__ clean and puts all
+        the calibration wiring in one place.
+
+        Each callback is a small function that tells PositionCalibration
+        how to talk to the motor and encoder. If your mechanism has no
+        limit switches, just leave those callbacks out and homing will
+        use stall detection instead.
+
+        Args:
+            min_soft_limit: the minimum turret position in degrees
+            max_soft_limit: the maximum turret position in degrees
+
+        Returns:
+            The configured PositionCalibration controller
+        """
+        # Step 1: Create calibration with no callbacks
+        cal = PositionCalibration(
+            name=self.getName(),
+            default_min_soft_limit=min_soft_limit,
+            default_max_soft_limit=max_soft_limit,
+        )
+
+        # Step 2: Build callbacks from the SparkMax motor and encoder.
+        # SparkMaxCallbacks generates all the callbacks for you.
+        # You can also write your own lambdas instead, for example:
+        #     set_motor_output=lambda pct: self.motor.set(pct),
+        #     stop_motor=lambda: self.motor.stopMotor(),
+        spark_cbs = SparkMaxCallbacks(self.motor, self.encoder).as_dict()
+
+        # Step 3: Set callbacks on the calibration controller.
+        # Each callback tells PositionCalibration how to interact
+        # with the hardware. See PositionCalibration docs for the
+        # full list of available callbacks.
+        cal.set_callbacks(
+            # --- Core required (must have all three) ---
+            # Drive the motor at a duty cycle (-1.0 to 1.0)
+            set_motor_output=spark_cbs['set_motor_output'],
+            # Stop the motor
+            stop_motor=spark_cbs['stop_motor'],
+            # Reset the encoder position to a value
+            set_position=spark_cbs['set_position'],
+
+            # --- Detection (need at least one per homing direction) ---
+            # Read encoder velocity for stall detection
+            get_velocity=spark_cbs['get_velocity'],
+            # Read limit switches (leave out if not installed)
+            get_forward_limit_switch=(
+                spark_cbs['get_forward_limit_switch']),
+            get_reverse_limit_switch=(
+                spark_cbs['get_reverse_limit_switch']),
+
+            # --- Optional (make homing safer but not required) ---
+            # Read encoder position (needed for calibration phase 2)
+            get_position=spark_cbs['get_position'],
+            # Lower current limit during homing to protect the motor
+            set_current_limit=spark_cbs['set_current_limit'],
+            # Apply soft limits to the motor controller
+            set_soft_limits=spark_cbs['set_soft_limits'],
+            # Disable soft limits so the motor can travel freely
+            disable_soft_limits=spark_cbs['disable_soft_limits'],
+            # Save motor config before homing, restore it after
+            save_config=spark_cbs['save_config'],
+            restore_config=spark_cbs['restore_config'],
+        )
+
+        # ---- Shortcut: motor= does the same thing in one line ----
+        # If you don't need to customize anything, you can replace
+        # all of the above with:
+        #
+        #     cal = PositionCalibration(
+        #         name=self.getName(),
+        #         default_min_soft_limit=min_soft_limit,
+        #         default_max_soft_limit=max_soft_limit,
+        #         motor=self.motor,
+        #         encoder=self.encoder,
+        #     )
+
+        return cal
 
     def setMotorVoltage(self, output: float) -> None:
         """
