@@ -117,6 +117,6 @@ class MyRobot(TimedCommandRobot):
             print("y button pressed")
         if self.controller._hid.getStartButtonPressed():
             print("start button pressed, calibration started")
-            self.turret.calibrationInit(10, 0.1, 5, 3.6)
+            self.turret.calibration.calibration_init(10, 0.1, 5, 3.6)
         
     
