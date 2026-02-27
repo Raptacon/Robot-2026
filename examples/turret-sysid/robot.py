@@ -101,7 +101,7 @@ class MyRobot(TimedCommandRobot):
         self.setPositionMagic = 0.0
         self.setPositionMagicSign = 1
         self.setPositionMagicIncrement = 3.6
-        
+
     def testPeriodic(self):
         super().testPeriodic()
         if self.controller._hid.getYButton():
@@ -118,5 +118,3 @@ class MyRobot(TimedCommandRobot):
         if self.controller._hid.getStartButtonPressed():
             print("start button pressed, calibration started")
             self.turret.calibration.calibration_init(10, 0.1, 5, 3.6)
-        
-    
