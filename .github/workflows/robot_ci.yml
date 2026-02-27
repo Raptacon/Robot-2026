@@ -74,16 +74,9 @@ jobs:
       #       statuses: write
 
   BuildDocs:
-    name: Build & Deploy Documentation
+    name: Build Documentation
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [RobotUnitTestWindows, StaticCritical]
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
     - uses: actions/checkout@v4
 
@@ -103,6 +96,30 @@ jobs:
       timeout-minutes: 2
       run: |
         python3 doc/build_docs.py docs/
+
+    - name: Upload docs artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: documentation
+        path: docs/
+
+  DeployDocs:
+    name: Deploy Documentation
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [BuildDocs]
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+    - name: Download docs artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: documentation
+        path: docs/
 
     - name: Upload Pages artifact
       uses: actions/upload-pages-artifact@v3
