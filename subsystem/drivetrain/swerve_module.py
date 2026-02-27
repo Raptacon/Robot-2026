@@ -494,14 +494,10 @@ class SwerveModuleMk4iSparkMaxNeoCanCoder(Subsystem):
         cmd_speed = self._last_commanded_state.speed
         cmd_angle = self._last_commanded_state.angle.degrees()
 
-        # Normalize commanded angle to [0°, 180°) to match the physics
-        # simulation's normalization.  optimize() may flip the state to
-        # {-v, θ} when the equivalent {+v, θ+180°} was requested; both
-        # represent the same physical wheel orientation.  Normalizing here
-        # ensures the commanded arm always agrees with the actual arm.
-        cmd_angle = cmd_angle % 360.0
-        if cmd_angle >= 180.0:
-            cmd_angle -= 180.0
+        # When speed is negative (optimize() flipped the state), add 180°
+        # so the arm shows the actual direction of wheel travel.
+        if cmd_speed < 0:
+            cmd_angle += 180.0
         cmd_len = max(
             _MECH_ARM_MIN_LEN,
             min(_MECH_ARM_MAX_LEN,
