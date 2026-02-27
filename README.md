@@ -6,6 +6,8 @@
 
 Please take a look at the [wiki](https://github.com/Raptacon/Robot-2023/wiki) for the most up to date documenation
 
+Browse the auto-generated [API documentation](http://raptacon.github.io/Robot-2026/robot.html)
+
 Also make sure to check out the [Kanban board](https://github.com/Raptacon/Robot-2023/projects/1)
 test
 

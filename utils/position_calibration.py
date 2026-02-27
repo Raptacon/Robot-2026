@@ -45,50 +45,35 @@ class PositionCalibration:
     discovered limits to NetworkTables via ntproperty so values survive
     reboots.
 
-    Callbacks
-    ---------
+    ## Callbacks
 
-    Core required (must be set before homing or calibration):
+    **Core required** (must be set before homing or calibration):
 
-    ========================  ======================  ======================
-    Name                      Signature               Purpose
-    ========================  ======================  ======================
-    ``set_motor_output``      ``(float) -> None``     Drive motor at duty
-                                                      cycle (-1.0 to 1.0)
-    ``stop_motor``            ``() -> None``          Stop motor output
-    ``set_position``          ``(float) -> None``     Reset encoder position
-    ========================  ======================  ======================
+    | Name | Signature | Purpose |
+    |------|-----------|---------|
+    | `set_motor_output` | `(float) -> None` | Drive motor at duty cycle (-1.0 to 1.0) |
+    | `stop_motor` | `() -> None` | Stop motor output |
+    | `set_position` | `(float) -> None` | Reset encoder position |
 
-    Detection (at least one required per homing direction):
+    **Detection** (at least one required per homing direction):
 
-    ============================  ==================  =======================
-    Name                          Signature           Purpose
-    ============================  ==================  =======================
-    ``get_velocity``              ``() -> float``     Enables stall detection
-    ``get_forward_limit_switch``  ``() -> bool``      Forward limit switch
-    ``get_reverse_limit_switch``  ``() -> bool``      Reverse limit switch
-    ============================  ==================  =======================
+    | Name | Signature | Purpose |
+    |------|-----------|---------|
+    | `get_velocity` | `() -> float` | Enables stall detection |
+    | `get_forward_limit_switch` | `() -> bool` | Forward limit switch |
+    | `get_reverse_limit_switch` | `() -> bool` | Reverse limit switch |
 
-    Optional (enhance safety/features but not required):
+    **Optional** (enhance safety/features but not required):
 
-    ========================  ==========================  ===================
-    Name                      Signature                   Purpose
-    ========================  ==========================  ===================
-    ``get_position``          ``() -> float``             Required only for
-                                                          calibration phase 2
-    ``set_current_limit``     ``(float) -> None``         Protective current
-                                                          limit during homing
-    ``set_soft_limits``       ``(min, max) -> None``      Apply soft limits
-                                                          to hardware
-    ``disable_soft_limits``   ``(fwd, rev) -> None``      Disable soft limits
-                                                          for free travel
-    ``save_config``           ``() -> Any``               Snapshot motor
-                                                          config before homing
-    ``restore_config``        ``(Any) -> None``           Restore snapshot
-                                                          after homing
-    ``on_limit_detected``     ``(pos, dir) -> None``      Fires when a hard
-                                                          limit is found
-    ========================  ==========================  ===================
+    | Name | Signature | Purpose |
+    |------|-----------|---------|
+    | `get_position` | `() -> float` | Required only for calibration phase 2 |
+    | `set_current_limit` | `(float) -> None` | Protective current limit during homing |
+    | `set_soft_limits` | `(min, max) -> None` | Apply soft limits to hardware |
+    | `disable_soft_limits` | `(fwd, rev) -> None` | Disable soft limits for free travel |
+    | `save_config` | `() -> Any` | Snapshot motor config before homing |
+    | `restore_config` | `(Any) -> None` | Restore snapshot after homing |
+    | `on_limit_detected` | `(pos, dir) -> None` | Fires when a hard limit is found |
 
     Use ``get_callbacks()`` to inspect the current callback dict (returns
     ``None`` for any callback that has not been set).
