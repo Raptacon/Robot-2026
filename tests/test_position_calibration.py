@@ -1023,6 +1023,86 @@ class TestPositionCalibrationCallbacks(unittest.TestCase):
         self.assertAlmostEqual(self._soft_limits[0], 10.0, places=1)
         self.assertAlmostEqual(self._soft_limits[1], 190.0, places=1)
 
+    # ---- Inactive periodic early returns ----
+
+    def test_homing_periodic_noop_when_not_homing(self):
+        """Test _homing_periodic returns True immediately when not homing."""
+        cbs = self._make_callbacks()
+        cal = PositionCalibration(
+            name="CbTest",
+            fallback_min=self.MIN_SOFT_LIMIT,
+            fallback_max=self.MAX_SOFT_LIMIT,
+            **cbs
+        )
+        result = cal._homing_periodic()
+        self.assertTrue(result)
+
+    def test_calibration_periodic_noop_when_not_calibrating(self):
+        """Test _calibration_periodic returns immediately when not
+        calibrating."""
+        cbs = self._make_callbacks()
+        cal = PositionCalibration(
+            name="CbTest",
+            fallback_min=self.MIN_SOFT_LIMIT,
+            fallback_max=self.MAX_SOFT_LIMIT,
+            **cbs
+        )
+        # Should not raise or change state
+        cal._calibration_periodic()
+        self.assertFalse(cal.is_calibrating)
+        self.assertFalse(cal.is_homing)
+
+    # ---- Calibration timeout aborts ----
+
+    def test_calibration_phase1_timeout_aborts(self):
+        """Test that phase 1 homing timeout aborts calibration."""
+        cbs = self._make_callbacks()
+        cal = PositionCalibration(
+            name="CbTest",
+            fallback_min=self.MIN_SOFT_LIMIT,
+            fallback_max=self.MAX_SOFT_LIMIT,
+            **cbs
+        )
+        cal.calibration_init(
+            max_current=10.0, max_power_pct=0.2,
+            max_homing_time=0.5, min_velocity=1.0
+        )
+        # Keep velocity high so stall doesn't trigger
+        self._velocity = 50.0
+        wpilib.simulation.stepTiming(0.6)
+        cal._calibration_periodic()
+
+        self.assertFalse(cal.is_calibrating)
+        self.assertFalse(cal.is_calibrated)
+
+    def test_calibration_phase2_timeout_aborts(self):
+        """Test that phase 2 homing timeout aborts calibration."""
+        cbs = self._make_callbacks()
+        cal = PositionCalibration(
+            name="CbTest",
+            fallback_min=self.MIN_SOFT_LIMIT,
+            fallback_max=self.MAX_SOFT_LIMIT,
+            **cbs
+        )
+        cal.calibration_init(
+            max_current=10.0, max_power_pct=0.2,
+            max_homing_time=0.5, min_velocity=1.0
+        )
+        # Complete phase 1 via stall
+        self._velocity = 0.0
+        cal._calibration_periodic()
+        wpilib.simulation.stepTiming(0.15)
+        cal._calibration_periodic()
+        self.assertEqual(cal._calibration_phase, 2)
+
+        # Phase 2: keep velocity high so stall doesn't trigger
+        self._velocity = 50.0
+        wpilib.simulation.stepTiming(0.6)
+        cal._calibration_periodic()
+
+        self.assertFalse(cal.is_calibrating)
+        self.assertFalse(cal.is_calibrated)
+
     # ---- Valid callbacks constant ----
 
     def test_valid_callbacks_contains_all_expected(self):

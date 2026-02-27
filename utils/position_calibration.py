@@ -1,5 +1,6 @@
 # Native imports
 import math
+from typing import Any, Callable, Optional
 
 # Third-party imports
 import wpilib
@@ -135,6 +136,21 @@ class PositionCalibration:
             set_position=encoder.setPosition,
             get_velocity=encoder.getVelocity)
     """
+
+    # -- Callback type declarations --
+    _cb_get_position: Optional[Callable[[], float]]
+    _cb_get_velocity: Optional[Callable[[], float]]
+    _cb_set_position: Optional[Callable[[float], None]]
+    _cb_set_motor_output: Optional[Callable[[float], None]]
+    _cb_stop_motor: Optional[Callable[[], None]]
+    _cb_set_current_limit: Optional[Callable[[float], None]]
+    _cb_set_soft_limits: Optional[Callable[[float, float], None]]
+    _cb_disable_soft_limits: Optional[Callable[[bool, bool], None]]
+    _cb_save_config: Optional[Callable[[], Any]]
+    _cb_restore_config: Optional[Callable[[Any], None]]
+    _cb_get_forward_limit_switch: Optional[Callable[[], bool]]
+    _cb_get_reverse_limit_switch: Optional[Callable[[], bool]]
+    _cb_on_limit_detected: Optional[Callable[[float, str], None]]
 
     def __init__(
         self,
@@ -678,6 +694,7 @@ class PositionCalibration:
 
         # Clear homing state
         self._is_homing = False
+        self._homing_succeeded = not abort
 
         # Stop timers
         self._homing_timer.stop()
@@ -709,7 +726,7 @@ class PositionCalibration:
         if self._calibration_phase == 1:
             done = self._homing_periodic()
             if done:
-                if not self._is_homing:
+                if self._homing_succeeded:
                     # Phase 1 complete - set encoder to 0
                     self._cb_set_position(0.0)
                     self._hard_limit_min = 0.0
@@ -738,7 +755,7 @@ class PositionCalibration:
             measured_position = self._cb_get_position()
             done = self._homing_periodic()
             if done:
-                if not self._is_homing:
+                if self._homing_succeeded:
                     self._hard_limit_max = measured_position
                     self._calibration_end(abort=False)
                 else:
