@@ -85,6 +85,8 @@ class PhysicsEngine:
             navx_sim = wpilib.simulation.SimDeviceSim("navX-Sensor[4]")
             self._navx_yaw = navx_sim.getDouble("Yaw")
         except Exception:
+            # NavX sim device or Yaw entry may be unavailable in some sim setups;
+            # ignore errors here and leave _navx_yaw as None.
             pass
 
     def update_sim(self, now: float, tm_diff: float) -> None:
