@@ -126,7 +126,42 @@ jobs:
     - name: Build documentation with pdoc
       timeout-minutes: 2
       run: |
-        pdoc -o docs/ robot.py robotswerve.py config.py photonUtils.py physics.py constants/ subsystem/ commands/ utils/ data/
+        python3 << 'SCRIPT'
+        import importlib, subprocess, sys, os, glob
+
+        # Top-level modules and package directories to document
+        top_level = ['robot', 'robotswerve', 'config', 'photonUtils', 'physics']
+        pkg_dirs = ['constants', 'subsystem', 'commands', 'utils', 'data']
+
+        # Enumerate all individual module names
+        candidates = list(top_level)
+        for pkg_dir in pkg_dirs:
+            for filepath in glob.glob(f'{pkg_dir}/**/*.py', recursive=True):
+                if '__pycache__' in filepath:
+                    continue
+                mod = filepath.replace(os.sep, '.').replace('/', '.').removesuffix('.py')
+                if mod.endswith('.__init__'):
+                    mod = mod.removesuffix('.__init__')
+                if mod not in candidates:
+                    candidates.append(mod)
+
+        # Test each module for importability, keep only working ones
+        valid = []
+        for mod in candidates:
+            try:
+                importlib.import_module(mod)
+                valid.append(mod)
+            except Exception as e:
+                print(f'::warning::Skipping {mod}: {e}')
+
+        if not valid:
+            print('::error::No modules could be imported for documentation')
+            sys.exit(1)
+
+        print(f'Building docs for {len(valid)} modules: {" ".join(valid)}')
+        result = subprocess.run(['pdoc', '-o', 'docs/'] + valid)
+        sys.exit(result.returncode)
+        SCRIPT
 
     - name: Upload Pages artifact
       uses: actions/upload-pages-artifact@v3
