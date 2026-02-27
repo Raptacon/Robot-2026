@@ -1,3 +1,4 @@
+from typing import Callable
 from commands2 import Command, Subsystem
 from commands2.sysid import SysIdRoutine
 from wpilib.sysid import SysIdRoutineLog
@@ -31,7 +32,7 @@ class FlywheelSysId(Subsystem):
         value = sysIdRoutine.dynamic(direction)
         print(f"Dynamic Command Value: {value}, Direction: {direction}")
         return sysIdRoutine.dynamic(direction)
-    
+
     def sysIdLog(self, sys_id_routine: SysIdRoutineLog) -> None:
         for name, motor in self.motors.items():
             motor_log = sys_id_routine.motor(name)
@@ -43,7 +44,7 @@ class FlywheelSysId(Subsystem):
             battery_voltage = motor.getBusVoltage()
             motor_temp = motor.getMotorTemperature()
             applied_voltage = motor.getAppliedOutput() * battery_voltage
-            
+
             #not included velocity acceleration, angularAcceleration, angularPosition,
             motor_log.angularVelocity(angular_velocity)
             motor_log.angularPosition(angular_position)

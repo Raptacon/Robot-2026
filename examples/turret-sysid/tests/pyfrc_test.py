@@ -3,4 +3,4 @@
     to test basic functionality of just about any robot.
 '''
 
-from pyfrc.tests import *
+from pyfrc.tests import *  # noqa: F401,F403

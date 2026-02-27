@@ -28,15 +28,15 @@ def GetSparkSignalsVelocityControlConfig(signalConfig: rev.SignalsConfig, period
     signalConfig.outputCurrentPeriodMs(periodMs)
     signalConfig.primaryEncoderVelocityAlwaysOn(True)
     signalConfig.primaryEncoderVelocityPeriodMs(periodMs)
-    
+
     #signalConfig.setpointAlwaysOn(True)
     #signalConfig.setpointPeriodMs(periodMs)
     return signalConfig
 
 def GetSparkConfig(
     config: rev.SparkBaseConfig,
-    inverted: bool = False, 
-    periodMs: int = 10, 
+    inverted: bool = False,
+    periodMs: int = 10,
     idleMode: rev.SparkBaseConfig.IdleMode = rev.SparkBaseConfig.IdleMode.kCoast ) -> rev.SparkBaseConfig:
     #config = rev.SparkBaseConfig()
     config.inverted(inverted)
@@ -94,7 +94,7 @@ class MyRobot(TimedCommandRobot):
         sysIdMechanism = SysIdRoutine.Mechanism(self.flywheels.setMotorVoltage, self.flywheels.sysIdLog, self.flywheels, "Flywheels")
         self.sysId = SysIdRoutine(sysIdConfig, sysIdMechanism)
 
-    
+
     def teleopInit(self) -> None:
         self.controller = CommandXboxController(0)
 
@@ -111,8 +111,8 @@ class MyRobot(TimedCommandRobot):
             self.flywheels.sysIdDynamicCommand(SysIdRoutine.Direction.kReverse, self.sysId)
         )
         #print(dir(self.flywheels.motors["upperFlyWheel"])PeriodicFrame)
-        
-    
+
+
     def teleopPeriodic(self):
         super().teleopPeriodic()
-        
+
