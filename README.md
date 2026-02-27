@@ -8,6 +8,17 @@ Please take a look at the [wiki](https://github.com/Raptacon/Robot-2023/wiki) fo
 
 Browse the auto-generated [API documentation](http://raptacon.github.io/Robot-2026/robot.html)
 
+### Testing docs from a branch
+
+By default, docs only build and deploy on pushes to `main`. To test from a feature branch:
+
+1. In `.github/workflows/robot_ci.yml`, update the `BuildDocs` job's `if:` condition to include your branch:
+   ```yaml
+   if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/your-branch-name')
+   ```
+2. Ask a mentor to add your branch to the [GitHub Pages environment deployment rules](https://github.com/Raptacon/Robot-2026/settings/environments/).
+3. Revert the `if:` condition before merging to `main`.
+
 Also make sure to check out the [Kanban board](https://github.com/Raptacon/Robot-2023/projects/1)
 test
 
