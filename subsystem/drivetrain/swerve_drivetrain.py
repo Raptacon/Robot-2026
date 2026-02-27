@@ -8,14 +8,16 @@ from .swerve_module import SwerveModuleMk4iSparkMaxNeoCanCoder
 
 # Third-party imports
 import navx
+import wpilib
 from commands2 import Subsystem
+from ntcore import NetworkTableInstance
 from pathplannerlib.auto import AutoBuilder
 from pathplannerlib.config import ModuleConfig, RobotConfig, PIDConstants
 from pathplannerlib.controller import PPHolonomicDriveController
 from wpilib import DriverStation
 from wpimath.estimator import SwerveDrive4PoseEstimator
 from wpimath.geometry import Pose2d, Rotation2d, Rotation3d, Translation2d
-from wpimath.kinematics import ChassisSpeeds, SwerveDrive4Kinematics, SwerveModulePosition
+from wpimath.kinematics import ChassisSpeeds, SwerveDrive4Kinematics, SwerveModulePosition, SwerveModuleState
 from wpimath.system.plant import DCMotor
 
 
@@ -34,6 +36,9 @@ class SwerveDrivetrain(Subsystem):
         self.invert_gyro = self.constants.invertGyro
         self.speedMultiplier = 1
 
+        # NT base path for all drivetrain telemetry
+        self._nt_base = f"subsystem/{self.getName()}"
+
         # must give in front-left, front-right, back-left, back-right order
         self.swerve_modules = [
             SwerveModuleMk4iSparkMaxNeoCanCoder(
@@ -42,7 +47,8 @@ class SwerveDrivetrain(Subsystem):
                 OperatorRobotConfig.swerve_module_channels[0],
                 invert_drive=self.constants.moduleFrontLeftInvertDrive,
                 invert_steer=self.constants.moduleFrontLeftInvertSteer,
-                encoder_calibration=OperatorRobotConfig.swerve_abs_encoder_calibrations[0]
+                encoder_calibration=OperatorRobotConfig.swerve_abs_encoder_calibrations[0],
+                parent_nt_base=self._nt_base
             ),
             SwerveModuleMk4iSparkMaxNeoCanCoder(
                 "frontRight",
@@ -50,7 +56,8 @@ class SwerveDrivetrain(Subsystem):
                 OperatorRobotConfig.swerve_module_channels[1],
                 invert_drive=self.constants.moduleFrontRightInvertDrive,
                 invert_steer=self.constants.moduleFrontRightInvertSteer,
-                encoder_calibration=OperatorRobotConfig.swerve_abs_encoder_calibrations[1]
+                encoder_calibration=OperatorRobotConfig.swerve_abs_encoder_calibrations[1],
+                parent_nt_base=self._nt_base
             ),
             SwerveModuleMk4iSparkMaxNeoCanCoder(
                 "backLeft",
@@ -58,7 +65,8 @@ class SwerveDrivetrain(Subsystem):
                 OperatorRobotConfig.swerve_module_channels[2],
                 invert_drive=self.constants.moduleBackLeftInvertDrive,
                 invert_steer=self.constants.moduleBackLeftInvertSteer,
-                encoder_calibration=OperatorRobotConfig.swerve_abs_encoder_calibrations[2]
+                encoder_calibration=OperatorRobotConfig.swerve_abs_encoder_calibrations[2],
+                parent_nt_base=self._nt_base
             ),
             SwerveModuleMk4iSparkMaxNeoCanCoder(
                 "backRight",
@@ -66,7 +74,8 @@ class SwerveDrivetrain(Subsystem):
                 OperatorRobotConfig.swerve_module_channels[3],
                 invert_drive=self.constants.moduleBackRightInvertDrive,
                 invert_steer=self.constants.moduleBackRightInvertSteer,
-                encoder_calibration=OperatorRobotConfig.swerve_abs_encoder_calibrations[3]
+                encoder_calibration=OperatorRobotConfig.swerve_abs_encoder_calibrations[3],
+                parent_nt_base=self._nt_base
             )
         ]
 
@@ -86,6 +95,27 @@ class SwerveDrivetrain(Subsystem):
         )
 
         self.reset_heading()
+
+        # Field visualization (owned by drivetrain)
+        self.field = wpilib.Field2d()
+        wpilib.SmartDashboard.putData("Field", self.field)
+
+        # Dashboard-tunable speed multiplier
+        wpilib.SmartDashboard.putNumber("Driver Tunables/Drivetrain speed", self.speedMultiplier)
+
+        # NT struct topics for odometry and swerve state
+        nt = NetworkTableInstance.getDefault()
+        self._nt_robot_pose = nt.getStructTopic(f"{self._nt_base}/robotpose", Pose2d).publish()
+        self._nt_target_pose = nt.getStructTopic(f"{self._nt_base}/targetpose", Pose2d).publish()
+        self._nt_module_states = nt.getStructArrayTopic(
+            f"{self._nt_base}/swervemodulestates", SwerveModuleState
+        ).publish()
+        self._nt_velocity = nt.getStructTopic(
+            f"{self._nt_base}/swervevelocity", ChassisSpeeds
+        ).publish()
+        self._nt_rotation = nt.getStructTopic(
+            f"{self._nt_base}/swerverotation", Rotation2d
+        ).publish()
 
         # Path Planner setup
         path_planner_config = RobotConfig.fromGUISettings()
@@ -441,9 +471,53 @@ class SwerveDrivetrain(Subsystem):
         """
         self.speedMultiplier = speedMult
 
+    def updateTelemetry(self) -> None:
+        """Publish odometry, swerve state, field pose, and per-module telemetry."""
+        pose = self.current_pose()
+        self.field.setRobotPose(pose)
+
+        # Odometry
+        self._nt_robot_pose.set(pose)
+
+        # Full swerve state
+        self._nt_module_states.set(
+            [mod.current_state() for mod in self.swerve_modules]
+        )
+        self._nt_velocity.set(self.current_robot_relative_speed())
+        self._nt_rotation.set(self.current_yaw())
+
+        # Per-module telemetry
+        for mod in self.swerve_modules:
+            mod.updateTelemetry()
+
+        # Read back dashboard-tunable speed
+        self.speedMultiplier = wpilib.SmartDashboard.getNumber(
+            "Driver Tunables/Drivetrain speed", self.speedMultiplier
+        )
+
+    def onDisabledInit(self) -> None:
+        """Set brake mode and stop driving when robot enters disabled mode."""
+        self.set_motor_stop_modes(
+            to_drive=True, to_break=True,
+            all_motor_override=True, burn_flash=False
+        )
+        self.stop_driving()
+
     def periodic(self) -> None:
         """
         Execute code on every periodic clock tick, regardless of the robot's game mode state
         (disabled, autonomous, teleoperated, test).
         """
         self.update_pose_estimator()
+
+
+# ---------------------------------------------------------------------------
+# Self-registration
+# ---------------------------------------------------------------------------
+from utils.subsystem_factory import SubsystemState, register_subsystem
+
+register_subsystem(
+    name="drivetrain",
+    default_state=SubsystemState.required,
+    creator=lambda subs: SwerveDrivetrain(),
+)

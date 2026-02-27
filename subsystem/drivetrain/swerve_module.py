@@ -9,9 +9,11 @@ from constants import SwerveModuleMk4iConsts, SwerveModuleMk4iL2Consts
 # Third-party imports
 import phoenix6
 import rev
+import wpilib
 from wpimath.controller import SimpleMotorFeedforwardMeters
 from wpimath.kinematics import SwerveModulePosition, SwerveModuleState
 from wpimath.geometry import Rotation2d, Translation2d
+from wpiutil.log import FloatLogEntry
 
 """
 This is a basic swerve drive module for a robot running
@@ -100,7 +102,8 @@ class SwerveModuleMk4iSparkMaxNeoCanCoder:
         invert_steer: bool = False,
         encoder_calibration: float = 0,
         swerve_level_constants: SwerveModuleMk4iConsts=SwerveModuleMk4iL2Consts(),
-        update_period: float = 0.05
+        update_period: float = 0.05,
+        parent_nt_base: str = "subsystem"
     ) -> None:
         """
         Creates a new swerve module at a given location in the robot.
@@ -191,6 +194,14 @@ class SwerveModuleMk4iSparkMaxNeoCanCoder:
 
         # Baseline relative encoders
         self.baseline_relative_encoders()
+
+        # Datalog entries for per-module telemetry
+        # TODO convert to network table entries
+        datalog = wpilib.DataLogManager.getLog()
+        prefix = f"{parent_nt_base}/module/{self.name}/"
+        self._log_steer_degree = FloatLogEntry(datalog, prefix + "steerdegree")
+        self._log_drive_percent = FloatLogEntry(datalog, prefix + "drivepercent")
+        self._log_velocity = FloatLogEntry(datalog, prefix + "velocity")
 
     def instantiate_steer_config(self, invert: bool) -> None:
         """
@@ -393,6 +404,12 @@ class SwerveModuleMk4iSparkMaxNeoCanCoder:
             state_speed, rev.SparkLowLevel.ControlType.kVelocity, rev.ClosedLoopSlot.kSlot0,
             self.drive_motor_feedforward.calculate(current_speed, state_speed)
         )
+
+    def updateTelemetry(self) -> None:
+        """Log per-module steer angle, drive output, and velocity."""
+        self._log_steer_degree.append(self.current_raw_absolute_steer_position())
+        self._log_drive_percent.append(self.drive_motor.getAppliedOutput())
+        self._log_velocity.append(self.current_state().speed)
 
     def set_motor_stop_mode(self, to_drive: bool, to_break: bool) -> None:
         """
