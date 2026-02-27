@@ -100,7 +100,7 @@ jobs:
   BuildDocs:
     name: Build & Deploy Documentation
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/nbeasley-docstringpublish')
     needs: [RobotUnitTestWindows, StaticCritical]
     permissions:
       pages: write
@@ -126,7 +126,7 @@ jobs:
     - name: Build documentation with pdoc
       timeout-minutes: 2
       run: |
-        pdoc -o docs/ robot.py robotswerve.py config.py photonUtils.py physics.py constants/ subsystem/ commands/ utils/ data/
+        python3 doc/build_docs.py docs/
 
     - name: Upload Pages artifact
       uses: actions/upload-pages-artifact@v3
