@@ -37,3 +37,8 @@ requires = [
 ]
 
 pyfrc.isolated = true
+
+[tool.pytest.ini_options]
+# Exclude example directories from main test collection to avoid
+# module name collisions (multiple pyfrc_test.py files)
+testpaths = ["tests"]
