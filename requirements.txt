@@ -15,6 +15,7 @@ robotpy-urcl==2026.*
 phoenix6==26.*
 photonlibpy==2026.*
 robotpy-urcl
+pdoc
 
 
 # raptacon3200>=2025.0.1
