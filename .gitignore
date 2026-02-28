@@ -145,3 +145,6 @@ setup_.venv_windows
 logs/
 tests/logs
 **/ctre_sim/
+networktables.json
+.claude/settings.local.json
+networktables.json.bck

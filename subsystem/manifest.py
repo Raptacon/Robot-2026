@@ -54,13 +54,32 @@ def get_competition_manifest(container) -> List[SubsystemEntry]:
     return _topological_sort(get_registered_entries())
 
 
+def _collect_dependencies(target_names, all_entries):
+    """
+    Collect a set of entry names needed to satisfy the given targets,
+    transitively including all dependencies.
+    """
+    by_name = {e.name: e for e in all_entries}
+    result = set()
+    queue = list(target_names)
+    while queue:
+        name = queue.pop()
+        if name in result or name not in by_name:
+            continue
+        result.add(name)
+        queue.extend(by_name[name].dependencies)
+    return result
+
+
 def get_sparky_manifest(container) -> List[SubsystemEntry]:
     """
     Build a minimal manifest for Sparky (drivetrain only).
+    Transitively includes swerve module dependencies.
     """
     import subsystem  # triggers registration via __init__.py imports
     all_entries = get_registered_entries()
-    return _topological_sort([e for e in all_entries if e.name == "drivetrain"])
+    needed = _collect_dependencies({"drivetrain"}, all_entries)
+    return _topological_sort([e for e in all_entries if e.name in needed])
 
 
 # Maps robot name strings to manifest builder functions.
