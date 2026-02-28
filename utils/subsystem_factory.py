@@ -165,6 +165,7 @@ class SubsystemRegistry:
         self._entries: Dict[str, SubsystemEntry] = {}
         self._subsystems: Dict[str, Optional[Any]] = {}
         self._active_entries: List[SubsystemEntry] = []
+        self._controls_modules: Dict[str, Any] = {}
         self._container = container
 
         for entry in manifest:

@@ -35,6 +35,6 @@ MODULE_NAMES = [f"swerve_module_{name}" for name, _ in _MODULE_CONFIGS]
 for _name, _idx in _MODULE_CONFIGS:
     register_subsystem(
         name=f"swerve_module_{_name}",
-        default_state=SubsystemState.required,
+        default_state=SubsystemState.enabled,
         creator=_make_module_creator(_name, _idx),
     )

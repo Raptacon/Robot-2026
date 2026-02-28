@@ -532,7 +532,7 @@ from .swerve2026Chassis import MODULE_NAMES as _MODULE_NAMES
 
 register_subsystem(
     name="drivetrain",
-    default_state=SubsystemState.required,
+    default_state=SubsystemState.enabled,
     creator=lambda subs: SwerveDrivetrain(
         swerve_modules={
             name: subs[entry]

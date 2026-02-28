@@ -3,7 +3,6 @@ import logging
 
 # Internal imports
 from data.telemetry import Telemetry
-from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
 from subsystem.manifest import ROBOT_MANIFESTS
 from utils.subsystem_factory import SubsystemRegistry
 
@@ -25,8 +24,8 @@ class RobotSwerve:
     creation, controls, telemetry, and disabled behavior are
     handled via convention-based discovery on each subsystem.
     """
-    # forward declare critical types for editors
-    drivetrain: SwerveDrivetrain
+    # Default to None so lifecycle methods work when subsystem creation fails
+    drivetrain = None
 
     # Persistent robot name — operators can change in the dashboard
     robot_name = ntproperty("/robot/name", "competition",
@@ -49,15 +48,19 @@ class RobotSwerve:
         for name, instance in self.registry.active_subsystems.items():
             setattr(self, name, instance)
 
-        # Autonomous setup
+        # Autonomous setup (requires drivetrain for PathPlanner configuration)
         self.auto_command = None
-        self.auto_chooser = AutoBuilder.buildAutoChooser()
-        wpilib.SmartDashboard.putData("Select auto routine", self.auto_chooser)
+        self.auto_chooser = None
+        self.teleop_stem_paths = {}
 
-        self.teleop_stem_paths = {
-            start_location: PathPlannerPath.fromPathFile(start_location)
-            for start_location in [f"Stem_Reef_F{n}" for n in range(1, 7)] + [f"Stem_Reef_N{n}" for n in range(1, 7)]
-        }
+        if self.drivetrain is not None:
+            self.auto_chooser = AutoBuilder.buildAutoChooser()
+            wpilib.SmartDashboard.putData("Select auto routine", self.auto_chooser)
+
+            self.teleop_stem_paths = {
+                start_location: PathPlannerPath.fromPathFile(start_location)
+                for start_location in [f"Stem_Reef_F{n}" for n in range(1, 7)] + [f"Stem_Reef_N{n}" for n in range(1, 7)]
+            }
 
         # Telemetry setup (controller + driverstation logging)
         self.enableTelemetry = wpilib.SmartDashboard.getBoolean("enableTelemetry", True)
@@ -82,7 +85,8 @@ class RobotSwerve:
         pass
 
     def autonomousInit(self):
-        self.auto_command = self.auto_chooser.getSelected()
+        if self.auto_chooser is not None:
+            self.auto_command = self.auto_chooser.getSelected()
         if self.auto_command:
             self.auto_command.schedule()
         elif self.drivetrain is not None:
