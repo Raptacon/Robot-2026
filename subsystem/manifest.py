@@ -50,7 +50,7 @@ def get_competition_manifest(container) -> List[SubsystemEntry]:
     subsystem modules (via their register_subsystem() calls). The
     returned list is topologically sorted so dependencies are created first.
     """
-    import subsystem  # triggers registration via __init__.py imports
+    import subsystem  # noqa: F401 triggers registration via __init__.py imports
     return _topological_sort(get_registered_entries())
 
 
@@ -76,7 +76,7 @@ def get_sparky_manifest(container) -> List[SubsystemEntry]:
     Build a minimal manifest for Sparky (drivetrain only).
     Transitively includes swerve module dependencies.
     """
-    import subsystem  # triggers registration via __init__.py imports
+    import subsystem  # noqa: F401 triggers registration via __init__.py imports
     all_entries = get_registered_entries()
     needed = _collect_dependencies({"drivetrain"}, all_entries)
     return _topological_sort([e for e in all_entries if e.name in needed])

@@ -405,7 +405,7 @@ class TestSubsystemRegistry(unittest.TestCase):
             ),
         ]
 
-        registry = SubsystemRegistry(manifest)
+        SubsystemRegistry(manifest)
         self.assertIs(received_subs.get("base"), base)
 
 
