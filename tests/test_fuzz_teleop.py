@@ -71,6 +71,12 @@ import pytest
 import wpilib.simulation
 from wpilib.simulation import XboxControllerSim, DriverStationSim
 
+from constants import RobotConstants
+
+# Step slightly under the robot's periodic period to avoid triggering
+# the loop overrun detector (hasElapsed returns true at exactly the limit).
+_STEP_PERIOD = RobotConstants.kPeriodicPeriodSec - 0.001
+
 
 # ---------------------------------------------------------------------------
 # Controller input snapshot
@@ -300,7 +306,7 @@ def _run_fuzz(
         DriverStationSim.setEnabled(True)
         DriverStationSim.notifyNewData()
         # Let teleopInit run
-        wpilib.simulation.stepTiming(0.02)
+        wpilib.simulation.stepTiming(_STEP_PERIOD)
 
         # Phase 3: Teleop fuzz
         for cycle in range(cycles):
@@ -309,7 +315,7 @@ def _run_fuzz(
                 apply_inputs(sim, inputs)
 
             DriverStationSim.notifyNewData()
-            wpilib.simulation.stepTiming(0.02)
+            wpilib.simulation.stepTiming(_STEP_PERIOD)
 
             assert control.robot_is_alive, (
                 f"Robot died during teleop fuzz cycle {cycle} (seed={seed})"
