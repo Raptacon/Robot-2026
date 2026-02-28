@@ -77,6 +77,15 @@ class ControllerConfigApp(tk.Tk):
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self._on_close)
 
+        view_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="View", menu=view_menu)
+        self._show_borders_var = tk.BooleanVar(value=False)
+        view_menu.add_checkbutton(label="Show Button Borders",
+                                  variable=self._show_borders_var,
+                                  command=self._toggle_borders)
+        view_menu.add_command(label="Reset Label Positions",
+                              command=self._reset_label_positions)
+
         self.bind_all("<Control-n>", lambda e: self._new_config())
         self.bind_all("<Control-o>", lambda e: self._open_dialog())
         self.bind_all("<Control-s>", lambda e: self._save())
@@ -108,6 +117,7 @@ class ControllerConfigApp(tk.Tk):
         self._controller_canvases: dict[int, ControllerCanvas] = {}
 
         # Status bar
+        self._hover_status_active = False
         self._status_var = tk.StringVar(value="Ready")
         status_bar = ttk.Label(self, textvariable=self._status_var, relief=tk.SUNKEN, anchor=tk.W)
         status_bar.pack(fill=tk.X, side=tk.BOTTOM, padx=5, pady=2)
@@ -284,6 +294,12 @@ class ControllerConfigApp(tk.Tk):
         canvas = ControllerCanvas(
             tab_frame,
             on_binding_click=lambda input_name, p=port: self._on_binding_click(p, input_name),
+            on_binding_clear=lambda input_name, p=port: self._on_binding_clear(p, input_name),
+            on_mouse_coord=self._on_mouse_coord,
+            on_label_moved=self._on_label_moved,
+            on_hover_input=lambda input_name, p=port: self._on_hover_input(p, input_name),
+            on_hover_shape=lambda input_names, p=port: self._on_hover_shape(p, input_names),
+            label_positions=self._settings.get("label_positions", {}),
         )
         canvas.pack(fill=tk.BOTH, expand=True)
         canvas.set_bindings(ctrl.bindings)
@@ -325,10 +341,94 @@ class ControllerConfigApp(tk.Tk):
 
     # --- Callbacks ---
 
+    def _on_mouse_coord(self, img_x: int, img_y: int):
+        """Update status bar with mouse position in source image pixels."""
+        # Don't overwrite action info while hovering a binding box
+        if not self._hover_status_active:
+            self._status_var.set(f"Image coords: ({img_x}, {img_y})")
+
+    def _format_action_status(self, port: int, input_names: list[str]) -> str | None:
+        """Build a status string for actions bound to the given inputs."""
+        ctrl = self._config.controllers.get(port)
+        if not ctrl:
+            return None
+
+        parts = []
+        for input_name in input_names:
+            for action_name in ctrl.bindings.get(input_name, []):
+                action = self._config.actions.get(action_name)
+                if action:
+                    desc = action.description or "No description"
+                    atype = action.input_type.value.capitalize()
+                    parts.append(f"{action.name} ({atype}) - {desc}")
+                else:
+                    parts.append(action_name)
+        return "  |  ".join(parts) if parts else None
+
+    def _on_hover_input(self, port: int, input_name: str | None):
+        """Update status bar with action info when hovering a binding box."""
+        if not input_name:
+            self._hover_status_active = False
+            self._status_var.set("Ready")
+            return
+
+        text = self._format_action_status(port, [input_name])
+        if text:
+            self._hover_status_active = True
+            self._status_var.set(text)
+        else:
+            self._hover_status_active = False
+
+    def _on_hover_shape(self, port: int, input_names: list[str] | None):
+        """Update status bar with action info when hovering a controller shape."""
+        if not input_names:
+            self._hover_status_active = False
+            self._status_var.set("Ready")
+            return
+
+        text = self._format_action_status(port, input_names)
+        if text:
+            self._hover_status_active = True
+            self._status_var.set(text)
+        else:
+            self._hover_status_active = False
+
+    def _toggle_borders(self):
+        """Toggle shape border visibility on all canvases."""
+        show = self._show_borders_var.get()
+        for canvas in self._controller_canvases.values():
+            canvas.set_show_borders(show)
+
+    def _reset_label_positions(self):
+        """Reset all dragged label positions to defaults."""
+        self._settings.pop("label_positions", None)
+        self._save_settings()
+        for canvas in self._controller_canvases.values():
+            canvas.reset_label_positions()
+        self._status_var.set("Label positions reset to defaults")
+
+    def _on_label_moved(self, input_name: str, img_x: int, img_y: int):
+        """Persist a dragged label position to settings."""
+        positions = self._settings.setdefault("label_positions", {})
+        positions[input_name] = [img_x, img_y]
+        self._save_settings()
+
     def _on_actions_changed(self):
         """Called when actions are added/removed/modified in the action panel."""
         self._config.actions = self._action_panel.get_actions()
         self._mark_dirty()
+
+    def _on_binding_clear(self, port: int, input_name: str):
+        """Clear all bindings for a specific input."""
+        ctrl = self._config.controllers.get(port)
+        if not ctrl:
+            return
+        if input_name in ctrl.bindings:
+            del ctrl.bindings[input_name]
+            canvas = self._controller_canvases.get(port)
+            if canvas:
+                canvas.set_bindings(ctrl.bindings)
+            self._mark_dirty()
 
     def _on_binding_click(self, port: int, input_name: str):
         """Open the binding dialog for a specific input on a specific controller."""
@@ -342,6 +442,8 @@ class ControllerConfigApp(tk.Tk):
         dialog = BindingDialog(self, input_name, current_actions, available_actions)
         result = dialog.get_result()
 
+        canvas = self._controller_canvases.get(port)
+
         if result is not None:
             if result:
                 ctrl.bindings[input_name] = result
@@ -349,7 +451,10 @@ class ControllerConfigApp(tk.Tk):
                 del ctrl.bindings[input_name]
 
             # Refresh the canvas
-            canvas = self._controller_canvases.get(port)
             if canvas:
                 canvas.set_bindings(ctrl.bindings)
             self._mark_dirty()
+
+        # Clear selection so line returns to default color
+        if canvas:
+            canvas.clear_selection()

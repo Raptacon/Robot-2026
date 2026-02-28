@@ -1,16 +1,21 @@
 """Canvas widget that renders the Xbox controller image with binding overlays.
 
 Draws leader lines from each controller input to binding boxes showing
-assigned actions. Clicking a binding box triggers the binding dialog.
+assigned actions. Bold outlines are drawn around each button on the
+controller image and are clickable to assign bindings.  Binding boxes
+are draggable — custom positions persist across sessions.
 """
 
 import io
+import math
 import tkinter as tk
 from pathlib import Path
 
-from PIL import Image, ImageTk
+from PIL import Image, ImageDraw, ImageTk
 
-from .layout_coords import XBOX_INPUTS, InputCoord
+from .layout_coords import (
+    XBOX_INPUTS, XBOX_SHAPES, InputCoord, ButtonShape, _IMG_W, _IMG_H,
+)
 
 # Try cairosvg for crisp SVG rendering, fall back to pre-rendered PNG
 try:
@@ -24,6 +29,7 @@ BOX_WIDTH = 120
 BOX_HEIGHT = 22
 BOX_PAD = 4
 LINE_COLOR = "#555555"
+LINE_SELECTED_COLOR = "#cc0000"
 BOX_OUTLINE = "#888888"
 BOX_FILL = "#f0f0f0"
 BOX_FILL_HOVER = "#ddeeff"
@@ -33,10 +39,18 @@ UNASSIGNED_COLOR = "#999999"
 ASSIGNED_COLOR = "#222222"
 AXIS_INDICATOR_COLORS = {"X": "#cc4444", "Y": "#4444cc"}
 
+# Shape overlay constants
+SHAPE_OUTLINE_COLOR = "#4488cc"
+SHAPE_OUTLINE_WIDTH = 2.5
+SHAPE_HOVER_FILL = "#4488cc"
+SHAPE_HOVER_STIPPLE = "gray25"
+
+# Drag threshold in pixels — must move this far before drag starts
+_DRAG_THRESHOLD = 5
+
 
 def _find_image_path() -> Path:
     """Locate the Xbox controller image relative to the project root."""
-    # Walk up from this file to find the project images/ folder
     here = Path(__file__).resolve().parent
     for ancestor in [here, here.parent, here.parent.parent]:
         svg_path = ancestor / "images" / "Xbox_Controller.svg"
@@ -48,20 +62,80 @@ def _find_image_path() -> Path:
     raise FileNotFoundError("Cannot find Xbox_Controller image in images/")
 
 
-class ControllerCanvas(tk.Frame):
-    """Displays the Xbox controller with interactive binding boxes."""
+def _find_rumble_icon() -> Path | None:
+    """Locate the rumble icon image relative to the project root."""
+    here = Path(__file__).resolve().parent
+    for ancestor in [here, here.parent, here.parent.parent]:
+        svg_path = ancestor / "images" / "rumble.svg"
+        if svg_path.exists():
+            return svg_path
+        png_path = ancestor / "images" / "rumble.png"
+        if png_path.exists():
+            return png_path
+    return None
 
-    def __init__(self, parent, on_binding_click=None):
+
+class ControllerCanvas(tk.Frame):
+    """Displays the Xbox controller with interactive binding boxes and
+    clickable button outlines."""
+
+    def __init__(self, parent, on_binding_click=None, on_binding_clear=None,
+                 on_mouse_coord=None, on_label_moved=None,
+                 on_hover_input=None, on_hover_shape=None,
+                 label_positions=None):
         """
         Args:
             parent: tkinter parent widget
-            on_binding_click: callback(input_name: str) when a binding box is clicked
+            on_binding_click: callback(input_name: str) when a binding is clicked
+            on_binding_clear: callback(input_name: str) to clear an input's bindings
+            on_mouse_coord: callback(img_x: int, img_y: int) with mouse
+                position in source-image pixel space (1920x1292)
+            on_label_moved: callback(input_name: str, img_x: int, img_y: int)
+                when a binding box is dragged to a new position
+            on_hover_input: callback(input_name: str | None) when hovering
+                over a binding box (None when hover leaves)
+            on_hover_shape: callback(input_names: list[str] | None) when
+                hovering over a controller shape (None when hover leaves)
+            label_positions: dict mapping input_name -> [img_x, img_y] for
+                custom label positions (loaded from settings)
         """
         super().__init__(parent)
         self._on_binding_click = on_binding_click
+        self._on_binding_clear = on_binding_clear
+        self._on_mouse_coord = on_mouse_coord
+        self._on_label_moved = on_label_moved
+        self._on_hover_input = on_hover_input
+        self._on_hover_shape = on_hover_shape
         self._bindings: dict[str, list[str]] = {}
-        self._box_items: dict[str, list[int]] = {}  # input_name -> canvas item ids
-        self._hover_input: str | None = None
+
+        # Custom label positions: input_name -> (img_px_x, img_px_y)
+        self._custom_label_pos: dict[str, tuple[int, int]] = {}
+        if label_positions:
+            for name, pos in label_positions.items():
+                if isinstance(pos, (list, tuple)) and len(pos) == 2:
+                    self._custom_label_pos[name] = (int(pos[0]), int(pos[1]))
+
+        # Canvas item tracking
+        self._box_items: dict[str, list[int]] = {}      # input_name -> item ids
+        self._line_items: dict[str, int] = {}            # input_name -> line item id
+        self._shape_items: dict[str, int] = {}           # shape.name -> canvas item id
+        self._shape_map: dict[str, ButtonShape] = {}     # shape.name -> ButtonShape
+
+        self._hover_input: str | None = None    # hovered binding box
+        self._hover_shape: str | None = None    # hovered controller shape
+        self._selected_input: str | None = None  # selected (red line) input
+        self._show_borders: bool = False         # shape outlines hidden by default
+
+        # Drag state
+        self._dragging: str | None = None
+        self._drag_start: tuple[float, float] = (0, 0)
+        self._did_drag: bool = False
+
+        # Tooltip
+        self._tooltip: tk.Toplevel | None = None
+
+        # Per-label rumble icon PhotoImages (prevent GC)
+        self._rumble_label_icons: list[ImageTk.PhotoImage] = []
 
         self._canvas = tk.Canvas(self, bg="white", highlightthickness=0)
         self._canvas.pack(fill=tk.BOTH, expand=True)
@@ -69,7 +143,11 @@ class ControllerCanvas(tk.Frame):
         self._load_image()
         self._canvas.bind("<Configure>", self._on_resize)
         self._canvas.bind("<Motion>", self._on_mouse_move)
-        self._canvas.bind("<Button-1>", self._on_click)
+        self._canvas.bind("<Button-1>", self._on_press)
+        self._canvas.bind("<B1-Motion>", self._on_drag)
+        self._canvas.bind("<ButtonRelease-1>", self._on_release)
+        self._canvas.bind("<Button-3>", self._on_right_click)
+        self._canvas.bind("<Leave>", self._on_leave)
 
     def _load_image(self):
         """Load the controller image (SVG preferred, PNG fallback)."""
@@ -83,7 +161,6 @@ class ControllerCanvas(tk.Frame):
             )
             self._base_image = Image.open(io.BytesIO(png_data))
         else:
-            # Use PNG fallback
             png_path = img_path.with_suffix(".svg.png")
             if not png_path.exists():
                 png_path = img_path
@@ -92,18 +169,78 @@ class ControllerCanvas(tk.Frame):
         self._img_width = self._base_image.width
         self._img_height = self._base_image.height
 
+        # Load rumble icon
+        self._rumble_base_image = None
+        rumble_path = _find_rumble_icon()
+        if rumble_path:
+            try:
+                if rumble_path.suffix == ".svg" and HAS_CAIROSVG:
+                    rumble_data = cairosvg.svg2png(
+                        url=str(rumble_path),
+                        output_width=64, output_height=64,
+                    )
+                    self._rumble_base_image = Image.open(
+                        io.BytesIO(rumble_data)).convert("RGBA")
+                elif rumble_path.suffix != ".svg":
+                    self._rumble_base_image = Image.open(
+                        str(rumble_path)).convert("RGBA")
+            except Exception:
+                pass
+        # Fallback: draw a simple rumble icon with PIL if SVG couldn't load
+        if self._rumble_base_image is None:
+            self._rumble_base_image = self._make_rumble_fallback(64)
+
+    @staticmethod
+    def _make_rumble_fallback(size: int) -> Image.Image:
+        """Draw a simple rumble/vibration icon when SVG can't be loaded.
+
+        Reproduces the key shapes from rumble.svg: a battery-like body
+        with horizontal bars and a positive terminal nub.
+        """
+        img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        d = ImageDraw.Draw(img)
+        s = size / 24  # scale factor (SVG viewBox is 24x24)
+
+        # Main body (rounded-ish rectangle: x=2..15, y=5..16)
+        d.rectangle([s * 2, s * 5, s * 15, s * 16], fill=(0, 0, 0, 255))
+        # Terminal nub (x=17..18, y=8..9.5 and x=17..22, y=9.5..11.5)
+        d.rectangle([s * 17, s * 8, s * 18, s * 11.5], fill=(0, 0, 0, 255))
+        d.rectangle([s * 17, s * 9.5, s * 22, s * 11.5], fill=(0, 0, 0, 255))
+        # Inner bars (white gaps to show charge lines)
+        for y_top in [7, 9, 11, 13]:
+            d.rectangle([s * 5, s * y_top, s * 14, s * (y_top + 0.8),],
+                        fill=(255, 255, 255, 255))
+        # Base plate (x=3..16, y=17..19)
+        d.rectangle([s * 3, s * 17, s * 16, s * 19], fill=(0, 0, 0, 255))
+        return img
+
     def set_bindings(self, bindings: dict[str, list[str]]):
         """Update the displayed bindings and redraw."""
         self._bindings = dict(bindings)
+        self._redraw()
+
+    def set_show_borders(self, show: bool):
+        """Toggle visibility of shape outlines and redraw."""
+        self._show_borders = show
+        self._redraw()
+
+    def reset_label_positions(self):
+        """Clear all custom label positions and redraw at defaults."""
+        self._custom_label_pos.clear()
         self._redraw()
 
     def _on_resize(self, event):
         self._redraw()
 
     def _redraw(self):
-        """Redraw the entire canvas: image, lines, and binding boxes."""
+        """Redraw the entire canvas: image, shapes, lines, and binding boxes."""
         self._canvas.delete("all")
         self._box_items.clear()
+        self._line_items.clear()
+        self._shape_items.clear()
+        self._shape_map.clear()
+        self._hover_shape = None
+        self._rumble_label_icons.clear()
 
         canvas_w = self._canvas.winfo_width()
         canvas_h = self._canvas.winfo_height()
@@ -116,7 +253,7 @@ class ControllerCanvas(tk.Frame):
         avail_h = canvas_h - 40
 
         scale = min(avail_w / self._img_width, avail_h / self._img_height)
-        scale = min(scale, 1.5)  # Don't upscale too much
+        scale = min(scale, 1.5)
 
         new_w = int(self._img_width * scale)
         new_h = int(self._img_height * scale)
@@ -127,77 +264,151 @@ class ControllerCanvas(tk.Frame):
         # Center the image
         img_x = canvas_w // 2
         img_y = canvas_h // 2
-        self._canvas.create_image(img_x, img_y, image=self._tk_image, anchor=tk.CENTER)
+        self._bg_image_id = self._canvas.create_image(
+            img_x, img_y, image=self._tk_image, anchor=tk.CENTER)
 
-        # Calculate offset for coordinate mapping
-        self._offset_x = img_x - new_w // 2
-        self._offset_y = img_y - new_h // 2
-        self._scale = scale
+        # Store rendered image bounds for fractional coordinate mapping
+        self._img_left = img_x - new_w // 2
+        self._img_top = img_y - new_h // 2
+        self._rendered_w = new_w
+        self._rendered_h = new_h
+
+        # Draw button outlines on the controller
+        for shape in XBOX_SHAPES:
+            self._draw_shape(shape)
 
         # Draw lines and binding boxes for each input
         for inp in XBOX_INPUTS:
             self._draw_input(inp)
 
-    def _map_coord(self, svg_x: float, svg_y: float) -> tuple[float, float]:
-        """Map SVG-space coordinates to canvas-space."""
+        # Draw rumble icons below each rumble label box
+        self._draw_rumble_icons()
+
+        # Re-apply selection highlight after redraw
+        if self._selected_input and self._selected_input in self._line_items:
+            self._canvas.itemconfig(
+                self._line_items[self._selected_input],
+                fill=LINE_SELECTED_COLOR, width=2)
+
+    def _map_frac(self, frac_x: float, frac_y: float) -> tuple[float, float]:
+        """Map fractional image coordinates (0-1) to canvas pixel position."""
         return (
-            self._offset_x + svg_x * self._scale,
-            self._offset_y + svg_y * self._scale,
+            self._img_left + frac_x * self._rendered_w,
+            self._img_top + frac_y * self._rendered_h,
         )
 
-    def _map_label(self, inp: InputCoord, canvas_w: int, canvas_h: int) -> tuple[float, float]:
-        """Map label positions, placing them at canvas edges."""
-        # Labels on the left or right side
-        if inp.label_x < 372:
-            # Left side label
-            lx = 10
-        else:
-            # Right side label
-            lx = canvas_w - BOX_WIDTH - 10
+    def _unmap_to_img(self, cx: float, cy: float) -> tuple[int, int]:
+        """Convert canvas pixel position back to source image pixel coords."""
+        frac_x = (cx - self._img_left) / self._rendered_w if self._rendered_w else 0
+        frac_y = (cy - self._img_top) / self._rendered_h if self._rendered_h else 0
+        return int(frac_x * _IMG_W), int(frac_y * _IMG_H)
 
-        # Scale Y proportionally
-        ly = self._offset_y + inp.label_y * self._scale
-        # Clamp to canvas bounds
+    def _map_label(self, inp: InputCoord, canvas_w: int,
+                   canvas_h: int) -> tuple[float, float]:
+        """Map label positions.  Uses custom dragged position if available,
+        otherwise places at the left or right canvas edge."""
+        if inp.name in self._custom_label_pos:
+            img_x, img_y = self._custom_label_pos[inp.name]
+            lx = self._img_left + (img_x / _IMG_W) * self._rendered_w
+            ly = self._img_top + (img_y / _IMG_H) * self._rendered_h
+            lx = max(5, min(lx, canvas_w - BOX_WIDTH - 5))
+            ly = max(5, min(ly, canvas_h - BOX_HEIGHT - 5))
+            return lx, ly
+
+        lx = self._img_left + inp.label_x * self._rendered_w
+        ly = self._img_top + inp.label_y * self._rendered_h
+        lx = max(5, min(lx, canvas_w - BOX_WIDTH - 5))
         ly = max(5, min(ly, canvas_h - BOX_HEIGHT - 5))
         return lx, ly
+
+    # --- Rumble icons ---
+
+    def _draw_rumble_icons(self):
+        """Draw a rumble icon on the controller at each rumble anchor."""
+        from .layout_coords import XBOX_INPUT_MAP
+        if not self._rumble_base_image:
+            return
+        icon_size = BOX_WIDTH // 4
+        resized = self._rumble_base_image.resize(
+            (icon_size, icon_size), Image.LANCZOS)
+
+        for name in ["rumble_left", "rumble_both", "rumble_right"]:
+            inp = XBOX_INPUT_MAP.get(name)
+            if not inp:
+                continue
+            cx, cy = self._map_frac(inp.anchor_x, inp.anchor_y)
+            tk_icon = ImageTk.PhotoImage(resized)
+            self._rumble_label_icons.append(tk_icon)
+            self._canvas.create_image(
+                cx, cy, image=tk_icon, anchor=tk.CENTER)
+
+    # --- Shape drawing ---
+
+    def _draw_shape(self, shape: ButtonShape):
+        """Draw a bold outline on the controller for a button/stick/trigger."""
+        cx, cy = self._map_frac(shape.center_x, shape.center_y)
+        hw = shape.width * self._rendered_w / 2
+        hh = shape.height * self._rendered_h / 2
+
+        outline = SHAPE_OUTLINE_COLOR if self._show_borders else ""
+        width = SHAPE_OUTLINE_WIDTH if self._show_borders else 0
+
+        if shape.shape == "circle":
+            item = self._canvas.create_oval(
+                cx - hw, cy - hh, cx + hw, cy + hh,
+                outline=outline, width=width,
+                fill="",
+            )
+        elif shape.shape == "pill":
+            # Rounded rectangle approximation using an oval
+            item = self._canvas.create_oval(
+                cx - hw, cy - hh, cx + hw, cy + hh,
+                outline=outline, width=width,
+                fill="",
+            )
+        else:  # rect
+            item = self._canvas.create_rectangle(
+                cx - hw, cy - hh, cx + hw, cy + hh,
+                outline=outline, width=width,
+                fill="",
+            )
+
+        self._shape_items[shape.name] = item
+        self._shape_map[shape.name] = shape
+
+    # --- Binding box drawing ---
 
     def _draw_input(self, inp: InputCoord):
         """Draw a single input's leader line and binding box."""
         canvas_w = self._canvas.winfo_width()
         canvas_h = self._canvas.winfo_height()
 
-        # Anchor point on the controller
-        ax, ay = self._map_coord(inp.anchor_x, inp.anchor_y)
-        # Label position at canvas edge
+        ax, ay = self._map_frac(inp.anchor_x, inp.anchor_y)
         lx, ly = self._map_label(inp, canvas_w, canvas_h)
 
-        # Box center for line endpoint
         box_cx = lx + BOX_WIDTH / 2
         box_cy = ly + BOX_HEIGHT / 2
 
-        # Draw leader line
-        self._canvas.create_line(
+        # Leader line (solid)
+        line_id = self._canvas.create_line(
             ax, ay, box_cx, box_cy,
-            fill=LINE_COLOR, width=1, dash=(4, 2),
+            fill=LINE_COLOR, width=1,
         )
+        self._line_items[inp.name] = line_id
 
-        # Get assigned actions
+        # Assigned actions
         actions = self._bindings.get(inp.name, [])
         has_actions = len(actions) > 0
-
-        # Determine box style
         fill = BOX_FILL_ASSIGNED if has_actions else BOX_FILL
+        total_height = (max(BOX_HEIGHT, BOX_HEIGHT + (len(actions) - 1) * 16)
+                        if has_actions else BOX_HEIGHT)
 
-        # Calculate box height based on number of actions
-        total_height = max(BOX_HEIGHT, BOX_HEIGHT + (len(actions) - 1) * 16) if has_actions else BOX_HEIGHT
-
-        # Draw box background
+        # Box background
         box_id = self._canvas.create_rectangle(
             lx, ly, lx + BOX_WIDTH, ly + total_height,
             fill=fill, outline=BOX_OUTLINE, width=1,
         )
 
-        # Draw axis indicator for stick inputs
         axis_tag = None
         if inp.name.endswith("_x"):
             axis_tag = "X"
@@ -206,21 +417,17 @@ class ControllerCanvas(tk.Frame):
 
         items = [box_id]
 
-        # Draw input label (small, at top of box)
-        label = inp.display_name
-        if axis_tag:
-            label_color = AXIS_INDICATOR_COLORS[axis_tag]
-        else:
-            label_color = "#555555"
-
+        # Input label
+        label_color = (AXIS_INDICATOR_COLORS[axis_tag]
+                       if axis_tag else "#555555")
         label_id = self._canvas.create_text(
             lx + BOX_PAD, ly + 2,
-            text=label, anchor=tk.NW,
+            text=inp.display_name, anchor=tk.NW,
             font=("Arial", 7), fill=label_color,
         )
         items.append(label_id)
 
-        # Draw action names or unassigned text
+        # Action names or unassigned text
         if has_actions:
             for i, action in enumerate(actions):
                 txt_id = self._canvas.create_text(
@@ -239,12 +446,14 @@ class ControllerCanvas(tk.Frame):
 
         self._box_items[inp.name] = items
 
-    def _hit_test(self, x: float, y: float) -> str | None:
-        """Return the input name if (x, y) is inside a binding box."""
+    # --- Hit testing ---
+
+    def _hit_test_box(self, x: float, y: float) -> str | None:
+        """Return input name if (x, y) is inside a binding box."""
         for name, item_ids in self._box_items.items():
             if not item_ids:
                 continue
-            box_id = item_ids[0]  # First item is the rectangle
+            box_id = item_ids[0]
             coords = self._canvas.coords(box_id)
             if len(coords) == 4:
                 x1, y1, x2, y2 = coords
@@ -252,31 +461,367 @@ class ControllerCanvas(tk.Frame):
                     return name
         return None
 
+    def _hit_test_shape(self, x: float, y: float) -> ButtonShape | None:
+        """Return the ButtonShape if (x, y) is inside a controller outline."""
+        for shape_name, item_id in self._shape_items.items():
+            coords = self._canvas.coords(item_id)
+            if len(coords) == 4:
+                x1, y1, x2, y2 = coords
+                shape = self._shape_map[shape_name]
+                if shape.shape == "circle":
+                    # Ellipse hit test
+                    cx = (x1 + x2) / 2
+                    cy = (y1 + y2) / 2
+                    rx = (x2 - x1) / 2
+                    ry = (y2 - y1) / 2
+                    if rx > 0 and ry > 0:
+                        if ((x - cx) ** 2 / rx ** 2
+                                + (y - cy) ** 2 / ry ** 2) <= 1:
+                            return shape
+                else:
+                    if x1 <= x <= x2 and y1 <= y <= y2:
+                        return shape
+        return None
+
+    # --- Selection ---
+
+    def clear_selection(self):
+        """Clear the selected input, restoring line to default color."""
+        self._select_input(None)
+
+    def _select_input(self, name: str | None):
+        """Set the selected input, updating line colors."""
+        # Deselect previous
+        if (self._selected_input
+                and self._selected_input in self._line_items):
+            self._canvas.itemconfig(
+                self._line_items[self._selected_input],
+                fill=LINE_COLOR, width=1)
+        # Select new
+        self._selected_input = name
+        if name and name in self._line_items:
+            line_id = self._line_items[name]
+            self._canvas.itemconfig(
+                line_id, fill=LINE_SELECTED_COLOR, width=2)
+            # Ensure line is visible above the background image
+            if hasattr(self, '_bg_image_id'):
+                self._canvas.tag_raise(line_id, self._bg_image_id)
+
+    # --- Drag helpers ---
+
+    def _move_box(self, name: str, dx: float, dy: float):
+        """Move all canvas items for a binding box by (dx, dy)."""
+        for item_id in self._box_items.get(name, []):
+            self._canvas.move(item_id, dx, dy)
+
+    def _update_line_for_box(self, name: str):
+        """Recreate the leader line to the current box center position."""
+        if name not in self._line_items or name not in self._box_items:
+            return
+        from .layout_coords import XBOX_INPUT_MAP
+        inp = XBOX_INPUT_MAP.get(name)
+        if not inp:
+            return
+
+        # Anchor point on the controller image
+        ax, ay = self._map_frac(inp.anchor_x, inp.anchor_y)
+
+        # Current box center
+        box_coords = self._canvas.coords(self._box_items[name][0])
+        if len(box_coords) != 4:
+            return
+        box_cx = (box_coords[0] + box_coords[2]) / 2
+        box_cy = (box_coords[1] + box_coords[3]) / 2
+
+        # Delete old line and create new
+        old_line = self._line_items[name]
+        self._canvas.delete(old_line)
+
+        is_selected = (name == self._selected_input)
+        color = LINE_SELECTED_COLOR if is_selected else LINE_COLOR
+        width = 2 if is_selected else 1
+
+        new_line = self._canvas.create_line(
+            ax, ay, box_cx, box_cy,
+            fill=color, width=width,
+        )
+        self._line_items[name] = new_line
+        # Place line above the background image but below boxes/shapes
+        self._canvas.tag_raise(new_line, self._bg_image_id)
+
+    # --- Tooltip ---
+
+    @staticmethod
+    def _input_description(inp: InputCoord) -> str:
+        """Build a one-line type description for an input."""
+        if inp.input_type == "axis":
+            if inp.name.endswith("_x"):
+                return "X Axis float [-1 (Left), 1 (Right)]"
+            elif inp.name.endswith("_y"):
+                return "Y Axis float [-1 (Up), 1 (Down)]"
+            else:
+                return "Axis float [0 (Released), 1 (Pressed)]"
+        elif inp.input_type == "pov":
+            pov_degrees = {
+                "pov_up": 0, "pov_up_right": 45,
+                "pov_right": 90, "pov_down_right": 135,
+                "pov_down": 180, "pov_down_left": 225,
+                "pov_left": 270, "pov_up_left": 315,
+            }
+            deg = pov_degrees.get(inp.name, "?")
+            return f"POV [{deg}\u00b0, Boolean]"
+        elif inp.input_type == "output":
+            return "Output float [0.0 (Off), 1.0 (Max)]"
+        else:
+            return "Button [Boolean]"
+
+    def _build_tooltip_text(self, shape: ButtonShape) -> str:
+        """Build multi-line tooltip text for a controller shape."""
+        from .layout_coords import XBOX_INPUT_MAP
+
+        # Title from the shape's first input's common name
+        title_map = {
+            "ls": "Left Analog Stick", "rs": "Right Analog Stick",
+            "lt": "Left Trigger", "rt": "Right Trigger",
+            "lb": "Left Bumper", "rb": "Right Bumper",
+            "a": "A Button", "b": "B Button",
+            "x": "X Button", "y": "Y Button",
+            "back": "Back Button", "start": "Start Button",
+            "dpad": "D-Pad",
+            "rumble_l": "Left Rumble", "rumble_b": "Both Rumble",
+            "rumble_r": "Right Rumble",
+        }
+        title = title_map.get(shape.name, shape.name)
+        lines = [title]
+        for input_name in shape.inputs:
+            inp = XBOX_INPUT_MAP.get(input_name)
+            if inp:
+                lines.append(f"  {inp.display_name}: {self._input_description(inp)}")
+        return "\n".join(lines)
+
+    def _show_tooltip(self, x_root: int, y_root: int, text: str):
+        """Show or update the tooltip near the cursor."""
+        if self._tooltip:
+            label = self._tooltip.winfo_children()[0]
+            label.config(text=text)
+            self._tooltip.geometry(f"+{x_root + 15}+{y_root + 10}")
+            self._tooltip.deiconify()
+            return
+
+        self._tooltip = tw = tk.Toplevel(self)
+        tw.wm_overrideredirect(True)
+        tw.wm_geometry(f"+{x_root + 15}+{y_root + 10}")
+        tw.attributes("-topmost", True)
+        label = tk.Label(
+            tw, text=text, justify=tk.LEFT,
+            background="#ffffe0", foreground="#222222",
+            relief=tk.SOLID, borderwidth=1,
+            font=("Arial", 9), padx=6, pady=4,
+        )
+        label.pack()
+
+    def _hide_tooltip(self):
+        """Hide the tooltip."""
+        if self._tooltip:
+            self._tooltip.withdraw()
+
+    # --- Event handlers ---
+
     def _on_mouse_move(self, event):
-        """Highlight binding box on hover."""
-        hit = self._hit_test(event.x, event.y)
-        if hit != self._hover_input:
-            # Unhighlight previous
+        """Highlight binding boxes and controller shapes on hover."""
+        # Skip hover highlighting while dragging
+        if self._dragging:
+            return
+
+        # Check binding boxes first (they're on top)
+        box_hit = self._hit_test_box(event.x, event.y)
+        shape_hit = self._hit_test_shape(event.x, event.y)
+
+        # Update binding box highlight
+        if box_hit != self._hover_input:
+            # Unhighlight previous hover box
             if self._hover_input and self._hover_input in self._box_items:
                 items = self._box_items[self._hover_input]
                 if items:
-                    has_actions = bool(self._bindings.get(self._hover_input))
+                    has_actions = bool(
+                        self._bindings.get(self._hover_input))
                     fill = BOX_FILL_ASSIGNED if has_actions else BOX_FILL
                     self._canvas.itemconfig(items[0], fill=fill)
+                # Restore line color unless this input is selected
+                if (self._hover_input != self._selected_input
+                        and self._hover_input in self._line_items):
+                    self._canvas.itemconfig(
+                        self._line_items[self._hover_input],
+                        fill=LINE_COLOR, width=1)
 
-            # Highlight current
-            if hit and hit in self._box_items:
-                items = self._box_items[hit]
+            # Highlight new hover box
+            if box_hit and box_hit in self._box_items:
+                items = self._box_items[box_hit]
                 if items:
                     self._canvas.itemconfig(items[0], fill=BOX_FILL_HOVER)
-                self._canvas.config(cursor="hand2")
+                # Turn line red on hover
+                if box_hit in self._line_items:
+                    self._canvas.itemconfig(
+                        self._line_items[box_hit],
+                        fill=LINE_SELECTED_COLOR, width=2)
+
+            self._hover_input = box_hit
+
+            # Notify parent of hovered input change
+            if self._on_hover_input:
+                self._on_hover_input(box_hit)
+
+        # Update shape highlight
+        new_shape_name = shape_hit.name if shape_hit else None
+        if new_shape_name != self._hover_shape:
+            # Unhighlight previous shape
+            if self._hover_shape and self._hover_shape in self._shape_items:
+                item_id = self._shape_items[self._hover_shape]
+                rest_outline = SHAPE_OUTLINE_COLOR if self._show_borders else ""
+                rest_width = SHAPE_OUTLINE_WIDTH if self._show_borders else 0
+                self._canvas.itemconfig(
+                    item_id, outline=rest_outline, width=rest_width)
+
+            # Highlight new shape (always show on hover)
+            if new_shape_name and new_shape_name in self._shape_items:
+                item_id = self._shape_items[new_shape_name]
+                self._canvas.itemconfig(
+                    item_id, outline="#2266aa", width=SHAPE_OUTLINE_WIDTH + 1.5)
+
+            self._hover_shape = new_shape_name
+
+            # Notify parent of hovered shape change
+            if self._on_hover_shape:
+                if shape_hit:
+                    self._on_hover_shape(list(shape_hit.inputs))
+                else:
+                    self._on_hover_shape(None)
+
+        # Tooltip for shapes
+        if shape_hit and not box_hit:
+            text = self._build_tooltip_text(shape_hit)
+            self._show_tooltip(event.x_root, event.y_root, text)
+        else:
+            self._hide_tooltip()
+
+        # Cursor
+        if box_hit or shape_hit:
+            self._canvas.config(cursor="hand2")
+        else:
+            self._canvas.config(cursor="")
+
+        # Report image-space coordinates to parent
+        if self._on_mouse_coord and hasattr(self, '_rendered_w'):
+            img_x, img_y = self._unmap_to_img(event.x, event.y)
+            self._on_mouse_coord(img_x, img_y)
+
+    def _on_leave(self, event):
+        """Hide tooltip when the cursor leaves the canvas."""
+        self._hide_tooltip()
+
+    def _on_press(self, event):
+        """Handle mouse button press — start potential drag or shape click."""
+        box_hit = self._hit_test_box(event.x, event.y)
+        if box_hit:
+            self._dragging = box_hit
+            self._drag_start = (event.x, event.y)
+            self._did_drag = False
+            self._select_input(box_hit)
+            return
+
+        # If not on a box, clear drag state
+        self._dragging = None
+        self._did_drag = False
+
+    def _on_drag(self, event):
+        """Handle mouse drag — move binding box if dragging."""
+        if not self._dragging:
+            return
+
+        dx = event.x - self._drag_start[0]
+        dy = event.y - self._drag_start[1]
+
+        if not self._did_drag:
+            dist = math.hypot(dx, dy)
+            if dist < _DRAG_THRESHOLD:
+                return
+            self._did_drag = True
+            self._canvas.config(cursor="fleur")
+
+        # Move the box items
+        self._move_box(self._dragging, dx, dy)
+        self._update_line_for_box(self._dragging)
+
+        self._drag_start = (event.x, event.y)
+
+    def _on_release(self, event):
+        """Handle mouse button release — finish drag or fire click."""
+        name = self._dragging
+        self._dragging = None
+
+        if name and self._did_drag:
+            # Drag finished — save position
+            box_items = self._box_items.get(name, [])
+            if box_items:
+                coords = self._canvas.coords(box_items[0])
+                if len(coords) == 4:
+                    lx, ly = coords[0], coords[1]
+                    img_x, img_y = self._unmap_to_img(lx, ly)
+                    self._custom_label_pos[name] = (img_x, img_y)
+                    if self._on_label_moved:
+                        self._on_label_moved(name, img_x, img_y)
+            self._canvas.config(cursor="hand2")
+            self._did_drag = False
+            return
+
+        self._did_drag = False
+
+        # Was a click (no drag) — handle binding click or shape click
+        if name:
+            # Clicked on a binding box
+            if self._on_binding_click:
+                self._on_binding_click(name)
+            return
+
+        # Check shapes (click wasn't on a box)
+        shape_hit = self._hit_test_shape(event.x, event.y)
+        if shape_hit and self._on_binding_click:
+            if len(shape_hit.inputs) == 1:
+                self._select_input(shape_hit.inputs[0])
+                self._on_binding_click(shape_hit.inputs[0])
             else:
-                self._canvas.config(cursor="")
+                self._show_input_menu(event, shape_hit)
 
-            self._hover_input = hit
+    def _on_right_click(self, event):
+        """Show a context menu with Clear Assignment on right-click."""
+        box_hit = self._hit_test_box(event.x, event.y)
+        if not box_hit:
+            return
 
-    def _on_click(self, event):
-        """Handle click on a binding box."""
-        hit = self._hit_test(event.x, event.y)
-        if hit and self._on_binding_click:
-            self._on_binding_click(hit)
+        self._select_input(box_hit)
+        has_actions = bool(self._bindings.get(box_hit))
+
+        menu = tk.Menu(self._canvas, tearoff=0)
+        menu.add_command(
+            label="Clear Assignment",
+            state=tk.NORMAL if has_actions else tk.DISABLED,
+            command=lambda n=box_hit: self._on_binding_clear(n)
+                    if self._on_binding_clear else None,
+        )
+        menu.tk_popup(event.x_root, event.y_root)
+
+    def _show_input_menu(self, event, shape: ButtonShape):
+        """Show a context menu to pick which input to configure
+        when a shape maps to multiple inputs (e.g., stick X/Y/button)."""
+        from .layout_coords import XBOX_INPUT_MAP
+
+        menu = tk.Menu(self._canvas, tearoff=0)
+        for input_name in shape.inputs:
+            inp = XBOX_INPUT_MAP.get(input_name)
+            display = inp.display_name if inp else input_name
+            # Capture input_name in the lambda default arg
+            menu.add_command(
+                label=display,
+                command=lambda n=input_name: self._on_binding_click(n),
+            )
+        menu.tk_popup(event.x_root, event.y_root)

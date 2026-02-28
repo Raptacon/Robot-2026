@@ -24,6 +24,7 @@ class InputType(Enum):
     BUTTON = "button"
     AXIS = "axis"
     POV = "pov"
+    OUTPUT = "output"
 
 
 @dataclass
