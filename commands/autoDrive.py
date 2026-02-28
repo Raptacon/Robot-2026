@@ -4,7 +4,7 @@ import wpilib
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
 from wpimath.geometry import Pose2d, Transform2d
 
-class AutoDrive(commands2.CommandBase):
+class AutoDrive(commands2.Command):
     targetPos = Pose2d()
     tolerance = Transform2d(0.5, 0.5, 0)
     def __init__(self, timeS: float, speedX: float, speedY: float, dir: float, fieldRel: bool, drive: SwerveDrivetrain) -> None:
