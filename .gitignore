@@ -151,3 +151,9 @@ tests/logs
 
 # Host tool user settings
 host/controller_config/.settings.json
+
+# Claude Code local settings
+.claude/
+
+# NetworkTables backup
+networktables.json.bck
