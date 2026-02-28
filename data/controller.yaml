@@ -1,0 +1,12 @@
+actions:
+  fire_shooter:
+    description: Fire the Shooter
+    trigger_mode: while_true
+controllers:
+  0:
+    name: Driver
+    bindings:
+      x_button:
+      - fire_shooter
+  1:
+    name: Operator
