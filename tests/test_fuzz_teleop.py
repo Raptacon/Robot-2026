@@ -301,11 +301,13 @@ def _run_fuzz(
         if not skip_auto:
             control.step_timing(seconds=1.0, autonomous=True, enabled=True)
 
-        # Transition to teleop
+        # Transition to teleop — we use raw stepTiming here (and in the fuzz
+        # loop below) instead of control.step_timing because we need per-tick
+        # control to inject different random inputs each cycle. control.step_timing
+        # steps multiple ticks at once with no per-tick callback.
         DriverStationSim.setAutonomous(False)
         DriverStationSim.setEnabled(True)
         DriverStationSim.notifyNewData()
-        # Let teleopInit run
         wpilib.simulation.stepTiming(_STEP_PERIOD)
 
         # Phase 3: Teleop fuzz
