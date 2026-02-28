@@ -208,6 +208,39 @@ Each test uses a **seed number** so the "random" inputs are the same every time.
 - `test_fuzz_teleop_all_extremes` - Only uses boundary stick values (-1, 0, +1)
 - `test_fuzz_teleop_long` - Thorough 5000-cycle test (runs in CI)
 
+# Host Tools
+
+## Controller Configuration GUI
+
+A tkinter-based GUI tool for visually configuring Xbox controller bindings for the robot. Define named actions with metadata (deadbands, inversions, trigger modes) and map them to controller inputs via a visual controller diagram. Configs are saved/loaded as YAML.
+
+### Dependencies
+
+```bash
+pip install -r host/requirements.txt
+```
+
+Note: For crisp SVG rendering, the native [Cairo](https://www.cairographics.org/download/) library must be installed on your system. Without it, the tool falls back to the pre-rendered PNG image.
+
+### Running
+
+```bash
+# Launch with a blank config (two default controllers: Driver and Operator)
+python -m host.controller_config
+
+# Open an existing config file
+python -m host.controller_config path/to/config.yaml
+```
+
+### Usage
+
+1. **Define actions** in the left panel (Add button) - set name, input type (button/axis/pov), trigger mode, deadband, inversion, scale
+2. **Assign actions** by clicking binding boxes on the controller diagram - each input can have multiple actions
+3. **Switch controllers** using the tabs (Driver/Operator) - add/remove controllers as needed
+4. **Save/Load** via File menu or Ctrl+S / Ctrl+O
+
+The config YAML is saved to a location of your choice and will later be consumed by robot code via the shared parser in `utils/controller/`.
+
 # Information
 
 ## Deployed Robot Version

@@ -148,3 +148,6 @@ setup_.venv_windows
 logs/
 tests/logs
 **/ctre_sim/
+
+# Host tool user settings
+host/controller_config/.settings.json
