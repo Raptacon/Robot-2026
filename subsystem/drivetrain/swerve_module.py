@@ -3,7 +3,7 @@ from typing import Tuple
 
 # Internal imports
 from config import OperatorRobotConfig
-from constants import SwerveModuleMk4iConsts, SwerveModuleMk4iL2Consts
+from constants import RobotConstants, SwerveModuleMk4iConsts, SwerveModuleMk4iL2Consts
 
 # Third-party imports
 import phoenix6
@@ -105,7 +105,7 @@ class SwerveModuleMk4iSparkMaxNeoCanCoder(Subsystem):
         invert_steer: bool = False,
         encoder_calibration: float = 0,
         swerve_level_constants: SwerveModuleMk4iConsts=SwerveModuleMk4iL2Consts(),
-        update_period: float = 0.05
+        update_period: float = RobotConstants.kPeriodicPeriodSec
     ) -> None:
         """
         Creates a new swerve module at a given location in the robot.

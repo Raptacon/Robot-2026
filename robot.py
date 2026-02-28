@@ -4,6 +4,7 @@ import typing
 import inspect
 import commands2
 
+from constants import RobotConstants
 from robotswerve import RobotSwerve
 from utils.deploy_info import publish_deploy_info
 import wpilib
@@ -16,8 +17,7 @@ class MyRobot(commands2.TimedCommandRobot):
     has an implementation of (self) -> None:
     which runs the scheduler for you
     """
-    # 50 ms default period
-    kDefaultPeriod: typing.ClassVar[float] = 50.0
+    kDefaultPeriod: typing.ClassVar[float] = RobotConstants.kPeriodicPeriodSec * 1000
     autonomousCommand: typing.Optional[commands2.Command] = None
 
     def __init__(self) -> None:
@@ -25,8 +25,13 @@ class MyRobot(commands2.TimedCommandRobot):
         self.__errorLogged = False
         self.__lastError = None
         self.__errorCatchedCount = 0
+        self.__loopOverrunAlert = wpilib.Alert(
+            "Loop overrun", wpilib.Alert.AlertType.kWarning
+        )
+        self.__loopOverrunCount = 0
+        self.__loopTimer = wpilib.Timer()
+        self.__loopTimer.start()
 
-        # setup our scheduling period. Defaulting to 20 Hz (50 ms)
         super().__init__(period=MyRobot.kDefaultPeriod / 1000)
         # Instantiate our RobotContainer. This will perform all our button bindings, and put our
         # autonomous chooser on the dashboard.
@@ -45,7 +50,19 @@ class MyRobot(commands2.TimedCommandRobot):
     def robotPeriodic(self) -> None:
         self.__callAndCatch(self.container.robotPeriodic)
 
+        period = RobotConstants.kPeriodicPeriodSec
+        overran = self.__loopTimer.hasElapsed(period)
+        if overran:
+            self.__loopOverrunCount += 1
+            logging.warning(
+                "Loop overrun: %.1f ms elapsed (limit %.1f ms)",
+                self.__loopTimer.get() * 1000, period * 1000
+            )
+        self.__loopOverrunAlert.set(overran)
+        self.__loopTimer.reset()
+
         wpilib.SmartDashboard.putNumber("Code Crash Count", self.__errorCatchedCount)
+        wpilib.SmartDashboard.putNumber("Loop Overrun Count", self.__loopOverrunCount)
 
     def disabledInit(self) -> None:
         """This function is called once each time the robot enters Disabled mode."""
