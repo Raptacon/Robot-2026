@@ -73,8 +73,43 @@ def main():
             sys.exit(1)
     else:
         # GUI mode
+        import signal
+        import tempfile
+        from utils.controller.config_io import save_config
         from host.controller_config.app import ControllerConfigApp
+
         app = ControllerConfigApp(initial_file=args.config_file)
+
+        def _sigint_handler(sig, frame):
+            """Handle Ctrl+C: save unsaved work to temp file and exit."""
+            if app._dirty:
+                try:
+                    app._sync_config_from_ui()
+                    tmp = tempfile.NamedTemporaryFile(
+                        prefix="controller_config_recovery_",
+                        suffix=".yaml",
+                        delete=False,
+                    )
+                    tmp.close()
+                    save_config(app._config, tmp.name)
+                    print(f"\nUnsaved changes saved to: {tmp.name}",
+                          file=sys.stderr)
+                except Exception as e:
+                    print(f"\nFailed to save recovery file: {e}",
+                          file=sys.stderr)
+            else:
+                print("\nNo unsaved changes.", file=sys.stderr)
+            app.destroy()
+            sys.exit(0)
+
+        signal.signal(signal.SIGINT, _sigint_handler)
+
+        # Tkinter mainloop blocks Python signal handling on Windows.
+        # Periodic after() calls let the interpreter check for signals.
+        def _poll_signals():
+            app.after(500, _poll_signals)
+        app.after(500, _poll_signals)
+
         app.mainloop()
 
 

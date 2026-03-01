@@ -32,6 +32,10 @@ controllers:
     bindings:
       rumble_both:
       - drivetrain.plade
+      right_stick_y:
+      - drivetrain.rotation
+      left_stick_y:
+      - drivetrain.speed
   1:
     name: Operator
     bindings:
@@ -41,3 +45,5 @@ controllers:
       - intake.manual
       a_button:
       - intake.run
+      left_bumper:
+      - intake.deploy

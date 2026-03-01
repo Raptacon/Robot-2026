@@ -266,6 +266,13 @@ class ControllerConfigApp(tk.Tk):
             on_drag_start=self._on_drag_start,
             on_drag_end=self._on_drag_end,
             on_before_change=self._on_before_action_change,
+            get_binding_info=self._get_binding_info_for_action,
+            on_assign_action=self._context_assign_action,
+            on_unassign_action=self._context_unassign_action,
+            on_unassign_all=self._context_unassign_all,
+            get_all_controllers=self._get_all_controllers,
+            get_compatible_inputs=self._get_compatible_inputs_with_display,
+            is_action_bound=self._is_action_bound_to,
         )
         self._paned.add(self._action_panel, weight=0)
 
@@ -426,6 +433,7 @@ class ControllerConfigApp(tk.Tk):
     def _mark_dirty(self):
         self._dirty = True
         self._update_title()
+        self._action_panel.update_binding_tags()
 
     # --- Undo / Redo ---
 
@@ -825,6 +833,75 @@ class ControllerConfigApp(tk.Tk):
             if allowed is None or action_def.input_type in allowed:
                 compatible.add(inp.name)
         return compatible
+
+    def _get_binding_info_for_action(self, qname: str) -> list[tuple[str, str]]:
+        """Return list of (controller_name, input_display) for an action.
+
+        Used by ActionPanel for tooltips and color-coding.
+        """
+        result = []
+        for port, ctrl in self._config.controllers.items():
+            ctrl_label = ctrl.name or f"Controller {port}"
+            for input_name, actions in ctrl.bindings.items():
+                if qname in actions:
+                    inp = XBOX_INPUT_MAP.get(input_name)
+                    display = inp.display_name if inp else input_name
+                    result.append((ctrl_label, display))
+        return result
+
+    def _get_all_controllers(self) -> list[tuple[int, str]]:
+        """Return list of (port, controller_name) for the context menu."""
+        return [
+            (port, ctrl.name or f"Controller {port}")
+            for port, ctrl in sorted(self._config.controllers.items())
+        ]
+
+    def _get_compatible_inputs_with_display(
+            self, qname: str) -> list[tuple[str, str]]:
+        """Return list of (input_name, display_name) compatible with action."""
+        compatible_names = self._get_compatible_inputs(qname)
+        result = []
+        for inp in XBOX_INPUT_MAP.values():
+            if inp.name in compatible_names:
+                result.append((inp.name, inp.display_name))
+        return result
+
+    def _is_action_bound_to(self, qname: str, port: int,
+                            input_name: str) -> bool:
+        """Check if action is bound to a specific input on a controller."""
+        ctrl = self._config.controllers.get(port)
+        if not ctrl:
+            return False
+        return qname in ctrl.bindings.get(input_name, [])
+
+    def _context_assign_action(self, qname: str, port: int,
+                               input_name: str):
+        """Assign an action to an input from the context menu."""
+        self._bind_dropped_action(port, input_name, qname)
+
+    def _context_unassign_action(self, qname: str, port: int,
+                                 input_name: str):
+        """Unassign an action from an input via the context menu."""
+        self._on_action_remove(port, input_name, qname)
+
+    def _context_unassign_all(self, qname: str):
+        """Remove an action from all inputs on all controllers."""
+        self._push_undo()
+        changed = False
+        for port, ctrl in self._config.controllers.items():
+            for input_name in list(ctrl.bindings.keys()):
+                actions = ctrl.bindings[input_name]
+                if qname in actions:
+                    actions.remove(qname)
+                    changed = True
+                    if not actions:
+                        del ctrl.bindings[input_name]
+            canvas = self._controller_canvases.get(port)
+            if canvas:
+                canvas.set_bindings(ctrl.bindings)
+        if changed:
+            self._mark_dirty()
+            self._status_var.set(f"Removed {qname} from all inputs")
 
     def _bind_dropped_action(self, port: int, input_name: str, action: str):
         """Add an action binding from a drag-and-drop, preventing duplicates."""

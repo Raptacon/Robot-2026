@@ -143,7 +143,10 @@ class ActionPanel(tk.Frame):
 
     def __init__(self, parent, on_actions_changed=None, on_export_group=None,
                  on_drag_start=None, on_drag_end=None,
-                 on_before_change=None):
+                 on_before_change=None, get_binding_info=None,
+                 on_assign_action=None, on_unassign_action=None,
+                 on_unassign_all=None, get_all_controllers=None,
+                 get_compatible_inputs=None, is_action_bound=None):
         """
         Args:
             parent: tkinter parent widget
@@ -153,6 +156,15 @@ class ActionPanel(tk.Frame):
             on_drag_end: callback() when a drag ends (release)
             on_before_change: callback(coalesce_ms) called BEFORE any mutation,
                 giving the app a chance to snapshot state for undo
+            get_binding_info: callback(qname) -> list[(ctrl_name, input_display)]
+                returns where an action is bound, or empty list if unbound
+            on_assign_action: callback(qname, port, input_name) to bind action
+            on_unassign_action: callback(qname, port, input_name) to unbind action
+            on_unassign_all: callback(qname) to remove action from all inputs
+            get_all_controllers: callback() -> list[(port, ctrl_name)]
+            get_compatible_inputs: callback(qname) ->
+                list[(input_name, display_name)] of compatible inputs
+            is_action_bound: callback(qname, port, input_name) -> bool
         """
         super().__init__(parent, padx=5, pady=5)
         self._on_actions_changed = on_actions_changed
@@ -160,6 +172,13 @@ class ActionPanel(tk.Frame):
         self._on_before_change = on_before_change
         self._on_drag_start = on_drag_start
         self._on_drag_end = on_drag_end
+        self._get_binding_info = get_binding_info
+        self._on_assign_action = on_assign_action
+        self._on_unassign_action = on_unassign_action
+        self._on_unassign_all = on_unassign_all
+        self._get_all_controllers = get_all_controllers
+        self._get_compatible_inputs = get_compatible_inputs
+        self._is_action_bound_cb = is_action_bound
         self._actions: dict[str, ActionDefinition] = {}
         self._empty_groups: set[str] = set()
         self._selected_name: str | None = None
@@ -439,6 +458,39 @@ class ActionPanel(tk.Frame):
         # Style rows
         self._tree.tag_configure("group", font=("TkDefaultFont", 9, "bold"))
         self._tree.tag_configure("action", font=("TkDefaultFont", 9))
+
+        self.update_binding_tags()
+
+    def update_binding_tags(self):
+        """Update action item background colors based on binding status.
+
+        Called after bindings change (drag-drop, dialog, undo, file load).
+        - Unassigned actions get a faint red background.
+        - Actions bound to more than one input get a faint yellow background.
+        """
+        self._tree.tag_configure("unassigned",
+                                 background="#ffdddd",
+                                 font=("TkDefaultFont", 9))
+        self._tree.tag_configure("multi_bound",
+                                 background="#ffffcc",
+                                 font=("TkDefaultFont", 9))
+        self._tree.tag_configure("action",
+                                 background="",
+                                 font=("TkDefaultFont", 9))
+
+        if not self._get_binding_info:
+            return
+
+        for qname in self._actions:
+            if not self._tree.exists(qname):
+                continue
+            bindings = self._get_binding_info(qname)
+            if not bindings:
+                self._tree.item(qname, tags=("unassigned",))
+            elif len(bindings) > 1:
+                self._tree.item(qname, tags=("multi_bound",))
+            else:
+                self._tree.item(qname, tags=("action",))
 
     # ------------------------------------------------------------------
     # Selection Handling
@@ -837,11 +889,94 @@ class ActionPanel(tk.Frame):
     # ------------------------------------------------------------------
 
     def _on_right_click(self, event):
-        """Show context menu on right-click over a group node."""
+        """Show context menu on right-click."""
         item = self._tree.identify_row(event.y)
-        if item and item.startswith(self._GROUP_PREFIX):
+        if not item:
+            return
+        if item.startswith(self._GROUP_PREFIX):
             self._tree.selection_set(item)
             self._context_menu.post(event.x_root, event.y_root)
+        elif item in self._actions:
+            self._tree.selection_set(item)
+            self._show_action_context_menu(event, item)
+
+    def _show_action_context_menu(self, event, qname: str):
+        """Build and show a context menu for an action item.
+
+        Shows each controller as a submenu with its compatible inputs.
+        Bound inputs have a checkmark and clicking unassigns them.
+        Unbound inputs are plain and clicking assigns them.
+        """
+        if not (self._get_all_controllers and self._get_compatible_inputs):
+            return
+
+        controllers = self._get_all_controllers()
+        compatible = self._get_compatible_inputs(qname)
+
+        menu = tk.Menu(self, tearoff=0)
+        has_any_binding = False
+
+        for port, ctrl_name in controllers:
+            sub = tk.Menu(menu, tearoff=0)
+            has_bound = False
+            has_unbound = False
+            bound_items = []
+            unbound_items = []
+
+            for input_name, display_name in compatible:
+                # Check if this action is bound to this input on this port
+                is_bound = self._is_action_bound(
+                    qname, port, input_name)
+                if is_bound:
+                    has_bound = True
+                    has_any_binding = True
+                    bound_items.append((input_name, display_name))
+                else:
+                    has_unbound = True
+                    unbound_items.append((input_name, display_name))
+
+            # Add bound inputs first (with checkmark)
+            for input_name, display_name in bound_items:
+                sub.add_command(
+                    label=f"\u2713 {display_name}",
+                    command=lambda q=qname, p=port, n=input_name:
+                        self._on_unassign_action(q, p, n)
+                        if self._on_unassign_action else None,
+                )
+
+            # Separator between bound and unbound
+            if has_bound and has_unbound:
+                sub.add_separator()
+
+            # Add unbound compatible inputs
+            for input_name, display_name in unbound_items:
+                sub.add_command(
+                    label=display_name,
+                    command=lambda q=qname, p=port, n=input_name:
+                        self._on_assign_action(q, p, n)
+                        if self._on_assign_action else None,
+                )
+
+            label = f"{ctrl_name} (Port {port})"
+            menu.add_cascade(label=label, menu=sub)
+
+        menu.add_separator()
+        menu.add_command(
+            label="Remove from All Inputs",
+            command=lambda q=qname:
+                self._on_unassign_all(q)
+                if self._on_unassign_all else None,
+            state=tk.NORMAL if has_any_binding else tk.DISABLED,
+        )
+
+        menu.tk_popup(event.x_root, event.y_root)
+
+    def _is_action_bound(self, qname: str, port: int,
+                         input_name: str) -> bool:
+        """Check if an action is bound to a specific input on a port."""
+        if self._is_action_bound_cb:
+            return self._is_action_bound_cb(qname, port, input_name)
+        return False
 
     def _on_context_export_group(self):
         """Handle 'Export Group...' from context menu."""
@@ -917,9 +1052,30 @@ class ActionPanel(tk.Frame):
             return f"{group} ({count} action{'s' if count != 1 else ''})"
 
         action = self._actions.get(item_id)
-        if action and action.description:
-            return f"{action.qualified_name}\n{action.description}"
-        return None
+        if not action:
+            return None
+
+        lines = [action.qualified_name]
+        if action.description:
+            lines.append(action.description)
+
+        # Show binding assignments
+        if self._get_binding_info:
+            bindings = self._get_binding_info(item_id)
+            if bindings:
+                lines.append("")
+                lines.append("Assigned to:")
+                for ctrl_name, input_display in bindings:
+                    lines.append(f"  {ctrl_name} > {input_display}")
+                if len(bindings) > 1:
+                    lines.append("")
+                    lines.append("[Yellow: bound to multiple inputs]")
+            else:
+                lines.append("")
+                lines.append("Not assigned to any input")
+                lines.append("[Red: unassigned]")
+
+        return "\n".join(lines)
 
     def _reselect(self, qname: str):
         """Select and scroll to an item in the tree."""
