@@ -273,6 +273,7 @@ class ControllerConfigApp(tk.Tk):
             get_all_controllers=self._get_all_controllers,
             get_compatible_inputs=self._get_compatible_inputs_with_display,
             is_action_bound=self._is_action_bound_to,
+            on_action_renamed=self._on_action_renamed,
         )
         self._paned.add(self._action_panel, weight=0)
 
@@ -470,7 +471,9 @@ class ControllerConfigApp(tk.Tk):
         self._restoring = True
         try:
             self._config = config
-            self._action_panel.set_empty_groups(empty_groups)
+            # Merge legacy undo-stack empty_groups into config
+            self._config.empty_groups = (
+                self._config.empty_groups | empty_groups)
             self._sync_ui_from_config()
         finally:
             self._restoring = False
@@ -505,6 +508,7 @@ class ControllerConfigApp(tk.Tk):
         """Push config data to all UI elements."""
         # Update action panel
         self._action_panel.set_actions(self._config.actions)
+        self._action_panel.set_empty_groups(self._config.empty_groups)
 
         # Update controller tabs — reuse existing canvases when possible
         new_ports = sorted(self._config.controllers.keys())
@@ -529,6 +533,7 @@ class ControllerConfigApp(tk.Tk):
     def _sync_config_from_ui(self):
         """Pull current UI state back into the config."""
         self._config.actions = self._action_panel.get_actions()
+        self._config.empty_groups = self._action_panel.get_empty_groups()
 
     def _create_controller_tab(self, port: int, ctrl: ControllerConfig):
         """Create a tab for a controller."""
@@ -991,6 +996,20 @@ class ControllerConfigApp(tk.Tk):
             return
         self._config.actions = self._action_panel.get_actions()
         self._mark_dirty()
+
+    def _on_action_renamed(self, old_qname: str, new_qname: str):
+        """Update all binding references when an action's qualified name changes."""
+        for port, ctrl in self._config.controllers.items():
+            changed = False
+            for input_name, actions in ctrl.bindings.items():
+                if old_qname in actions:
+                    idx = actions.index(old_qname)
+                    actions[idx] = new_qname
+                    changed = True
+            if changed:
+                canvas = self._controller_canvases.get(port)
+                if canvas:
+                    canvas.set_bindings(ctrl.bindings)
 
     def _on_binding_clear(self, port: int, input_name: str):
         """Clear all bindings for a specific input."""

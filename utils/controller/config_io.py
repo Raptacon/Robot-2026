@@ -165,34 +165,49 @@ def _is_nested_format(actions_data: dict) -> bool:
     return True
 
 
-def _load_actions_dict(actions_data: dict) -> dict[str, ActionDefinition]:
+def _load_actions_dict(actions_data: dict
+                       ) -> tuple[dict[str, ActionDefinition], set[str]]:
     """Load actions from either nested or flat YAML format.
 
-    Returns dict keyed by qualified name (``group.action_name``).
+    Returns (actions_dict, empty_groups) where actions_dict is keyed by
+    qualified name and empty_groups contains group names that exist but
+    have no actions.
     """
     if not actions_data:
-        return {}
+        return {}, set()
 
     actions = {}
+    empty_groups: set[str] = set()
     if _is_nested_format(actions_data):
         for group_name, group_actions in actions_data.items():
             group_name = str(group_name)
-            if not isinstance(group_actions, dict):
+            if not isinstance(group_actions, dict) or not group_actions:
+                empty_groups.add(group_name)
                 continue
             for action_name, action_dict in group_actions.items():
-                action = _dict_to_action(str(action_name), action_dict, group=group_name)
+                action = _dict_to_action(
+                    str(action_name), action_dict, group=group_name)
                 actions[action.qualified_name] = action
     else:
         for action_name, action_dict in actions_data.items():
-            action = _dict_to_action(str(action_name), action_dict, group="general")
+            action = _dict_to_action(
+                str(action_name), action_dict, group="general")
             actions[action.qualified_name] = action
 
-    return actions
+    return actions, empty_groups
 
 
-def _actions_to_nested_dict(actions: dict[str, ActionDefinition]) -> dict:
-    """Group actions by group and serialize to nested dict."""
+def _actions_to_nested_dict(actions: dict[str, ActionDefinition],
+                            empty_groups: set[str] | None = None) -> dict:
+    """Group actions by group and serialize to nested dict.
+
+    Empty groups are preserved as empty dicts so they round-trip
+    through YAML save/load.
+    """
     groups: dict[str, dict[str, dict]] = {}
+    if empty_groups:
+        for g in empty_groups:
+            groups[g] = {}
     for action in actions.values():
         group = action.group
         if group not in groups:
@@ -225,8 +240,9 @@ def save_config(config: FullConfig, path: str | Path) -> None:
     """Save a FullConfig to a YAML file (nested action format)."""
     data = {}
 
-    if config.actions:
-        data["actions"] = _actions_to_nested_dict(config.actions)
+    if config.actions or config.empty_groups:
+        data["actions"] = _actions_to_nested_dict(
+            config.actions, config.empty_groups)
 
     if config.controllers:
         data["controllers"] = {
@@ -252,7 +268,7 @@ def load_config(path: str | Path) -> FullConfig:
     if not data:
         return FullConfig()
 
-    actions = _load_actions_dict(data.get("actions") or {})
+    actions, empty_groups = _load_actions_dict(data.get("actions") or {})
 
     controllers = {}
     for port, ctrl_dict in (data.get("controllers") or {}).items():
@@ -261,7 +277,8 @@ def load_config(path: str | Path) -> FullConfig:
 
     _migrate_bindings(controllers, actions)
 
-    return FullConfig(actions=actions, controllers=controllers)
+    return FullConfig(actions=actions, controllers=controllers,
+                      empty_groups=empty_groups)
 
 
 def load_actions_from_file(path: str | Path) -> dict[str, ActionDefinition]:
@@ -274,7 +291,8 @@ def load_actions_from_file(path: str | Path) -> dict[str, ActionDefinition]:
         data = yaml.safe_load(f)
     if not data:
         return {}
-    return _load_actions_dict(data.get("actions") or {})
+    actions, _empty = _load_actions_dict(data.get("actions") or {})
+    return actions
 
 
 def save_actions_to_file(actions: dict[str, ActionDefinition],

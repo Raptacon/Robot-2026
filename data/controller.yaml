@@ -1,4 +1,5 @@
 actions:
+  myfunio: {}
   intake:
     jiggle:
       trigger_mode: while_true
@@ -23,9 +24,52 @@ actions:
       input_type: analog
       trigger_mode: squared
       deadband: 0.05
+    spliney:
+      input_type: analog
+      trigger_mode: spline
+      deadband: 0.05
+      extra:
+        spline_points:
+        - x: -1.0
+          y: -1.0
+          tangent: 1.0
+        - x: -0.395
+          y: -0.28
+          tangent: 2.25
+        - x: 0.0
+          y: 0.0
+          tangent: 0.27
+        - x: 0.395
+          y: 0.28
+          tangent: 2.25
+        - x: 1.0
+          y: 1.0
+          tangent: 1.0
     plade:
       description: Yes you heard it..we went to plade
       input_type: output
+    sawblade:
+      input_type: analog
+      trigger_mode: segmented
+      deadband: 0.05
+      extra:
+        segment_points:
+        - x: -1.0
+          y: 0.88
+        - x: -0.605
+          y: -0.765
+        - x: -0.32
+          y: -0.54
+        - x: 0.0
+          y: 0.0
+        - x: 0.36
+          y: 0.335
+        - x: 0.605
+          y: 0.765
+        - x: 0.85
+          y: 0.9
+        - x: 1.0
+          y: 0.9
 controllers:
   0:
     name: Driver
@@ -36,6 +80,8 @@ controllers:
       - drivetrain.rotation
       left_stick_y:
       - drivetrain.speed
+      right_stick_x:
+      - drivetrain.spliney
   1:
     name: Operator
     bindings:

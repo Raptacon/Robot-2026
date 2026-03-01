@@ -139,14 +139,15 @@ class ActionPanel(tk.Frame):
     _GROUP_PREFIX = "group::"
 
     # Drag threshold in pixels before drag-and-drop starts
-    _DRAG_THRESHOLD = 5
+    _DRAG_THRESHOLD = 8
 
     def __init__(self, parent, on_actions_changed=None, on_export_group=None,
                  on_drag_start=None, on_drag_end=None,
                  on_before_change=None, get_binding_info=None,
                  on_assign_action=None, on_unassign_action=None,
                  on_unassign_all=None, get_all_controllers=None,
-                 get_compatible_inputs=None, is_action_bound=None):
+                 get_compatible_inputs=None, is_action_bound=None,
+                 on_action_renamed=None):
         """
         Args:
             parent: tkinter parent widget
@@ -165,6 +166,9 @@ class ActionPanel(tk.Frame):
             get_compatible_inputs: callback(qname) ->
                 list[(input_name, display_name)] of compatible inputs
             is_action_bound: callback(qname, port, input_name) -> bool
+            on_action_renamed: callback(old_qname, new_qname) when an action's
+                qualified name changes (group or name change) so bindings can
+                be updated
         """
         super().__init__(parent, padx=5, pady=5)
         self._on_actions_changed = on_actions_changed
@@ -179,6 +183,7 @@ class ActionPanel(tk.Frame):
         self._get_all_controllers = get_all_controllers
         self._get_compatible_inputs = get_compatible_inputs
         self._is_action_bound_cb = is_action_bound
+        self._on_action_renamed = on_action_renamed
         self._actions: dict[str, ActionDefinition] = {}
         self._empty_groups: set[str] = set()
         self._selected_name: str | None = None
@@ -188,6 +193,8 @@ class ActionPanel(tk.Frame):
         self._drag_item: str | None = None
         self._drag_start_pos: tuple[int, int] = (0, 0)
         self._drag_started: bool = False
+        self._drag_target_group: str | None = None
+        self._drag_highlight_iid: str | None = None
 
         self._build_ui()
 
@@ -206,11 +213,16 @@ class ActionPanel(tk.Frame):
         self._tree = ttk.Treeview(tree_container, selectmode="browse", show="tree")
         self._tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self._tree.bind("<<TreeviewSelect>>", self._on_select)
+        self._tree.bind("<<TreeviewOpen>>", self._on_tree_toggle)
+        self._tree.bind("<<TreeviewClose>>", self._on_tree_toggle)
 
         # Drag-from-tree bindings
         self._tree.bind("<ButtonPress-1>", self._on_tree_press)
         self._tree.bind("<B1-Motion>", self._on_tree_drag)
         self._tree.bind("<ButtonRelease-1>", self._on_tree_release)
+        self._tree.bind("<MouseWheel>", self._on_tree_scroll)
+        self._tree.bind("<Button-4>", self._on_tree_scroll)   # Linux scroll up
+        self._tree.bind("<Button-5>", self._on_tree_scroll)   # Linux scroll down
 
         tree_scroll = ttk.Scrollbar(tree_container, orient=tk.VERTICAL,
                                     command=self._tree.yview)
@@ -340,6 +352,24 @@ class ActionPanel(tk.Frame):
         self._scale_spin.grid(row=row, column=1, sticky=tk.EW, pady=2)
         self._scale_var.trace_add("write", self._on_field_changed)
 
+        # Spline controls (visible only for ANALOG + SPLINE trigger mode)
+        row += 1
+        self._edit_spline_btn = ttk.Button(
+            self._detail_frame, text="Edit Spline...",
+            command=self._on_edit_spline,
+        )
+        self._edit_spline_btn.grid(row=row, column=0, columnspan=2,
+                                    sticky=tk.EW, pady=2)
+
+        # Segment controls (visible only for ANALOG + SEGMENTED trigger mode)
+        row += 1
+        self._edit_segments_btn = ttk.Button(
+            self._detail_frame, text="Edit Segments...",
+            command=self._on_edit_segments,
+        )
+        self._edit_segments_btn.grid(row=row, column=0, columnspan=2,
+                                     sticky=tk.EW, pady=2)
+
         self._detail_frame.columnconfigure(1, weight=1)
 
         # Analog-only widgets for show/hide
@@ -348,6 +378,14 @@ class ActionPanel(tk.Frame):
             (self._inversion_label, self._inversion_check),
             (self._scale_label, self._scale_spin),
         ]
+
+        # Spline-only widgets for show/hide
+        self._spline_widgets = [self._edit_spline_btn]
+        self._edit_spline_btn.grid_remove()
+
+        # Segment-only widgets for show/hide
+        self._segment_widgets = [self._edit_segments_btn]
+        self._edit_segments_btn.grid_remove()
 
         # Tooltips for detail form fields (label + widget share the same text)
         _name_tip = ("Short action name (no dots). Combined with\n"
@@ -386,6 +424,14 @@ class ActionPanel(tk.Frame):
         _WidgetTooltip(self._scale_label, _scale_tip)
         _WidgetTooltip(self._scale_spin, _scale_tip)
 
+        _edit_spline_tip = ("Open the visual spline curve editor.\n"
+                            "Click to add points, right-click to remove.")
+        _WidgetTooltip(self._edit_spline_btn, _edit_spline_tip)
+
+        _edit_seg_tip = ("Open the piecewise-linear curve editor.\n"
+                         "Click to add points, right-click to remove.")
+        _WidgetTooltip(self._edit_segments_btn, _edit_seg_tip)
+
         self._set_detail_enabled(False)
 
     # ------------------------------------------------------------------
@@ -415,14 +461,19 @@ class ActionPanel(tk.Frame):
     def set_empty_groups(self, groups: set[str]):
         """Restore the empty-group set (for undo restore)."""
         self._empty_groups = set(groups)
+        self._refresh_tree()
 
     # ------------------------------------------------------------------
     # Tree Management
     # ------------------------------------------------------------------
 
     def _collect_groups(self) -> dict[str, list[str]]:
-        """Collect group -> [qualified_name, ...] mapping."""
-        groups: dict[str, list[str]] = {}
+        """Collect group -> [qualified_name, ...] mapping.
+
+        The "general" group is always included so actions can be
+        assigned to it even when it has no members.
+        """
+        groups: dict[str, list[str]] = {"general": []}
         for qname, action in self._actions.items():
             groups.setdefault(action.group, []).append(qname)
         for g in self._empty_groups:
@@ -434,6 +485,9 @@ class ActionPanel(tk.Frame):
         """Sort group names with 'general' first."""
         return sorted(groups.keys(), key=lambda g: (g != "general", g))
 
+    # Prefix for placeholder items in empty groups
+    _EMPTY_PREFIX = "empty::"
+
     def _refresh_tree(self):
         """Rebuild the treeview from the actions dict."""
         self._tree.delete(*self._tree.get_children())
@@ -443,14 +497,24 @@ class ActionPanel(tk.Frame):
 
         for group in sorted_groups:
             group_iid = f"{self._GROUP_PREFIX}{group}"
+            has_actions = bool(groups[group])
             self._tree.insert("", tk.END, iid=group_iid,
-                              text=f" {group}", open=True, tags=("group",))
+                              text=f" {group}", open=has_actions,
+                              tags=("group",))
 
-            for qname in sorted(groups[group],
-                                key=lambda q: q.split(".", 1)[-1]):
-                action = self._actions[qname]
-                self._tree.insert(group_iid, tk.END, iid=qname,
-                                  text=f"  {action.name}", tags=("action",))
+            if has_actions:
+                for qname in sorted(groups[group],
+                                    key=lambda q: q.split(".", 1)[-1]):
+                    action = self._actions[qname]
+                    self._tree.insert(group_iid, tk.END, iid=qname,
+                                      text=f"  {action.name}",
+                                      tags=("action",))
+            else:
+                # Placeholder so the +/- indicator appears
+                self._tree.insert(
+                    group_iid, tk.END,
+                    iid=f"{self._EMPTY_PREFIX}{group}",
+                    text="  (empty)", tags=("empty_placeholder",))
 
         # Update group combo values
         self._group_combo['values'] = sorted_groups
@@ -458,6 +522,9 @@ class ActionPanel(tk.Frame):
         # Style rows
         self._tree.tag_configure("group", font=("TkDefaultFont", 9, "bold"))
         self._tree.tag_configure("action", font=("TkDefaultFont", 9))
+        self._tree.tag_configure("empty_placeholder",
+                                 foreground="#999999",
+                                 font=("TkDefaultFont", 9, "italic"))
 
         self.update_binding_tags()
 
@@ -467,6 +534,8 @@ class ActionPanel(tk.Frame):
         Called after bindings change (drag-drop, dialog, undo, file load).
         - Unassigned actions get a faint red background.
         - Actions bound to more than one input get a faint yellow background.
+        - Collapsed groups reflect child status: red (unassigned), yellow
+          (duplicate-bound), or orange (both).
         """
         self._tree.tag_configure("unassigned",
                                  background="#ffdddd",
@@ -477,20 +546,63 @@ class ActionPanel(tk.Frame):
         self._tree.tag_configure("action",
                                  background="",
                                  font=("TkDefaultFont", 9))
+        # Group-level status tags (shown when collapsed)
+        self._tree.tag_configure("group_unassigned",
+                                 background="#ffdddd",
+                                 font=("TkDefaultFont", 9, "bold"))
+        self._tree.tag_configure("group_multi_bound",
+                                 background="#ffffcc",
+                                 font=("TkDefaultFont", 9, "bold"))
+        self._tree.tag_configure("group_mixed",
+                                 background="#ffddbb",
+                                 font=("TkDefaultFont", 9, "bold"))
 
         if not self._get_binding_info:
             return
 
-        for qname in self._actions:
+        # Track per-group status flags
+        group_has_unassigned: dict[str, bool] = {}
+        group_has_multi: dict[str, bool] = {}
+
+        for qname, action in self._actions.items():
             if not self._tree.exists(qname):
                 continue
             bindings = self._get_binding_info(qname)
             if not bindings:
                 self._tree.item(qname, tags=("unassigned",))
+                group_has_unassigned[action.group] = True
             elif len(bindings) > 1:
                 self._tree.item(qname, tags=("multi_bound",))
+                group_has_multi[action.group] = True
             else:
                 self._tree.item(qname, tags=("action",))
+
+        # Apply status colors to collapsed group nodes
+        self._update_group_tags(group_has_unassigned, group_has_multi)
+
+    def _update_group_tags(self, group_has_unassigned: dict[str, bool],
+                           group_has_multi: dict[str, bool]):
+        """Set group node tags based on child status and collapsed state."""
+        for group_iid in self._tree.get_children(""):
+            if not group_iid.startswith(self._GROUP_PREFIX):
+                continue
+            group_name = group_iid[len(self._GROUP_PREFIX):]
+            is_open = self._tree.item(group_iid, "open")
+            has_unassigned = group_has_unassigned.get(group_name, False)
+            has_multi = group_has_multi.get(group_name, False)
+
+            if not is_open and has_unassigned and has_multi:
+                self._tree.item(group_iid, tags=("group_mixed",))
+            elif not is_open and has_unassigned:
+                self._tree.item(group_iid, tags=("group_unassigned",))
+            elif not is_open and has_multi:
+                self._tree.item(group_iid, tags=("group_multi_bound",))
+            else:
+                self._tree.item(group_iid, tags=("group",))
+
+    def _on_tree_toggle(self, event):
+        """Handle group expand/collapse — refresh group background colors."""
+        self.update_binding_tags()
 
     # ------------------------------------------------------------------
     # Selection Handling
@@ -505,7 +617,8 @@ class ActionPanel(tk.Frame):
             return
 
         item_id = sel[0]
-        if item_id.startswith(self._GROUP_PREFIX):
+        if (item_id.startswith(self._GROUP_PREFIX)
+                or item_id.startswith(self._EMPTY_PREFIX)):
             self._selected_name = None
             self._set_detail_enabled(False)
             return
@@ -547,7 +660,7 @@ class ActionPanel(tk.Frame):
                 child.config(state=state)
             elif isinstance(child, ttk.Combobox):
                 child.config(state=readonly_state)
-            elif isinstance(child, ttk.Checkbutton):
+            elif isinstance(child, (ttk.Checkbutton, ttk.Button)):
                 child.config(state=state)
         # The group combo is editable (not readonly) so users can type new names
         if enabled:
@@ -583,9 +696,10 @@ class ActionPanel(tk.Frame):
             self._trigger_var.set(default.value)
 
     def _update_type_visibility(self):
-        """Show/hide fields based on input type.
+        """Show/hide fields based on input type and trigger mode.
 
         Analog-specific fields (deadband, inversion, scale) only shown for analog.
+        Spline controls only shown for analog + spline trigger mode.
         Trigger mode hidden for output actions.
         """
         input_type_str = self._input_type_var.get()
@@ -597,6 +711,25 @@ class ActionPanel(tk.Frame):
             else:
                 label.grid_remove()
                 widget.grid_remove()
+
+        # Spline controls: visible only for ANALOG + SPLINE
+        trigger_str = self._trigger_var.get()
+        show_spline = (is_analog
+                       and trigger_str == TriggerMode.SPLINE.value)
+        for w in self._spline_widgets:
+            if show_spline:
+                w.grid()
+            else:
+                w.grid_remove()
+
+        # Segment controls: visible only for ANALOG + SEGMENTED
+        show_segments = (is_analog
+                         and trigger_str == TriggerMode.SEGMENTED.value)
+        for w in self._segment_widgets:
+            if show_segments:
+                w.grid()
+            else:
+                w.grid_remove()
 
     # ------------------------------------------------------------------
     # Detail Form Changes
@@ -632,6 +765,7 @@ class ActionPanel(tk.Frame):
             return
         if self._on_before_change:
             self._on_before_change(500)
+        self._update_type_visibility()
         if self._save_detail() and self._on_actions_changed:
             self._on_actions_changed()
 
@@ -661,6 +795,58 @@ class ActionPanel(tk.Frame):
         self._update_type_visibility()
         self._on_field_changed()
 
+    def _on_edit_spline(self):
+        """Open the spline editor dialog for the selected action."""
+        if self._selected_name is None:
+            return
+        action = self._actions.get(self._selected_name)
+        if not action:
+            return
+
+        from host.controller_config.spline_editor import (
+            SplineEditorDialog, default_points,
+        )
+
+        points = action.extra.get("spline_points")
+        if not points:
+            points = default_points()
+
+        dialog = SplineEditorDialog(self.winfo_toplevel(), points)
+        result = dialog.get_result()
+
+        if result is not None:
+            if self._on_before_change:
+                self._on_before_change(0)
+            action.extra["spline_points"] = result
+            if self._on_actions_changed:
+                self._on_actions_changed()
+
+    def _on_edit_segments(self):
+        """Open the segment editor dialog for the selected action."""
+        if self._selected_name is None:
+            return
+        action = self._actions.get(self._selected_name)
+        if not action:
+            return
+
+        from host.controller_config.segment_editor import (
+            SegmentEditorDialog, default_segment_points,
+        )
+
+        points = action.extra.get("segment_points")
+        if not points:
+            points = default_segment_points()
+
+        dialog = SegmentEditorDialog(self.winfo_toplevel(), points)
+        result = dialog.get_result()
+
+        if result is not None:
+            if self._on_before_change:
+                self._on_before_change(0)
+            action.extra["segment_points"] = result
+            if self._on_actions_changed:
+                self._on_actions_changed()
+
     def _on_name_changed(self, *args):
         """Handle renaming an action (short name)."""
         if self._updating_form or self._selected_name is None:
@@ -687,6 +873,10 @@ class ActionPanel(tk.Frame):
         self._actions[new_qname] = action
         self._selected_name = new_qname
 
+        # Update binding references from old to new qualified name
+        if self._on_action_renamed and old_qname != new_qname:
+            self._on_action_renamed(old_qname, new_qname)
+
         self._refresh_tree()
         self._reselect(new_qname)
 
@@ -706,10 +896,20 @@ class ActionPanel(tk.Frame):
         if not action or new_group == action.group:
             return
 
+        self._move_action_to_group(self._selected_name, new_group)
+
+    def _move_action_to_group(self, qname: str, new_group: str):
+        """Move an action to a different group, handling collisions and undo."""
+        action = self._actions.get(qname)
+        if not action or new_group == action.group:
+            return
+
         if self._on_before_change:
             self._on_before_change(0)
-        old_qname = self._selected_name
-        del self._actions[old_qname]
+
+        old_qname = qname
+        old_group = action.group
+        del self._actions[qname]
 
         action.group = new_group
         new_qname = action.qualified_name
@@ -726,11 +926,20 @@ class ActionPanel(tk.Frame):
         self._actions[new_qname] = action
         self._selected_name = new_qname
 
-        # Remove old group from empty tracking if it now has actions, or add it
+        # Preserve old group as empty if it has no remaining actions
+        if not any(a.group == old_group for a in self._actions.values()):
+            self._empty_groups.add(old_group)
+
+        # Remove new group from empty tracking since it now has actions
         self._empty_groups.discard(new_group)
+
+        # Update binding references from old to new qualified name
+        if self._on_action_renamed and old_qname != new_qname:
+            self._on_action_renamed(old_qname, new_qname)
 
         self._refresh_tree()
         self._reselect(new_qname)
+        self._load_detail(new_qname)
 
         if self._on_actions_changed:
             self._on_actions_changed()
@@ -988,6 +1197,20 @@ class ActionPanel(tk.Frame):
     # Drag-from-Tree (cross-widget drag-and-drop)
     # ------------------------------------------------------------------
 
+    def _on_tree_scroll(self, event):
+        """Cancel any drag (pending or active) when the user scrolls.
+
+        Scrolling shifts items under the cursor, so a release after
+        scrolling could target the wrong group.
+        """
+        if self._drag_item:
+            if self._drag_started and self._on_drag_end:
+                self._on_drag_end()
+            self._drag_item = None
+            self._drag_started = False
+            self._drag_target_group = None
+            self._clear_drag_highlight()
+
     def _on_tree_press(self, event):
         """Record potential drag start position."""
         item = self._tree.identify_row(event.y)
@@ -1002,23 +1225,102 @@ class ActionPanel(tk.Frame):
         """Start drag after movement exceeds threshold."""
         if not self._drag_item:
             return
-        if self._drag_started:
-            return  # Already notified app
 
-        dx = event.x_root - self._drag_start_pos[0]
-        dy = event.y_root - self._drag_start_pos[1]
-        if (dx * dx + dy * dy) >= self._DRAG_THRESHOLD ** 2:
+        if not self._drag_started:
+            dx = event.x_root - self._drag_start_pos[0]
+            dy = event.y_root - self._drag_start_pos[1]
+            if (dx * dx + dy * dy) < self._DRAG_THRESHOLD ** 2:
+                return
             self._drag_started = True
             if self._on_drag_start:
                 self._on_drag_start(self._drag_item)
 
+        # Track intra-tree group target for visual feedback
+        # Only consider intra-tree drops when mouse is inside the tree widget;
+        # implicit grab delivers events even when the mouse is over other widgets
+        if self._is_over_tree(event):
+            item = self._tree.identify_row(event.y)
+            target_group = self._resolve_group_for_item(item)
+        else:
+            target_group = None
+
+        action = self._actions.get(self._drag_item)
+        source_group = action.group if action else None
+
+        if target_group and target_group != source_group:
+            group_iid = f"{self._GROUP_PREFIX}{target_group}"
+            self._set_drag_highlight(group_iid)
+        else:
+            self._clear_drag_highlight()
+        self._drag_target_group = target_group
+
     def _on_tree_release(self, event):
-        """Reset local drag state. Drop is handled by app's global handler."""
+        """Handle release — move action to target group or let app handle."""
+        drag_item = self._drag_item
+        was_dragging = self._drag_started
+
+        # Reset all local drag state
         self._drag_item = None
         self._drag_started = False
+        self._drag_target_group = None
+        self._clear_drag_highlight()
+
+        if not was_dragging or not drag_item:
+            return
+
+        # Check if released over a group in the tree (not outside the widget)
+        if not self._is_over_tree(event):
+            return
+
+        item = self._tree.identify_row(event.y)
+        target_group = self._resolve_group_for_item(item)
+
+        action = self._actions.get(drag_item)
+        if action and target_group and target_group != action.group:
+            # Cancel cross-widget drag before moving
+            if self._on_drag_end:
+                self._on_drag_end()
+            self._move_action_to_group(drag_item, target_group)
+
+    def _set_drag_highlight(self, group_iid: str):
+        """Highlight a group node as a drop target."""
+        if group_iid == self._drag_highlight_iid:
+            return
+        self._clear_drag_highlight()
+        if group_iid and self._tree.exists(group_iid):
+            self._tree.tag_configure(
+                "drop_target",
+                background="#cce5ff",
+                font=("TkDefaultFont", 9, "bold"))
+            self._tree.item(group_iid, tags=("group", "drop_target"))
+            self._drag_highlight_iid = group_iid
+
+    def _clear_drag_highlight(self):
+        """Remove drop target highlight."""
+        if self._drag_highlight_iid and self._tree.exists(
+                self._drag_highlight_iid):
+            self._tree.item(self._drag_highlight_iid, tags=("group",))
+        self._drag_highlight_iid = None
 
     # ------------------------------------------------------------------
     # Helpers
+
+    def _is_over_tree(self, event) -> bool:
+        """Check if event coordinates are within the tree widget bounds."""
+        return (0 <= event.x <= self._tree.winfo_width()
+                and 0 <= event.y <= self._tree.winfo_height())
+
+    def _resolve_group_for_item(self, item: str | None) -> str | None:
+        """Return the group name for a tree item, or None."""
+        if not item:
+            return None
+        if item.startswith(self._GROUP_PREFIX):
+            return item[len(self._GROUP_PREFIX):]
+        if item.startswith(self._EMPTY_PREFIX):
+            return item[len(self._EMPTY_PREFIX):]
+        if item in self._actions:
+            return self._actions[item].group
+        return None
     # ------------------------------------------------------------------
 
     def _get_selected_group(self) -> str:
@@ -1048,8 +1350,28 @@ class ActionPanel(tk.Frame):
         """Return tooltip text for a tree item, or None."""
         if item_id.startswith(self._GROUP_PREFIX):
             group = item_id[len(self._GROUP_PREFIX):]
-            count = sum(1 for a in self._actions.values() if a.group == group)
-            return f"{group} ({count} action{'s' if count != 1 else ''})"
+            group_actions = [a for a in self._actions.values()
+                             if a.group == group]
+            count = len(group_actions)
+            lines = [f"{group} ({count} action{'s' if count != 1 else ''})"]
+
+            if self._get_binding_info and group_actions:
+                unassigned = 0
+                multi_bound = 0
+                for a in group_actions:
+                    bindings = self._get_binding_info(a.qualified_name)
+                    if not bindings:
+                        unassigned += 1
+                    elif len(bindings) > 1:
+                        multi_bound += 1
+                if unassigned:
+                    lines.append(
+                        f"{unassigned} unassigned")
+                if multi_bound:
+                    lines.append(
+                        f"{multi_bound} bound to multiple inputs")
+
+            return "\n".join(lines)
 
         action = self._actions.get(item_id)
         if not action:

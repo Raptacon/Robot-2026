@@ -106,3 +106,4 @@ class FullConfig:
     """Top-level configuration: action definitions + controller bindings."""
     actions: dict[str, ActionDefinition] = field(default_factory=dict)
     controllers: dict[int, ControllerConfig] = field(default_factory=dict)
+    empty_groups: set[str] = field(default_factory=set)
