@@ -62,6 +62,16 @@ def _find_image_path() -> Path:
     raise FileNotFoundError("Cannot find Xbox_Controller image in images/")
 
 
+def _find_gear_icon() -> Path | None:
+    """Locate the team gear logo image relative to the project root."""
+    here = Path(__file__).resolve().parent
+    for ancestor in [here, here.parent, here.parent.parent]:
+        png_path = ancestor / "images" / "raptacongear.png"
+        if png_path.exists():
+            return png_path
+    return None
+
+
 def _find_rumble_icon() -> Path | None:
     """Locate the rumble icon image relative to the project root."""
     here = Path(__file__).resolve().parent
@@ -82,6 +92,7 @@ class ControllerCanvas(tk.Frame):
     def __init__(self, parent, on_binding_click=None, on_binding_clear=None,
                  on_mouse_coord=None, on_label_moved=None,
                  on_hover_input=None, on_hover_shape=None,
+                 on_action_remove=None,
                  label_positions=None):
         """
         Args:
@@ -96,6 +107,8 @@ class ControllerCanvas(tk.Frame):
                 over a binding box (None when hover leaves)
             on_hover_shape: callback(input_names: list[str] | None) when
                 hovering over a controller shape (None when hover leaves)
+            on_action_remove: callback(input_name: str, action_name: str) to
+                remove a single action from an input's bindings
             label_positions: dict mapping input_name -> [img_x, img_y] for
                 custom label positions (loaded from settings)
         """
@@ -106,6 +119,7 @@ class ControllerCanvas(tk.Frame):
         self._on_label_moved = on_label_moved
         self._on_hover_input = on_hover_input
         self._on_hover_shape = on_hover_shape
+        self._on_action_remove = on_action_remove
         self._bindings: dict[str, list[str]] = {}
 
         # Custom label positions: input_name -> (img_px_x, img_px_y)
@@ -125,11 +139,17 @@ class ControllerCanvas(tk.Frame):
         self._hover_shape: str | None = None    # hovered controller shape
         self._selected_input: str | None = None  # selected (red line) input
         self._show_borders: bool = False         # shape outlines hidden by default
+        self._labels_locked: bool = False        # prevent label dragging
+        self._hide_unassigned: bool = False      # hide inputs with no bindings
 
         # Drag state
         self._dragging: str | None = None
         self._drag_start: tuple[float, float] = (0, 0)
         self._did_drag: bool = False
+
+        # Drop target highlight (for drag-and-drop from action panel)
+        self._drop_highlight_id: int | None = None
+        self._dim_overlay_ids: list[int] = []   # grey overlays on incompatible inputs
 
         # Tooltip
         self._tooltip: tk.Toplevel | None = None
@@ -190,6 +210,16 @@ class ControllerCanvas(tk.Frame):
         if self._rumble_base_image is None:
             self._rumble_base_image = self._make_rumble_fallback(64)
 
+        # Load team gear logo for top-right overlay
+        self._gear_base_image = None
+        gear_path = _find_gear_icon()
+        if gear_path:
+            try:
+                self._gear_base_image = Image.open(
+                    str(gear_path)).convert("RGBA")
+            except Exception:
+                pass
+
     @staticmethod
     def _make_rumble_fallback(size: int) -> Image.Image:
         """Draw a simple rumble/vibration icon when SVG can't be loaded.
@@ -224,10 +254,158 @@ class ControllerCanvas(tk.Frame):
         self._show_borders = show
         self._redraw()
 
+    def set_hide_unassigned(self, hide: bool):
+        """Toggle hiding of inputs with no bindings and redraw."""
+        self._hide_unassigned = hide
+        self._redraw()
+
     def reset_label_positions(self):
         """Clear all custom label positions and redraw at defaults."""
         self._custom_label_pos.clear()
         self._redraw()
+
+    def set_labels_locked(self, locked: bool):
+        """Lock or unlock label dragging."""
+        self._labels_locked = locked
+
+    # --- Drop target highlighting (for drag-and-drop) ---
+
+    def _root_to_canvas(self, x_root: int, y_root: int) -> tuple[int, int]:
+        """Convert root screen coordinates to canvas-local coordinates."""
+        return x_root - self._canvas.winfo_rootx(), y_root - self._canvas.winfo_rooty()
+
+    def highlight_drop_target(self, x_root: int, y_root: int) -> str | None:
+        """Highlight the binding box or shape under root coords.
+
+        Returns the input name if over a single-input target, None otherwise.
+        """
+        self.clear_drop_highlight()
+        cx, cy = self._root_to_canvas(x_root, y_root)
+
+        # Check binding boxes first
+        box_hit = self._hit_test_box(cx, cy)
+        if box_hit and box_hit in self._box_items:
+            box_id = self._box_items[box_hit][0]
+            coords = self._canvas.coords(box_id)
+            if len(coords) == 4:
+                self._drop_highlight_id = self._canvas.create_rectangle(
+                    coords[0] - 2, coords[1] - 2,
+                    coords[2] + 2, coords[3] + 2,
+                    outline="#2266cc", width=3, fill="",
+                )
+            return box_hit
+
+        # Check shapes
+        shape_hit = self._hit_test_shape(cx, cy)
+        if shape_hit and shape_hit.name in self._shape_items:
+            item_id = self._shape_items[shape_hit.name]
+            coords = self._canvas.coords(item_id)
+            if len(coords) == 4:
+                self._drop_highlight_id = self._canvas.create_rectangle(
+                    coords[0] - 2, coords[1] - 2,
+                    coords[2] + 2, coords[3] + 2,
+                    outline="#2266cc", width=3, fill="",
+                )
+            if len(shape_hit.inputs) == 1:
+                return shape_hit.inputs[0]
+            # Multi-input shape: caller should handle via get_drop_target
+            return None
+
+        return None
+
+    def get_drop_target(self, x_root: int, y_root: int):
+        """Return (input_name, shape) at root coordinates for drop resolution.
+
+        Returns:
+            (str, None) if over a binding box (direct single-input target)
+            (str, None) if over a single-input shape
+            (None, ButtonShape) if over a multi-input shape (caller shows menu)
+            (None, None) if not over anything
+        """
+        cx, cy = self._root_to_canvas(x_root, y_root)
+
+        box_hit = self._hit_test_box(cx, cy)
+        if box_hit:
+            return box_hit, None
+
+        shape_hit = self._hit_test_shape(cx, cy)
+        if shape_hit:
+            if len(shape_hit.inputs) == 1:
+                return shape_hit.inputs[0], None
+            return None, shape_hit
+
+        return None, None
+
+    def clear_drop_highlight(self):
+        """Remove any drop target highlighting."""
+        if self._drop_highlight_id is not None:
+            self._canvas.delete(self._drop_highlight_id)
+            self._drop_highlight_id = None
+
+    def dim_incompatible_inputs(self, compatible_names: set[str]):
+        """Grey out incompatible boxes and highlight compatible ones.
+
+        Also shows green outlines on controller button shapes that
+        contain at least one compatible input.
+        """
+        self.clear_dim_overlays()
+        # Highlight/dim binding boxes
+        for name, item_ids in self._box_items.items():
+            if not item_ids:
+                continue
+            box_id = item_ids[0]
+            coords = self._canvas.coords(box_id)
+            if len(coords) != 4:
+                continue
+            if name in compatible_names:
+                # Green highlight border around compatible inputs
+                oid = self._canvas.create_rectangle(
+                    coords[0] - 3, coords[1] - 3,
+                    coords[2] + 3, coords[3] + 3,
+                    outline="#33aa33", width=3, fill="",
+                )
+                self._dim_overlay_ids.append(oid)
+            else:
+                # Solid grey overlay on incompatible inputs
+                oid = self._canvas.create_rectangle(
+                    coords[0], coords[1], coords[2], coords[3],
+                    fill="#bbbbbb", outline="#999999", stipple="gray75",
+                )
+                self._dim_overlay_ids.append(oid)
+
+        # Green outlines on compatible button shapes
+        for shape_name, shape in self._shape_map.items():
+            has_compatible = any(
+                inp in compatible_names for inp in shape.inputs)
+            if not has_compatible:
+                continue
+            item_id = self._shape_items.get(shape_name)
+            if item_id is None:
+                continue
+            coords = self._canvas.coords(item_id)
+            if len(coords) != 4:
+                continue
+            cx = (coords[0] + coords[2]) / 2
+            cy = (coords[1] + coords[3]) / 2
+            hw = (coords[2] - coords[0]) / 2
+            hh = (coords[3] - coords[1]) / 2
+            if shape.shape in ("circle", "pill"):
+                oid = self._canvas.create_oval(
+                    cx - hw, cy - hh, cx + hw, cy + hh,
+                    outline="#33aa33", width=3, fill="",
+                )
+            else:
+                oid = self._canvas.create_rectangle(
+                    cx - hw, cy - hh, cx + hw, cy + hh,
+                    outline="#33aa33", width=3, fill="",
+                )
+            self._dim_overlay_ids.append(oid)
+
+    def clear_dim_overlays(self):
+        """Remove drag compatibility overlays."""
+        for oid in self._dim_overlay_ids:
+            self._canvas.delete(oid)
+        self._dim_overlay_ids.clear()
 
     def _on_resize(self, event):
         self._redraw()
@@ -279,10 +457,15 @@ class ControllerCanvas(tk.Frame):
 
         # Draw lines and binding boxes for each input
         for inp in XBOX_INPUTS:
+            if self._hide_unassigned and not self._bindings.get(inp.name):
+                continue
             self._draw_input(inp)
 
         # Draw rumble icons below each rumble label box
         self._draw_rumble_icons()
+
+        # Draw team logo in top-right corner
+        self._draw_gear_logo(canvas_w)
 
         # Re-apply selection highlight after redraw
         if self._selected_input and self._selected_input in self._line_items:
@@ -342,6 +525,22 @@ class ControllerCanvas(tk.Frame):
             self._canvas.create_image(
                 cx, cy, image=tk_icon, anchor=tk.CENTER)
 
+    # --- Gear logo ---
+
+    def _draw_gear_logo(self, canvas_w: int):
+        """Draw the team gear logo in the top-right corner of the canvas."""
+        if not self._gear_base_image:
+            return
+        # ~96px (approx 1 inch at standard DPI)
+        logo_size = 96
+        resized = self._gear_base_image.resize(
+            (logo_size, logo_size), Image.LANCZOS)
+        self._gear_tk_image = ImageTk.PhotoImage(resized)
+        margin = 8
+        self._canvas.create_image(
+            canvas_w - margin, margin,
+            image=self._gear_tk_image, anchor=tk.NE)
+
     # --- Shape drawing ---
 
     def _draw_shape(self, shape: ButtonShape):
@@ -400,7 +599,7 @@ class ControllerCanvas(tk.Frame):
         actions = self._bindings.get(inp.name, [])
         has_actions = len(actions) > 0
         fill = BOX_FILL_ASSIGNED if has_actions else BOX_FILL
-        total_height = (max(BOX_HEIGHT, BOX_HEIGHT + (len(actions) - 1) * 16)
+        total_height = (12 + len(actions) * 16
                         if has_actions else BOX_HEIGHT)
 
         # Box background
@@ -735,7 +934,7 @@ class ControllerCanvas(tk.Frame):
 
     def _on_drag(self, event):
         """Handle mouse drag — move binding box if dragging."""
-        if not self._dragging:
+        if not self._dragging or self._labels_locked:
             return
 
         dx = event.x - self._drag_start[0]
@@ -793,22 +992,85 @@ class ControllerCanvas(tk.Frame):
                 self._show_input_menu(event, shape_hit)
 
     def _on_right_click(self, event):
-        """Show a context menu with Clear Assignment on right-click."""
+        """Show a context menu for clearing actions on right-click.
+
+        Works on binding boxes (labels) and controller shapes (buttons).
+        Shows individual action removal items plus Clear All.
+        """
         box_hit = self._hit_test_box(event.x, event.y)
-        if not box_hit:
+        if box_hit:
+            self._show_binding_context_menu(event, box_hit)
             return
 
-        self._select_input(box_hit)
-        has_actions = bool(self._bindings.get(box_hit))
+        shape_hit = self._hit_test_shape(event.x, event.y)
+        if shape_hit:
+            self._show_shape_context_menu(event, shape_hit)
+
+    def _show_binding_context_menu(self, event, input_name: str):
+        """Context menu for a binding box: remove individual actions + clear all."""
+        self._select_input(input_name)
+        actions = self._bindings.get(input_name, [])
+        menu = tk.Menu(self._canvas, tearoff=0)
+
+        if actions:
+            for action in actions:
+                menu.add_command(
+                    label=f"Remove: {action}",
+                    command=lambda n=input_name, a=action:
+                        self._on_action_remove(n, a)
+                        if self._on_action_remove else None,
+                )
+            menu.add_separator()
+            menu.add_command(
+                label="Clear All",
+                command=lambda n=input_name: self._on_binding_clear(n)
+                        if self._on_binding_clear else None,
+            )
+        else:
+            menu.add_command(label="(no actions bound)", state=tk.DISABLED)
+
+        menu.tk_popup(event.x_root, event.y_root)
+
+    def _show_shape_context_menu(self, event, shape: ButtonShape):
+        """Context menu for a controller shape: remove individual actions + clear all."""
+        from .layout_coords import XBOX_INPUT_MAP
 
         menu = tk.Menu(self._canvas, tearoff=0)
-        menu.add_command(
-            label="Clear Assignment",
-            state=tk.NORMAL if has_actions else tk.DISABLED,
-            command=lambda n=box_hit: self._on_binding_clear(n)
-                    if self._on_binding_clear else None,
-        )
+        has_any = False
+
+        for input_name in shape.inputs:
+            actions = self._bindings.get(input_name, [])
+            if not actions:
+                continue
+            has_any = True
+            inp = XBOX_INPUT_MAP.get(input_name)
+            display = inp.display_name if inp else input_name
+            for action in actions:
+                menu.add_command(
+                    label=f"Remove: {action} ({display})",
+                    command=lambda n=input_name, a=action:
+                        self._on_action_remove(n, a)
+                        if self._on_action_remove else None,
+                )
+
+        if has_any:
+            menu.add_separator()
+            menu.add_command(
+                label="Clear All",
+                command=lambda: self._clear_shape_bindings(shape),
+            )
+        else:
+            menu.add_command(label="(no actions bound)", state=tk.DISABLED)
+
         menu.tk_popup(event.x_root, event.y_root)
+
+    def _clear_shape_bindings(self, shape: ButtonShape):
+        """Clear bindings for all inputs of a shape."""
+        if not self._on_binding_clear:
+            return
+        for input_name in shape.inputs:
+            if self._bindings.get(input_name):
+                self._on_binding_clear(input_name)
 
     def _show_input_menu(self, event, shape: ButtonShape):
         """Show a context menu to pick which input to configure

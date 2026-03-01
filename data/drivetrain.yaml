@@ -1,0 +1,8 @@
+actions:
+  drivetrain:
+    speed:
+      input_type: axis
+      trigger_mode: raw
+    rotation:
+      input_type: axis
+      trigger_mode: raw
