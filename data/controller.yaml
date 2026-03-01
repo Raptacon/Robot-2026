@@ -1,18 +1,5 @@
 actions:
   myfunio: {}
-  intake:
-    jiggle:
-      trigger_mode: while_true
-    manual:
-      input_type: analog
-      trigger_mode: scaled
-      deadband: 0.05
-    run:
-      description: Runs the Inake
-      trigger_mode: toggle_on_true
-    deploy:
-      description: Toggles if Intake is deployed or not
-      trigger_mode: toggle_on_true
   drivetrain:
     speed:
       description: speedy driver drive
@@ -70,6 +57,21 @@ actions:
           y: 0.9
         - x: 1.0
           y: 0.9
+    new_action:
+      deadband: 0.05
+  intake:
+    jiggle:
+      trigger_mode: while_true
+    manual:
+      input_type: analog
+      trigger_mode: scaled
+      deadband: 0.05
+    run:
+      description: Runs the Inake
+      trigger_mode: toggle_on_true
+    deploy:
+      description: Toggles if Intake is deployed or not
+      trigger_mode: toggle_on_true
 controllers:
   0:
     name: Driver

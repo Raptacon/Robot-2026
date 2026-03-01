@@ -145,16 +145,21 @@ class ControllerConfigApp(tk.Tk):
         self.geometry("1200x700")
         self.minsize(900, 550)
 
+        self._config = FullConfig()
+        self._current_file: Path | None = None
+        self._dirty = False
+        self._settings = self._load_settings()
+
+        # Restore saved window geometry (size + position)
+        saved_geom = self._settings.get("geometry")
+        if saved_geom:
+            self.geometry(saved_geom)
+
         # Window icon (title bar + taskbar)
         icon_path = _project_root / "images" / "Raptacon3200-BG-BW.png"
         if icon_path.exists():
             self._icon_image = tk.PhotoImage(file=str(icon_path))
             self.iconphoto(True, self._icon_image)
-
-        self._config = FullConfig()
-        self._current_file: Path | None = None
-        self._dirty = False
-        self._settings = self._load_settings()
 
         # Undo / redo stacks: each entry is (FullConfig, empty_groups_set)
         self._undo_stack: list[tuple[FullConfig, set[str]]] = []
@@ -230,7 +235,8 @@ class ControllerConfigApp(tk.Tk):
 
         view_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="View", menu=view_menu)
-        self._show_borders_var = tk.BooleanVar(value=False)
+        self._show_borders_var = tk.BooleanVar(
+            value=self._settings.get("show_borders", False))
         view_menu.add_checkbutton(label="Show Button Borders",
                                   variable=self._show_borders_var,
                                   command=self._toggle_borders)
@@ -424,6 +430,8 @@ class ControllerConfigApp(tk.Tk):
         if self._dirty:
             if not self._handle_unsaved_changes():
                 return
+        self._settings["geometry"] = self.geometry()
+        self._save_settings()
         self.destroy()
 
     def _update_title(self):
@@ -577,6 +585,7 @@ class ControllerConfigApp(tk.Tk):
         )
         canvas.pack(fill=tk.BOTH, expand=True)
         canvas.set_bindings(ctrl.bindings)
+        canvas.set_show_borders(self._show_borders_var.get())
         canvas.set_labels_locked(self._lock_labels_var.get())
         canvas.set_hide_unassigned(self._hide_unassigned_var.get())
 
@@ -676,6 +685,8 @@ class ControllerConfigApp(tk.Tk):
         show = self._show_borders_var.get()
         for canvas in self._controller_canvases.values():
             canvas.set_show_borders(show)
+        self._settings["show_borders"] = show
+        self._save_settings()
 
     def _toggle_lock_labels(self):
         """Toggle label dragging lock on all canvases."""
@@ -715,6 +726,8 @@ class ControllerConfigApp(tk.Tk):
         self._drag_action = action_qname
         self._status_var.set(f"Dragging: {action_qname}")
         self.config(cursor="plus")
+        for c in self._controller_canvases.values():
+            c.set_drag_cursor(True)
         # Temporarily show all inputs so user can see all drop targets
         if self._hide_unassigned_var.get():
             for c in self._controller_canvases.values():
@@ -975,6 +988,8 @@ class ControllerConfigApp(tk.Tk):
         self._unbind_drag_handlers()
         self.config(cursor="")
         for c in self._controller_canvases.values():
+            c.set_drag_cursor(False)
+        for c in self._controller_canvases.values():
             c.clear_drop_highlight()
             c.clear_dim_overlays()
         # Restore hide-unassigned state after drag
@@ -996,6 +1011,47 @@ class ControllerConfigApp(tk.Tk):
             return
         self._config.actions = self._action_panel.get_actions()
         self._mark_dirty()
+        self._check_orphan_bindings()
+
+    def _check_orphan_bindings(self):
+        """Detect and offer to remove bindings referencing deleted actions."""
+        orphans = []
+        for port, ctrl in self._config.controllers.items():
+            ctrl_label = ctrl.name or f"Controller {port}"
+            for input_name, actions in ctrl.bindings.items():
+                for qname in actions:
+                    if qname not in self._config.actions:
+                        inp = XBOX_INPUT_MAP.get(input_name)
+                        display = inp.display_name if inp else input_name
+                        orphans.append((port, input_name, qname,
+                                        ctrl_label, display))
+        if not orphans:
+            return
+
+        lines = [f"  {o[3]} / {o[4]}: {o[2]}" for o in orphans]
+        detail = "\n".join(lines)
+        msg = (
+            "The following bindings reference actions that no "
+            f"longer exist:\n\n{detail}"
+            "\n\nRemove these orphaned bindings?"
+        )
+        if messagebox.askyesno("Orphaned Bindings", msg, parent=self):
+            for port, input_name, qname, _, _ in orphans:
+                ctrl = self._config.controllers.get(port)
+                if not ctrl:
+                    continue
+                actions = ctrl.bindings.get(input_name, [])
+                if qname in actions:
+                    actions.remove(qname)
+                if not actions and input_name in ctrl.bindings:
+                    del ctrl.bindings[input_name]
+            # Refresh canvases
+            for port, ctrl in self._config.controllers.items():
+                canvas = self._controller_canvases.get(port)
+                if canvas:
+                    canvas.set_bindings(ctrl.bindings)
+            self._status_var.set(
+                f"Removed {len(orphans)} orphaned binding(s)")
 
     def _on_action_renamed(self, old_qname: str, new_qname: str):
         """Update all binding references when an action's qualified name changes."""
@@ -1051,7 +1107,15 @@ class ControllerConfigApp(tk.Tk):
         # Only show actions whose type is compatible with this input
         available_actions = self._get_compatible_actions(input_name)
 
-        dialog = BindingDialog(self, input_name, current_actions, available_actions)
+        # Build description map for the dialog
+        descriptions = {
+            qname: act.description
+            for qname, act in self._config.actions.items()
+            if act.description
+        }
+
+        dialog = BindingDialog(self, input_name, current_actions,
+                               available_actions, descriptions)
         result = dialog.get_result()
 
         canvas = self._controller_canvases.get(port)

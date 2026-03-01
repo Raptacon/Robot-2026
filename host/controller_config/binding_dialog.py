@@ -2,7 +2,7 @@
 
 Opened when clicking a binding box on the controller canvas.
 Shows the input name, currently assigned actions, and allows
-adding/removing actions.
+adding/removing actions.  Double-click transfers items between lists.
 """
 
 import tkinter as tk
@@ -15,13 +15,15 @@ class BindingDialog(tk.Toplevel):
     """Dialog for editing the action bindings of a single controller input."""
 
     def __init__(self, parent, input_name: str, current_actions: list[str],
-                 available_actions: list[str]):
+                 available_actions: list[str],
+                 action_descriptions: dict[str, str] | None = None):
         """
         Args:
             parent: parent window
             input_name: canonical input name (e.g., "left_stick_x")
             current_actions: list of currently bound action names
             available_actions: all action names available to assign
+            action_descriptions: optional mapping of qname -> description
         """
         super().__init__(parent)
         self.transient(parent)
@@ -35,6 +37,7 @@ class BindingDialog(tk.Toplevel):
         self._result: list[str] | None = None
         self._assigned = list(current_actions)
         self._available = [a for a in available_actions if a not in current_actions]
+        self._descriptions = action_descriptions or {}
 
         self._build_ui()
 
@@ -54,16 +57,23 @@ class BindingDialog(tk.Toplevel):
         self.bind("<Escape>", lambda e: self._on_cancel())
 
     def _build_ui(self):
-        self.minsize(350, 300)
+        self.minsize(400, 350)
 
         main = ttk.Frame(self, padding=10)
         main.pack(fill=tk.BOTH, expand=True)
+
+        # --- Description status bar ---
+        self._desc_var = tk.StringVar(value="")
+        self._desc_label = ttk.Label(
+            main, textvariable=self._desc_var,
+            relief=tk.SUNKEN, anchor=tk.W, foreground="grey40")
+        self._desc_label.pack(fill=tk.X, pady=(0, 8))
 
         # --- Currently assigned actions ---
         ttk.Label(main, text="Assigned Actions:", font=("Arial", 9, "bold")).pack(anchor=tk.W)
 
         assigned_frame = tk.Frame(main)
-        assigned_frame.pack(fill=tk.BOTH, expand=True, pady=(2, 10))
+        assigned_frame.pack(fill=tk.BOTH, expand=True, pady=(2, 5))
 
         self._assigned_listbox = tk.Listbox(assigned_frame, height=5, exportselection=False)
         self._assigned_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -76,8 +86,14 @@ class BindingDialog(tk.Toplevel):
         for action in self._assigned:
             self._assigned_listbox.insert(tk.END, action)
 
+        # Double-click to remove, select to show description
+        self._assigned_listbox.bind("<Double-1>", lambda e: self._remove_action())
+        self._assigned_listbox.bind("<<ListboxSelect>>",
+                                    lambda e: self._show_description(self._assigned_listbox))
+
         # Remove button
-        ttk.Button(main, text="Remove Selected", command=self._remove_action).pack(anchor=tk.W, pady=(0, 10))
+        ttk.Button(main, text="Remove Selected",
+                   command=self._remove_action).pack(anchor=tk.W, pady=(0, 10))
 
         # --- Available actions to add ---
         ttk.Label(main, text="Available Actions:", font=("Arial", 9, "bold")).pack(anchor=tk.W)
@@ -96,14 +112,30 @@ class BindingDialog(tk.Toplevel):
         for action in sorted(self._available):
             self._avail_listbox.insert(tk.END, action)
 
+        # Double-click to add, select to show description
+        self._avail_listbox.bind("<Double-1>", lambda e: self._add_action())
+        self._avail_listbox.bind("<<ListboxSelect>>",
+                                 lambda e: self._show_description(self._avail_listbox))
+
         # Add button
-        ttk.Button(main, text="Add Selected", command=self._add_action).pack(anchor=tk.W, pady=(0, 10))
+        ttk.Button(main, text="Add Selected",
+                   command=self._add_action).pack(anchor=tk.W, pady=(0, 10))
 
         # --- OK / Cancel ---
         btn_frame = tk.Frame(main)
         btn_frame.pack(fill=tk.X)
         ttk.Button(btn_frame, text="OK", command=self._on_ok, width=10).pack(side=tk.RIGHT, padx=5)
         ttk.Button(btn_frame, text="Cancel", command=self._on_cancel, width=10).pack(side=tk.RIGHT)
+
+    def _show_description(self, listbox):
+        """Show the description of the selected action."""
+        sel = listbox.curselection()
+        if not sel:
+            self._desc_var.set("")
+            return
+        action = listbox.get(sel[0])
+        desc = self._descriptions.get(action, "")
+        self._desc_var.set(desc if desc else "No description")
 
     def _remove_action(self):
         """Move selected action from assigned back to available."""
@@ -120,6 +152,7 @@ class BindingDialog(tk.Toplevel):
         self._avail_listbox.delete(0, tk.END)
         for a in self._available:
             self._avail_listbox.insert(tk.END, a)
+        self._desc_var.set("")
 
     def _add_action(self):
         """Move selected action from available to assigned."""
@@ -132,6 +165,7 @@ class BindingDialog(tk.Toplevel):
 
         self._assigned.append(action)
         self._assigned_listbox.insert(tk.END, action)
+        self._desc_var.set("")
 
     def _on_ok(self):
         self._result = list(self._assigned)

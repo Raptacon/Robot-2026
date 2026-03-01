@@ -8,6 +8,7 @@ its metadata is shown in an editable detail form below the tree.
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 
+import fnmatch
 import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -207,6 +208,39 @@ class ActionPanel(tk.Frame):
         list_frame = ttk.LabelFrame(self, text="Actions", padding=5)
         list_frame.pack(fill=tk.BOTH, expand=True)
 
+        # Filter entry
+        filter_frame = tk.Frame(list_frame)
+        filter_frame.pack(fill=tk.X, pady=(0, 3))
+        self._filter_var = tk.StringVar()
+        self._filter_entry = ttk.Entry(
+            filter_frame, textvariable=self._filter_var, width=20)
+        self._filter_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self._filter_var.trace_add("write", self._on_filter_changed)
+        self._filter_entry.bind(
+            "<Escape>", lambda e: self._clear_filter())
+        # Placeholder text
+        self._filter_placeholder = True
+        self._filter_entry.insert(0, "Filter actions...")
+        self._filter_entry.config(foreground="grey")
+        self._filter_entry.bind("<FocusIn>", self._on_filter_focus_in)
+        self._filter_entry.bind("<FocusOut>", self._on_filter_focus_out)
+
+        # Binding status filter toggles
+        self._filter_unassigned_var = tk.BooleanVar()
+        self._filter_multi_var = tk.BooleanVar()
+        self._filter_unassigned_cb = ttk.Checkbutton(
+            filter_frame, text="Unassigned",
+            variable=self._filter_unassigned_var,
+            command=self._on_status_filter_changed,
+        )
+        self._filter_unassigned_cb.pack(side=tk.LEFT, padx=(4, 0))
+        self._filter_multi_cb = ttk.Checkbutton(
+            filter_frame, text="Multi",
+            variable=self._filter_multi_var,
+            command=self._on_status_filter_changed,
+        )
+        self._filter_multi_cb.pack(side=tk.LEFT, padx=(2, 0))
+
         tree_container = tk.Frame(list_frame)
         tree_container.pack(fill=tk.BOTH, expand=True)
 
@@ -223,6 +257,8 @@ class ActionPanel(tk.Frame):
         self._tree.bind("<MouseWheel>", self._on_tree_scroll)
         self._tree.bind("<Button-4>", self._on_tree_scroll)   # Linux scroll up
         self._tree.bind("<Button-5>", self._on_tree_scroll)   # Linux scroll down
+        self._tree.bind("<Delete>", lambda e: self._remove_action())
+        self._tree.bind("<Control-d>", lambda e: self._duplicate_action())
 
         tree_scroll = ttk.Scrollbar(tree_container, orient=tk.VERTICAL,
                                     command=self._tree.yview)
@@ -237,6 +273,8 @@ class ActionPanel(tk.Frame):
         self._context_menu = tk.Menu(self, tearoff=0)
         self._context_menu.add_command(label="Export Group...",
                                        command=self._on_context_export_group)
+        self._context_menu.add_command(label="Rename Group...",
+                                       command=self._rename_group)
         self._tree.bind("<Button-3>", self._on_right_click)
 
         # Action buttons
@@ -248,6 +286,10 @@ class ActionPanel(tk.Frame):
                    width=8).pack(side=tk.LEFT, padx=2)
         ttk.Button(btn_frame, text="Duplicate", command=self._duplicate_action,
                    width=8).pack(side=tk.LEFT, padx=2)
+        self._assign_btn = ttk.Button(
+            btn_frame, text="Assign...",
+            command=self._on_assign_button, width=8)
+        self._assign_btn.pack(side=tk.LEFT, padx=2)
 
         # Group buttons
         group_btn_frame = tk.Frame(list_frame)
@@ -432,6 +474,19 @@ class ActionPanel(tk.Frame):
                          "Click to add points, right-click to remove.")
         _WidgetTooltip(self._edit_segments_btn, _edit_seg_tip)
 
+        # Filter bar tooltips
+        _WidgetTooltip(self._filter_entry,
+                       "Filter by name, group, or description.\n"
+                       "Wildcards: * = any chars, ? = one char.\n"
+                       "e.g. r*n = starts with r ends with n,\n"
+                       "*ee* = contains ee. Escape to clear.")
+        _WidgetTooltip(self._filter_unassigned_cb,
+                       "Show only actions not assigned\n"
+                       "to any controller input.")
+        _WidgetTooltip(self._filter_multi_cb,
+                       "Show only actions bound to\n"
+                       "more than one input.")
+
         self._set_detail_enabled(False)
 
     # ------------------------------------------------------------------
@@ -494,16 +549,41 @@ class ActionPanel(tk.Frame):
 
         groups = self._collect_groups()
         sorted_groups = self._sorted_group_names(groups)
+        filt = self._get_filter_text()
+        status_active = (self._filter_unassigned_var.get()
+                         or self._filter_multi_var.get())
 
         for group in sorted_groups:
             group_iid = f"{self._GROUP_PREFIX}{group}"
-            has_actions = bool(groups[group])
+            members = groups[group]
+
+            # Apply text filter: keep actions matching name/group/description
+            if filt:
+                members = [
+                    q for q in members
+                    if self._matches_filter(q, filt)
+                ]
+                # Skip groups with no matching actions (unless group
+                # name itself matches)
+                if not members and filt not in group.lower():
+                    continue
+
+            # Apply binding status filter
+            if status_active:
+                members = [
+                    q for q in members
+                    if self._matches_status_filter(q)
+                ]
+                if not members:
+                    continue
+
+            has_actions = bool(members)
             self._tree.insert("", tk.END, iid=group_iid,
                               text=f" {group}", open=has_actions,
                               tags=("group",))
 
             if has_actions:
-                for qname in sorted(groups[group],
+                for qname in sorted(members,
                                     key=lambda q: q.split(".", 1)[-1]):
                     action = self._actions[qname]
                     self._tree.insert(group_iid, tk.END, iid=qname,
@@ -603,6 +683,82 @@ class ActionPanel(tk.Frame):
     def _on_tree_toggle(self, event):
         """Handle group expand/collapse — refresh group background colors."""
         self.update_binding_tags()
+
+    # ------------------------------------------------------------------
+    # Filter
+    # ------------------------------------------------------------------
+
+    def _get_filter_text(self) -> str:
+        """Return the active filter string, or '' if placeholder is showing."""
+        if self._filter_placeholder:
+            return ""
+        return self._filter_var.get().strip().lower()
+
+    def _on_filter_changed(self, *args):
+        if self._filter_placeholder:
+            return
+        self._refresh_tree()
+
+    def _clear_filter(self):
+        self._filter_var.set("")
+        self._filter_unassigned_var.set(False)
+        self._filter_multi_var.set(False)
+        self._refresh_tree()
+        self._tree.focus_set()
+
+    def _on_filter_focus_in(self, event):
+        if self._filter_placeholder:
+            self._filter_placeholder = False
+            self._filter_entry.delete(0, tk.END)
+            self._filter_entry.config(foreground="")
+
+    def _on_filter_focus_out(self, event):
+        if not self._filter_var.get():
+            self._filter_placeholder = True
+            self._filter_entry.insert(0, "Filter actions...")
+            self._filter_entry.config(foreground="grey")
+
+    def _on_status_filter_changed(self):
+        """Handle unassigned/multi-bound filter toggle."""
+        self._refresh_tree()
+
+    def _matches_filter(self, qname: str, filt: str) -> bool:
+        """Check if an action matches the filter text.
+
+        Supports glob wildcards (* and ?) when present in the filter.
+        Falls back to substring matching otherwise.
+        """
+        action = self._actions.get(qname)
+        if not action:
+            return False
+        fields = (action.name.lower(), action.group.lower(),
+                  action.description.lower())
+        if '*' in filt or '?' in filt:
+            # Auto-append * so users don't need to match through
+            # end of string: "de*p" matches "deploy"
+            pattern = filt if filt.endswith(('*', '?')) else filt + '*'
+            return any(fnmatch.fnmatch(f, pattern) for f in fields)
+        return any(filt in f for f in fields)
+
+    def _matches_status_filter(self, qname: str) -> bool:
+        """Check if an action passes the binding status filter.
+
+        When neither toggle is active, all actions pass.
+        When one or both are active, the action must match at least
+        one active filter (OR logic).
+        """
+        want_unassigned = self._filter_unassigned_var.get()
+        want_multi = self._filter_multi_var.get()
+        if not want_unassigned and not want_multi:
+            return True
+        if not self._get_binding_info:
+            return True
+        bindings = self._get_binding_info(qname)
+        if want_unassigned and not bindings:
+            return True
+        if want_multi and len(bindings) > 1:
+            return True
+        return False
 
     # ------------------------------------------------------------------
     # Selection Handling
@@ -776,6 +932,30 @@ class ActionPanel(tk.Frame):
                 input_type = InputType(self._input_type_var.get())
             except ValueError:
                 input_type = InputType.BUTTON
+
+            # Warn if switching away from ANALOG with configured data
+            if input_type != InputType.ANALOG and self._selected_name:
+                action = self._actions.get(self._selected_name)
+                if action and action.input_type == InputType.ANALOG:
+                    has_data = (
+                        action.deadband > 0.01
+                        or abs(action.scale - 1.0) > 0.01
+                        or action.extra.get("spline_points")
+                        or action.extra.get("segment_points")
+                    )
+                    if has_data and not messagebox.askyesno(
+                        "Change Input Type",
+                        "Changing from analog will reset deadband,\n"
+                        "scale, and curve editor data. Continue?",
+                    ):
+                        self._updating_form = True
+                        try:
+                            self._input_type_var.set(
+                                InputType.ANALOG.value)
+                        finally:
+                            self._updating_form = False
+                        return
+
             # Suppress intermediate traces from deadband/trigger var changes
             # so the final _on_field_changed captures a single pre-mutation snapshot
             self._updating_form = True
@@ -811,7 +991,16 @@ class ActionPanel(tk.Frame):
         if not points:
             points = default_points()
 
-        dialog = SplineEditorDialog(self.winfo_toplevel(), points)
+        # Collect spline curves from other actions for "Copy from..."
+        other_curves = {}
+        for qname, act in self._actions.items():
+            if qname != self._selected_name:
+                pts = act.extra.get("spline_points")
+                if pts:
+                    other_curves[qname] = pts
+
+        dialog = SplineEditorDialog(self.winfo_toplevel(), points,
+                                    other_curves)
         result = dialog.get_result()
 
         if result is not None:
@@ -837,7 +1026,16 @@ class ActionPanel(tk.Frame):
         if not points:
             points = default_segment_points()
 
-        dialog = SegmentEditorDialog(self.winfo_toplevel(), points)
+        # Collect segment curves from other actions for "Copy from..."
+        other_curves = {}
+        for qname, act in self._actions.items():
+            if qname != self._selected_name:
+                pts = act.extra.get("segment_points")
+                if pts:
+                    other_curves[qname] = pts
+
+        dialog = SegmentEditorDialog(self.winfo_toplevel(), points,
+                                     other_curves)
         result = dialog.get_result()
 
         if result is not None:
@@ -1093,9 +1291,93 @@ class ActionPanel(tk.Frame):
         if self._on_actions_changed:
             self._on_actions_changed()
 
+    def _rename_group(self):
+        """Rename the selected group and update all its actions."""
+        old_name = self._get_selected_group_name()
+        if not old_name:
+            messagebox.showinfo("No Group Selected",
+                                "Select a group to rename.")
+            return
+
+        new_name = simpledialog.askstring(
+            "Rename Group", "New name:", initialvalue=old_name, parent=self)
+        if not new_name or not new_name.strip():
+            return
+        new_name = new_name.strip().lower().replace(" ", "_")
+
+        if new_name == old_name:
+            return
+
+        # Validate: no dots allowed in group names
+        if "." in new_name:
+            messagebox.showerror("Invalid Name",
+                                 "Group names cannot contain dots.")
+            return
+
+        # Check for collision with existing groups
+        groups = self._collect_groups()
+        if new_name in groups:
+            messagebox.showerror("Group Exists",
+                                 f"Group '{new_name}' already exists.")
+            return
+
+        if self._on_before_change:
+            self._on_before_change(0)
+
+        # Collect actions in this group
+        group_actions = [(qn, a) for qn, a in list(self._actions.items())
+                         if a.group == old_name]
+
+        # Re-key each action with the new group
+        for old_qname, action in group_actions:
+            del self._actions[old_qname]
+            action.group = new_name
+            new_qname = action.qualified_name
+            self._actions[new_qname] = action
+
+            if self._on_action_renamed:
+                self._on_action_renamed(old_qname, new_qname)
+
+        # Update empty groups tracking
+        if old_name in self._empty_groups:
+            self._empty_groups.discard(old_name)
+            self._empty_groups.add(new_name)
+
+        # Update selection to the renamed group
+        if self._selected_name:
+            # If the selected action was in this group, update reference
+            for old_qname, action in group_actions:
+                if self._selected_name == old_qname:
+                    self._selected_name = action.qualified_name
+                    break
+
+        self._refresh_tree()
+
+        if self._on_actions_changed:
+            self._on_actions_changed()
+
     # ------------------------------------------------------------------
     # Context Menu (Right-Click)
     # ------------------------------------------------------------------
+
+    def _on_assign_button(self):
+        """Open the assign context menu from the Assign button."""
+        if not self._selected_name:
+            return
+        if self._selected_name not in self._actions:
+            return
+        # Position menu at the button
+        btn = self._assign_btn
+        x = btn.winfo_rootx()
+        y = btn.winfo_rooty() + btn.winfo_height()
+
+        class _FakeEvent:
+            pass
+
+        evt = _FakeEvent()
+        evt.x_root = x
+        evt.y_root = y
+        self._show_action_context_menu(evt, self._selected_name)
 
     def _on_right_click(self, event):
         """Show context menu on right-click."""

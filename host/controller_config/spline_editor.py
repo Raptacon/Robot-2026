@@ -32,11 +32,14 @@ can be added or removed freely.
 
 import math
 import tkinter as tk
-from tkinter import ttk
+from copy import deepcopy
+from tkinter import ttk, filedialog, messagebox
+
+import yaml
 
 # Canvas layout (pixels)
-_CANVAS_W = 500
-_CANVAS_H = 500
+_CANVAS_W = 600
+_CANVAS_H = 600
 _MARGIN = 50
 _PLOT_W = _CANVAS_W - 2 * _MARGIN
 _PLOT_H = _CANVAS_H - 2 * _MARGIN
@@ -142,7 +145,14 @@ class SplineEditorDialog(tk.Toplevel):
       - Drag a green tangent handle: adjust slope at that point
     """
 
-    def __init__(self, parent, points: list[dict]):
+    def __init__(self, parent, points: list[dict],
+                 other_curves: dict[str, list[dict]] | None = None):
+        """
+        Args:
+            parent: parent window
+            points: initial control points
+            other_curves: optional {action_name: points} for "Copy from..."
+        """
         super().__init__(parent)
         self.title("Spline Response Curve Editor")
         self.transient(parent)
@@ -152,11 +162,16 @@ class SplineEditorDialog(tk.Toplevel):
         self._points.sort(key=lambda p: p["x"])
         self._result = None
         self._symmetric = False
+        self._other_curves = other_curves or {}
 
         # Drag state
         self._drag_type = None   # "point" or "handle"
         self._drag_idx = None
         self._drag_side = None   # "in" or "out"
+
+        # Undo stack (max 30 snapshots)
+        self._undo_stack: list[list[dict]] = []
+        self._drag_undo_pushed = False
 
         self._build_ui()
         self._draw()
@@ -183,6 +198,147 @@ class SplineEditorDialog(tk.Toplevel):
         return self._result
 
     # ------------------------------------------------------------------
+    # Undo
+    # ------------------------------------------------------------------
+
+    def _push_undo(self):
+        """Save current points to undo stack."""
+        self._undo_stack.append(deepcopy(self._points))
+        if len(self._undo_stack) > 30:
+            self._undo_stack.pop(0)
+
+    def _pop_undo(self):
+        """Restore previous points from undo stack."""
+        if not self._undo_stack:
+            self._status_var.set("Nothing to undo")
+            return
+        self._points = self._undo_stack.pop()
+        self._draw()
+        self._status_var.set(f"Undo ({len(self._undo_stack)} remaining)")
+
+    # ------------------------------------------------------------------
+    # Import / Export / Copy
+    # ------------------------------------------------------------------
+
+    def _on_export(self):
+        """Export current curve points to a YAML file."""
+        path = filedialog.asksaveasfilename(
+            parent=self, title="Export Spline Curve",
+            defaultextension=".yaml",
+            filetypes=[("YAML files", "*.yaml *.yml"), ("All files", "*.*")])
+        if not path:
+            return
+        data = {"type": "spline", "points": deepcopy(self._points)}
+        with open(path, "w") as f:
+            yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+        self._status_var.set(f"Exported to {path}")
+
+    def _on_import(self):
+        """Import curve points from a YAML file."""
+        path = filedialog.askopenfilename(
+            parent=self, title="Import Spline Curve",
+            filetypes=[("YAML files", "*.yaml *.yml"), ("All files", "*.*")])
+        if not path:
+            return
+        try:
+            with open(path) as f:
+                data = yaml.safe_load(f)
+        except Exception as exc:
+            messagebox.showerror("Import Failed",
+                                 f"Could not read YAML file:\n{exc}",
+                                 parent=self)
+            return
+
+        if isinstance(data, dict):
+            points = data.get("points", [])
+        elif isinstance(data, list):
+            points = data
+        else:
+            messagebox.showerror(
+                "Import Failed",
+                "File does not contain curve data.\n"
+                "Expected a 'points' list of {{x, y, tangent}} entries.",
+                parent=self)
+            return
+
+        if not points:
+            messagebox.showerror(
+                "Import Failed",
+                "No points found in file.\n"
+                "Expected a 'points' key containing a list.",
+                parent=self)
+            return
+
+        if not isinstance(points, list) or not all(
+                isinstance(p, dict) and "x" in p and "y" in p
+                for p in points):
+            messagebox.showerror(
+                "Import Failed",
+                "Invalid point data. Each point must have "
+                "'x' and 'y' fields.",
+                parent=self)
+            return
+
+        # Ensure tangent field exists for spline points
+        for p in points:
+            if "tangent" not in p:
+                p["tangent"] = 1.0
+        self._push_undo()
+        self._points = [dict(p) for p in points]
+        self._points.sort(key=lambda p: p["x"])
+        self._draw()
+        self._status_var.set(f"Imported from {path}")
+
+    def _on_copy_from(self):
+        """Copy curve data from another action."""
+        if not self._other_curves:
+            return
+        win = tk.Toplevel(self)
+        win.title("Copy Curve From...")
+        win.transient(self)
+        win.grab_set()
+        win.resizable(False, False)
+
+        ttk.Label(win, text="Select an action to copy its curve:",
+                  padding=5).pack(anchor=tk.W)
+        listbox = tk.Listbox(win, height=min(10, len(self._other_curves)),
+                             width=40)
+        listbox.pack(padx=10, pady=5, fill=tk.BOTH, expand=True)
+        names = sorted(self._other_curves.keys())
+        for name in names:
+            listbox.insert(tk.END, name)
+
+        def on_ok():
+            sel = listbox.curselection()
+            if not sel:
+                return
+            chosen = names[sel[0]]
+            pts = self._other_curves[chosen]
+            for p in pts:
+                if "tangent" not in p:
+                    p["tangent"] = 1.0
+            self._push_undo()
+            self._points = [dict(p) for p in pts]
+            self._points.sort(key=lambda p: p["x"])
+            self._draw()
+            self._status_var.set(f"Copied curve from {chosen}")
+            win.destroy()
+
+        listbox.bind("<Double-1>", lambda e: on_ok())
+        bf = ttk.Frame(win)
+        bf.pack(fill=tk.X, padx=10, pady=(0, 10))
+        ttk.Button(bf, text="OK", command=on_ok).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(bf, text="Cancel",
+                   command=win.destroy).pack(side=tk.RIGHT)
+
+        # Center on parent editor dialog
+        win.update_idletasks()
+        px, py = self.winfo_rootx(), self.winfo_rooty()
+        pw, ph = self.winfo_width(), self.winfo_height()
+        ww, wh = win.winfo_width(), win.winfo_height()
+        win.geometry(f"+{px + (pw - ww) // 2}+{py + (ph - wh) // 2}")
+
+    # ------------------------------------------------------------------
     # UI
     # ------------------------------------------------------------------
 
@@ -201,10 +357,24 @@ class SplineEditorDialog(tk.Toplevel):
         ttk.Label(self, textvariable=self._status_var,
                   relief=tk.SUNKEN, anchor=tk.W).pack(fill=tk.X, padx=10)
 
+        # Top button row: file and copy operations
+        top_btn = ttk.Frame(self)
+        top_btn.pack(fill=tk.X, padx=10, pady=(5, 0))
+        ttk.Button(top_btn, text="Export YAML",
+                   command=self._on_export).pack(side=tk.LEFT, padx=5)
+        ttk.Button(top_btn, text="Import YAML",
+                   command=self._on_import).pack(side=tk.LEFT, padx=5)
+        if self._other_curves:
+            ttk.Button(top_btn, text="Copy from...",
+                       command=self._on_copy_from).pack(side=tk.LEFT, padx=5)
+
+        # Bottom button row: edit operations
         btn = ttk.Frame(self)
         btn.pack(fill=tk.X, padx=10, pady=(5, 10))
         ttk.Button(btn, text="Reset to Linear",
                    command=self._on_reset).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn, text="Undo",
+                   command=self._pop_undo).pack(side=tk.LEFT, padx=5)
         self._sym_var = tk.BooleanVar()
         ttk.Checkbutton(btn, text="Symmetry", variable=self._sym_var,
                         command=self._on_symmetry_toggle
@@ -213,6 +383,8 @@ class SplineEditorDialog(tk.Toplevel):
                    command=self._on_cancel).pack(side=tk.RIGHT, padx=5)
         ttk.Button(btn, text="OK",
                    command=self._on_ok).pack(side=tk.RIGHT, padx=5)
+
+        self.bind("<Control-z>", lambda e: self._pop_undo())
 
     # ------------------------------------------------------------------
     # Coordinate conversion
@@ -406,6 +578,7 @@ class SplineEditorDialog(tk.Toplevel):
             if abs(pt["x"] - x) < _MIN_X_GAP:
                 return
 
+        self._push_undo()
         tangent = _numerical_slope(self._points, x)
         self._points.append({
             "x": round(x, 3),
@@ -425,6 +598,7 @@ class SplineEditorDialog(tk.Toplevel):
         """Remove the control point at *idx* (not endpoints)."""
         if self._is_endpoint(idx) or len(self._points) <= 2:
             return
+        self._push_undo()
         self._points.pop(idx)
         if self._symmetric:
             self._enforce_symmetry()
@@ -436,6 +610,7 @@ class SplineEditorDialog(tk.Toplevel):
         hit = self._hit_test(event.x, event.y)
         if hit:
             self._drag_type, self._drag_idx, self._drag_side = hit
+            self._drag_undo_pushed = False
         else:
             self._drag_type = None
             self._add_point_at(event.x, event.y)
@@ -443,6 +618,9 @@ class SplineEditorDialog(tk.Toplevel):
     def _on_drag(self, event):
         if self._drag_type is None:
             return
+        if not self._drag_undo_pushed:
+            self._push_undo()
+            self._drag_undo_pushed = True
         i = self._drag_idx
         pt = self._points[i]
 
@@ -510,6 +688,7 @@ class SplineEditorDialog(tk.Toplevel):
 
     def _on_symmetry_toggle(self):
         """Handle the Symmetry checkbox toggle."""
+        self._push_undo()
         self._symmetric = self._sym_var.get()
         if self._symmetric:
             self._enforce_symmetry()
@@ -555,6 +734,7 @@ class SplineEditorDialog(tk.Toplevel):
     # ------------------------------------------------------------------
 
     def _on_reset(self):
+        self._push_undo()
         self._points = default_points()
         if self._symmetric:
             self._enforce_symmetry()

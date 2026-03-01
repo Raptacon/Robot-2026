@@ -138,9 +138,10 @@ class ControllerCanvas(tk.Frame):
         self._hover_input: str | None = None    # hovered binding box
         self._hover_shape: str | None = None    # hovered controller shape
         self._selected_input: str | None = None  # selected (red line) input
-        self._show_borders: bool = False         # shape outlines hidden by default
+        self._show_borders: bool = False
         self._labels_locked: bool = False        # prevent label dragging
         self._hide_unassigned: bool = False      # hide inputs with no bindings
+        self._dragging_from_panel: bool = False  # cross-widget drag active
 
         # Drag state
         self._dragging: str | None = None
@@ -258,6 +259,11 @@ class ControllerCanvas(tk.Frame):
         """Toggle hiding of inputs with no bindings and redraw."""
         self._hide_unassigned = hide
         self._redraw()
+
+    def set_drag_cursor(self, dragging: bool):
+        """Set cross-widget drag state so hover cursor is overridden."""
+        self._dragging_from_panel = dragging
+        self._canvas.config(cursor="plus" if dragging else "")
 
     def reset_label_positions(self):
         """Clear all custom label positions and redraw at defaults."""
@@ -903,11 +909,12 @@ class ControllerCanvas(tk.Frame):
         else:
             self._hide_tooltip()
 
-        # Cursor
-        if box_hit or shape_hit:
-            self._canvas.config(cursor="hand2")
-        else:
-            self._canvas.config(cursor="")
+        # Cursor (don't override plus cursor during cross-widget drag)
+        if not self._dragging_from_panel:
+            if box_hit or shape_hit:
+                self._canvas.config(cursor="hand2")
+            else:
+                self._canvas.config(cursor="")
 
         # Report image-space coordinates to parent
         if self._on_mouse_coord and hasattr(self, '_rendered_w'):
