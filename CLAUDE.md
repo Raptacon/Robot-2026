@@ -43,6 +43,12 @@ make deploy             # Deploys libraries and code to the robot. (requires rob
 python -m robotpy deploy
 ```
 
+**Run controller config GUI:**
+```bash
+pip install -r host/requirements.txt   # First time only (Pillow, PyYAML)
+python -m host.controller_config       # Launch GUI
+```
+
 **Style:**
 Follow major style guidelines from PEP8 based on what is configured for flake8.
 
@@ -118,6 +124,40 @@ Logs controller inputs, odometry, swerve module states, and driver station data 
 ### PathPlanner Integration
 
 Autonomous routines are defined as `.auto` and `.path` files in `deploy/pathplanner/`. PathPlanner is configured in `SwerveDrivetrain.configure_path_planner()` via `AutoBuilder`. The auto chooser is exposed on SmartDashboard.
+
+### Controller Config Model (`utils/controller/`)
+
+Shared pure-Python data model used by both the GUI tool and robot code. No wpilib dependency.
+
+- **`model.py`** - `ActionDefinition` (name, description, input_type, trigger_mode, deadband, inversion, scale, extra), `ControllerConfig` (port, name, bindings), `FullConfig` (actions + controllers). Enums: `InputType` (BUTTON/AXIS/POV/OUTPUT), `TriggerMode` (ON_TRUE/ON_FALSE/WHILE_TRUE/WHILE_FALSE/TOGGLE_ON_TRUE/RAW).
+- **`config_io.py`** - `load_config(path)` / `save_config(config, path)` for YAML serialization. Omits default values for clean output.
+- Config files stored in `data/controller.yaml`
+
+**Robot-side integration (not yet implemented):**
+To use GUI-configured bindings on the robot, a future `commands/controller_loader.py` would:
+1. Call `load_config("data/controller.yaml")` at robot init
+2. For each controller port, create `commands2.button.CommandXboxController(port)`
+3. Map each binding entry to the appropriate trigger (e.g., `controller.a()` for `a_button`, `controller.leftTrigger()` for `left_trigger`)
+4. Apply `TriggerMode` to determine wpilib trigger method (`.onTrue()`, `.whileTrue()`, `.toggleOnTrue()`, etc.)
+5. Wire to the command referenced by the action name
+
+### Controller Config GUI (`host/controller_config/`)
+
+Host-side tkinter tool for visually mapping Xbox controller inputs to robot actions. Run with `python -m host.controller_config`. Requires `pip install -r host/requirements.txt` (Pillow, PyYAML).
+
+**Key files:**
+- **`app.py`** - Main `ControllerConfigApp(tk.Tk)` window: menu bar, tabbed controllers, action panel, status bar. Orchestrates callbacks between canvas and data model.
+- **`controller_canvas.py`** - `ControllerCanvas(tk.Frame)`: renders Xbox controller image with interactive binding boxes, leader lines, clickable button shapes, rumble icons, drag support, hover highlighting, and tooltips.
+- **`layout_coords.py`** - Defines all input positions (`InputCoord`) and clickable shapes (`ButtonShape`) in fractional coordinates (0-1) relative to a 1920x1292 source image. Helper functions `_fx()`/`_fy()` convert pixel coords to fractions.
+- **`action_panel.py`** - `ActionPanel(tk.Frame)`: CRUD for `ActionDefinition` objects (name, description, input type, trigger mode, deadband, inversion, scale).
+- **`binding_dialog.py`** - `BindingDialog`: modal dialog for assigning actions to a controller input.
+- **`main.py`** - CLI entry point with argparse.
+
+**Design patterns:**
+- Canvas uses callback-based architecture — parent (app.py) passes `on_binding_click`, `on_hover_input`, `on_hover_shape`, etc.
+- Label positions are draggable and persist to `.settings.json` (gitignored)
+- Shape borders hidden by default, toggleable via View menu
+- PIL `ImageDraw` fallback for rumble icon when `cairosvg` unavailable (common on Windows)
 
 ### CAN ID Convention
 
