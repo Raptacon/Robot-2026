@@ -155,5 +155,9 @@ host/controller_config/.settings.json
 # Claude Code local settings
 .claude/
 
+# Auto-generated controller map files
+controller_maps.py
+**/controller_map*.png
+
 # NetworkTables backup
 networktables.json.bck

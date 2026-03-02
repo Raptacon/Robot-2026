@@ -143,7 +143,7 @@ Config-driven controller input management. `InputFactory` loads YAML config, cre
 - `getAnalogRaw(name, group, required, apply_invert, apply_deadband, apply_scale)` -> `Callable[[], float]`
 - `getRumbleControl(name, group, required)` -> `ManagedRumble`
 
-Analog shaping pipeline order: inversion -> deadband -> curve -> scale -> slew rate limit. All action parameters published to NT under `/inputs/actions/<group>/<action>/` via `ntproperty` for runtime dashboard tuning. Call `factory.update()` once per cycle in `robotPeriodic` to sync NT changes (prevents mid-cycle inconsistency).
+Analog shaping pipeline order: inversion -> deadband -> curve -> scale -> slew rate limit. All action parameters published to NT under `/inputs/actions/<group>/<action>/` via `ntproperty` for runtime dashboard tuning. NT sync is handled automatically each scheduler cycle.
 
 Input types: BUTTON, ANALOG, POV, OUTPUT, BOOLEAN_TRIGGER (analog->bool via threshold), VIRTUAL_ANALOG (reserved).
 
@@ -162,7 +162,7 @@ Input types: BUTTON, ANALOG, POV, OUTPUT, BOOLEAN_TRIGGER (analog->bool via thre
    ```python
    self.factory.getButton("intake.run").bind(intake.runCommand())
    ```
-4. Call `self.factory.update()` once per cycle in `robotPeriodic`.
+4. NT sync is automatic — the factory registers an internal subsystem with the CommandScheduler that handles it each cycle.
 5. Subsystems that need their own inputs can use `utils.input.get_factory()` instead of constructor injection:
    ```python
    import utils.input
@@ -190,6 +190,10 @@ Portable curve math lives in `utils/math/curves.py` (shared by both robot code a
   - Numeric input with 0 = disabled
   - Optional negative_slew_rate in extra
 - [ ] Add threshold field to action panel for BOOLEAN_TRIGGER inputs
+- [ ] Disable deadband/inversion/scale/curve fields when trigger_mode is RAW
+  - RAW is true passthrough — no shaping applied
+  - Grey out or hide shaping fields to avoid confusion
+  - Show a note: "RAW mode: no shaping applied. Use SCALED for deadband/inversion/scale."
 - [ ] Refactor: spline_editor.py and segment_editor.py already import
   curve math from utils/math/curves.py (done) — no further changes needed
 
@@ -210,12 +214,6 @@ Portable curve math lives in `utils/math/curves.py` (shared by both robot code a
 
 ## Future: Config Cleanup
 
-- [ ] Remove `_INPUT_TYPE_MIGRATION` backward compat in `config_io.py` (migrates `"axis"` -> `"analog"`)
-  - Ensure all YAML files use `"analog"` not `"axis"`, then delete the migration dict and lookup
-- [ ] Remove flat (non-nested) config format support in `config_io.py`
-  - Remove `_is_nested_format()` heuristic detection and flat-format branch in `_load_actions_dict()`
-  - Remove `_migrate_bindings()` (upgrades bare action names to qualified `general.name`)
-  - All current YAML files already use nested format with explicit `general:` group key
 - [ ] Explore adding JSON Schema for controller config YAML validation
   - A `.schema.json` file would give IDE autocompletion + red squiggles in YAML editors
   - JSON Schema validates YAML after parsing (YAML is a superset of JSON)

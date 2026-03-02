@@ -1,8 +1,8 @@
 actions:
   drivetrain:
     speed:
-      input_type: axis
+      input_type: analog
       trigger_mode: raw
     rotation:
-      input_type: axis
+      input_type: analog
       trigger_mode: raw
