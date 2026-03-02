@@ -5,9 +5,8 @@ XboxControllers, and provides factory methods that return managed
 input objects (ManagedButton, ManagedAnalog, ManagedRumble).
 
 All action parameters are published to NetworkTables via ntproperty
-for runtime dashboard tuning.  The factory.update() method syncs
-NT changes into managed objects once per cycle to prevent mid-cycle
-inconsistency.
+for runtime dashboard tuning.  NT sync is handled automatically each
+scheduler cycle via an internal subsystem.
 
 Usage::
 
@@ -15,15 +14,13 @@ Usage::
     speed = factory.getAnalog("drivetrain.speed")
     fire = factory.getButton("intake.run")
     rumble = factory.getRumbleControl("general.rumble_left")
-
-    # In robotPeriodic:
-    factory.update()
 """
 
 import logging
 from pathlib import Path
 from typing import Callable
 
+import commands2
 import wpilib
 
 from utils.controller.model import (
@@ -78,6 +75,25 @@ def get_factory() -> "InputFactory":
             "InputFactory not initialized — create one in robotInit "
             "before calling get_factory()")
     return _active_factory
+
+
+class _FactoryUpdater(commands2.Subsystem):
+    """Internal subsystem that runs factory NT sync each scheduler cycle.
+
+    Registered with the CommandScheduler on construction.  The scheduler
+    iterates subsystem ``periodic()`` calls in registration order (dict
+    insertion order).  Because the factory is created in ``robotInit``
+    before any user subsystems, this updater is the first registered
+    subsystem and its ``periodic()`` runs before all others — ensuring
+    managed inputs have fresh NT values before any subsystem reads them.
+    """
+
+    def __init__(self, factory: "InputFactory"):
+        super().__init__()
+        self._factory = factory
+
+    def periodic(self) -> None:
+        self._factory._update()
 
 
 class InputFactory:
@@ -159,6 +175,21 @@ class InputFactory:
             _active_factory = self
         elif register_global is None and _active_factory is None:
             _active_factory = self
+
+        # Register an internal subsystem that syncs NT values each cycle.
+        # The CommandScheduler iterates subsystems in registration order
+        # (dict insertion order in Python 3.7+).  Since the factory is
+        # created in robotInit before user subsystems, this updater is
+        # registered first and its periodic() runs before all others.
+        scheduler = commands2.CommandScheduler.getInstance()
+        if scheduler._subsystems:
+            log.warning(
+                "InputFactory created after %d other subsystem(s) — "
+                "NT sync may run after those subsystems read stale "
+                "values for one cycle. Create the factory before any "
+                "subsystems to guarantee ordering.",
+                len(scheduler._subsystems))
+        self._updater = _FactoryUpdater(self)
 
     @property
     def config(self) -> FullConfig:
@@ -462,30 +493,45 @@ class InputFactory:
         self._rumbles[qn] = rumble
         return rumble
 
-    # --- Periodic update ---
+    # --- Periodic sync (called automatically by _FactoryUpdater) ---
 
-    def update(self) -> None:
-        """Call once per robot cycle (in robotPeriodic).
+    def _update(self) -> None:
+        """Sync NT values into managed objects and handle rumble timeouts.
 
-        Syncs NT values into managed objects and handles rumble timeouts.
+        Called automatically each scheduler cycle by ``_FactoryUpdater``.
+        Because the factory registers before user subsystems, this runs
+        first — so managed inputs have fresh NT values before any
+        subsystem reads them.
 
         NT values are read once per cycle and compared against cached
         local values.  If a dashboard change is detected, the local
         property is updated and the pipeline is rebuilt.  This prevents
         mid-cycle inconsistency — all reads within a single cycle see
         the same parameter snapshot.
+
+        Custom NT mappings (from ``mapParamToNtPath()``) are synced
+        after the auto-generated NT sync.  Parameters with custom
+        mappings are skipped during auto-generated sync to prevent
+        conflicts.
+
+        All NT reads (both auto-generated and custom) happen here in
+        the main robot loop — not via ntcore listeners — because
+        listener callbacks fire on a background thread and would race
+        with property reads during pipeline execution.
         """
         # Sync NT -> ManagedAnalog properties
         for analog in self._analogs.values():
             if analog.action is None:
                 continue
             sync_analog_nt(analog)
+            analog._sync_custom_maps()
 
         # Sync NT -> ManagedButton properties (BOOLEAN_TRIGGER threshold)
         for btn in self._buttons.values():
             if btn.action is None:
                 continue
             sync_button_nt(btn)
+            btn._sync_custom_maps()
 
         # Update rumble timeouts
         for rumble in self._rumbles.values():

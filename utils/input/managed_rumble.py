@@ -1,7 +1,7 @@
 """ManagedRumble — output setter with optional timeout.
 
 Wraps a rumble output channel with set/stop/timeout functionality.
-The factory calls update() each cycle to handle timeouts.
+Timeouts are checked automatically each scheduler cycle.
 """
 
 import time

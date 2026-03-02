@@ -143,7 +143,7 @@ Config-driven controller input management. `InputFactory` loads YAML config, cre
 - `getAnalogRaw(name, group, required, apply_invert, apply_deadband, apply_scale)` -> `Callable[[], float]`
 - `getRumbleControl(name, group, required)` -> `ManagedRumble`
 
-Analog shaping pipeline order: inversion -> deadband -> curve -> scale -> slew rate limit. All action parameters published to NT under `/inputs/actions/<group>/<action>/` via `ntproperty` for runtime dashboard tuning. Call `factory.update()` once per cycle in `robotPeriodic` to sync NT changes (prevents mid-cycle inconsistency).
+Analog shaping pipeline order: inversion -> deadband -> curve -> scale -> slew rate limit. All action parameters published to NT under `/inputs/actions/<group>/<action>/` via `ntproperty` for runtime dashboard tuning. NT sync is handled automatically each scheduler cycle.
 
 Input types: BUTTON, ANALOG, POV, OUTPUT, BOOLEAN_TRIGGER (analog->bool via threshold), VIRTUAL_ANALOG (reserved).
 
@@ -162,7 +162,7 @@ Input types: BUTTON, ANALOG, POV, OUTPUT, BOOLEAN_TRIGGER (analog->bool via thre
    ```python
    self.factory.getButton("intake.run").bind(intake.runCommand())
    ```
-4. Call `self.factory.update()` once per cycle in `robotPeriodic`.
+4. NT sync is automatic — the factory registers an internal subsystem with the CommandScheduler that handles it each cycle.
 5. Subsystems that need their own inputs can use `utils.input.get_factory()` instead of constructor injection:
    ```python
    import utils.input

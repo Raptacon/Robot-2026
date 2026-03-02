@@ -27,15 +27,30 @@ To use different rates for increasing vs decreasing, add
         negative_slew_rate: -2.0  # max decrease rate (must be negative)
 
 If ``negative_slew_rate`` is not set, it defaults to ``-slew_rate``.
+
+Custom NT mappings
+------------------
+Any tunable parameter can be mapped to an arbitrary NetworkTables path
+using ``mapParamToNtPath()``.  While a custom mapping is active for a
+parameter, the auto-generated NT property for that parameter is ignored
+(to prevent conflicts).  Changes to the custom NT value are applied
+automatically each scheduler cycle::
+
+    analog = factory.getAnalog("drivetrain.speed")
+    analog.mapParamToNtPath("/SmartDashboard/Drivetrain speed", "scale")
+    # Now SmartDashboard "Drivetrain speed" controls the scale property.
+    analog.unmap("scale")      # Revert to auto-generated NT control
+    analog.clearMaps()         # Remove all custom mappings
 """
 
 from typing import Callable
 
 from utils.controller.model import ActionDefinition, EventTriggerMode
+from utils.input._nt_mapping import NtMappingMixin
 from utils.input.shaping import build_shaping_pipeline
 
 
-class ManagedAnalog:
+class ManagedAnalog(NtMappingMixin):
     """A managed analog input with full shaping pipeline.
 
     Args:
@@ -43,6 +58,13 @@ class ManagedAnalog:
         accessor: Callable returning the raw axis value each cycle.
         default_value: Value returned when no accessor is bound.
     """
+
+    _PARAM_TYPES: dict[str, type] = {
+        "deadband": float,
+        "inversion": bool,
+        "scale": float,
+        "slew_rate": float,
+    }
 
     def __init__(
         self,
@@ -69,6 +91,8 @@ class ManagedAnalog:
             self._slew_rate = 0.0
             self._trigger_mode = EventTriggerMode.RAW
             self._extra = {}
+
+        self._init_nt_mapping()
 
         self._pipeline: Callable[[float], float] = lambda x: x
         self._slew_limiter = None

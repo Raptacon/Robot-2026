@@ -3,6 +3,13 @@
 Provides the same binding API as Trigger (.onTrue, .whileTrue, etc.)
 but adds config-driven auto-binding via .bind() and supports future
 dynamic remapping through _rebind().
+
+Custom NT mappings
+------------------
+The ``threshold`` parameter (for BOOLEAN_TRIGGER actions) can be mapped
+to an arbitrary NetworkTables path using ``mapParamToNtPath()``.  While
+a custom mapping is active, the auto-generated NT property is ignored.
+Changes are applied automatically each scheduler cycle.
 """
 
 from typing import Callable
@@ -10,10 +17,11 @@ from typing import Callable
 import commands2
 from commands2.button import Trigger
 
-from utils.controller.model import ActionDefinition, EventTriggerMode
+from utils.controller.model import ActionDefinition, EventTriggerMode, InputType
+from utils.input._nt_mapping import NtMappingMixin
 
 
-class ManagedButton:
+class ManagedButton(NtMappingMixin):
     """A managed boolean input backed by a Trigger.
 
     Args:
@@ -22,6 +30,10 @@ class ManagedButton:
         condition: Callable returning the current boolean state.
         default_value: Value returned when no condition is bound.
     """
+
+    _PARAM_TYPES: dict[str, type] = {
+        "threshold": float,
+    }
 
     def __init__(
         self,
@@ -33,6 +45,37 @@ class ManagedButton:
         self._condition = condition
         self._default_value = default_value
         self._trigger = Trigger(condition)
+
+        self._init_nt_mapping()
+
+    # --- Mixin overrides for threshold-specific behavior ---
+
+    def _validate_param(self, param: str) -> str | None:
+        """Reject threshold mapping on non-BOOLEAN_TRIGGER actions."""
+        if (param == "threshold"
+                and self._action is not None
+                and self._action.input_type != InputType.BOOLEAN_TRIGGER):
+            return (
+                f"Cannot map 'threshold' on a non-BOOLEAN_TRIGGER action "
+                f"('{self._action.qualified_name}' is "
+                f"{self._action.input_type.value})")
+        return None
+
+    def _get_param_value(self, param: str):
+        """Read threshold from the action definition or nt_threshold."""
+        if param == "threshold":
+            if hasattr(self, 'nt_threshold'):
+                return self.nt_threshold
+            return (self._action.threshold
+                    if self._action is not None else 0.5)
+        return getattr(self, param)
+
+    def _set_param_value(self, param: str, value) -> None:
+        """Write threshold to nt_threshold if available."""
+        if param == "threshold" and hasattr(self, 'nt_threshold'):
+            self.nt_threshold = value
+        else:
+            setattr(self, param, value)
 
     # --- Drop-in Trigger binding methods ---
 

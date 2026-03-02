@@ -9,7 +9,7 @@ Features shown:
   - ManagedButton.bind() for auto-binding using configured trigger modes
   - Drivetrain subsystem with default command and swappable axes
   - get_factory() for subsystem-local input access (LED fetches its own rumble)
-  - factory.update() in robotPeriodic for NT sync and rumble timeouts
+  - Automatic NT sync via CommandScheduler
 
 Compare to the original WPILib SwerveBot example to see how InputFactory
 replaces manual deadband/inversion/slew rate code with config-driven
@@ -102,11 +102,6 @@ class MyRobot(commands2.TimedCommandRobot):
             self._last_rumble_right = 0.0
 
     def robotPeriodic(self) -> None:
-        # Sync NT values into managed objects and handle rumble
-        # timeouts.  Call this exactly once per cycle.
-        self.factory.update()
-        commands2.CommandScheduler.getInstance().run()
-
         # Log rumble changes in sim
         # Note that this is a work around since the sim does not seem
         # to let a attached controller rumble and does not display the rumble

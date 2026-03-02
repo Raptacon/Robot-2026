@@ -190,31 +190,50 @@ def make_rumble_nt_class(nt_path: str, action: ActionDefinition) -> type:
 # ---------------------------------------------------------------------------
 
 def sync_analog_nt(analog: ManagedAnalog) -> None:
-    """Sync NT values into a ManagedAnalog's local properties."""
+    """Sync NT values into a ManagedAnalog's local properties.
+
+    Skips parameters that have active custom NT mappings — those are
+    handled separately by the managed object's ``_sync_custom_maps()``
+    method, which reads from the user-specified NT path instead.
+    """
     if not hasattr(analog, 'nt_deadband'):
         return
 
-    nt_db = analog.nt_deadband
-    if nt_db != analog.deadband:
-        analog.deadband = nt_db
+    mapped = analog.mapped_params
 
-    nt_inv = analog.nt_inversion
-    if nt_inv != analog.inversion:
-        analog.inversion = nt_inv
+    if 'deadband' not in mapped:
+        nt_db = analog.nt_deadband
+        if nt_db != analog.deadband:
+            analog.deadband = nt_db
 
-    nt_sc = analog.nt_scale
-    if nt_sc != analog.scale:
-        analog.scale = nt_sc
+    if 'inversion' not in mapped:
+        nt_inv = analog.nt_inversion
+        if nt_inv != analog.inversion:
+            analog.inversion = nt_inv
 
-    nt_sr = analog.nt_slew_rate
-    if nt_sr != analog.slew_rate:
-        analog.slew_rate = nt_sr
+    if 'scale' not in mapped:
+        nt_sc = analog.nt_scale
+        if nt_sc != analog.scale:
+            analog.scale = nt_sc
+
+    if 'slew_rate' not in mapped:
+        nt_sr = analog.nt_slew_rate
+        if nt_sr != analog.slew_rate:
+            analog.slew_rate = nt_sr
 
 
 def sync_button_nt(btn: ManagedButton) -> None:
-    """Sync NT values into a ManagedButton (threshold for BOOLEAN_TRIGGER)."""
+    """Sync NT values into a ManagedButton (threshold for BOOLEAN_TRIGGER).
+
+    Skips parameters that have active custom NT mappings.
+    """
     if not hasattr(btn, 'nt_threshold'):
         return
+
+    mapped = btn.mapped_params
+    if 'threshold' in mapped:
+        return
+
     # BOOLEAN_TRIGGER threshold changes require rebuilding the
     # condition — this is a future enhancement. For now we just
     # read and log.
