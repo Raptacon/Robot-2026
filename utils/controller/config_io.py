@@ -27,11 +27,11 @@ import yaml
 
 from .model import (
     ActionDefinition,
-    BUTTON_TRIGGER_MODES,
+    BUTTON_EVENT_TRIGGER_MODES,
     ControllerConfig,
     FullConfig,
     InputType,
-    TriggerMode,
+    EventTriggerMode,
 )
 
 # Defaults used to decide which fields to omit from YAML output
@@ -40,7 +40,7 @@ _ACTION_DEFAULTS = ActionDefinition(name="")
 # Known ActionDefinition fields used for format detection
 _ACTION_FIELD_NAMES = {
     "description", "input_type", "trigger_mode",
-    "deadband", "inversion", "scale", "extra",
+    "deadband", "threshold", "inversion", "slew_rate", "scale", "extra",
 }
 
 
@@ -55,8 +55,12 @@ def _action_to_dict(action: ActionDefinition) -> dict:
         d["trigger_mode"] = action.trigger_mode.value
     if action.deadband != _ACTION_DEFAULTS.deadband:
         d["deadband"] = action.deadband
+    if action.threshold != _ACTION_DEFAULTS.threshold:
+        d["threshold"] = action.threshold
     if action.inversion != _ACTION_DEFAULTS.inversion:
         d["inversion"] = action.inversion
+    if action.slew_rate != _ACTION_DEFAULTS.slew_rate:
+        d["slew_rate"] = action.slew_rate
     if action.scale != _ACTION_DEFAULTS.scale:
         d["scale"] = action.scale
     if action.extra:
@@ -77,17 +81,17 @@ def _dict_to_action(name: str, d: dict, group: str = "general") -> ActionDefinit
     input_type = InputType(raw_input_type)
 
     # Determine appropriate default trigger mode based on input type
-    if input_type == InputType.ANALOG:
-        default_trigger = TriggerMode.SCALED.value
+    if input_type in (InputType.ANALOG, InputType.VIRTUAL_ANALOG):
+        default_trigger = EventTriggerMode.SCALED.value
     else:
-        default_trigger = TriggerMode.ON_TRUE.value
+        default_trigger = EventTriggerMode.ON_TRUE.value
     raw_trigger = d.get("trigger_mode", default_trigger)
 
     # Migrate button trigger modes on analog inputs to scaled
-    trigger_mode = TriggerMode(raw_trigger)
-    button_values = {m.value for m in BUTTON_TRIGGER_MODES}
+    trigger_mode = EventTriggerMode(raw_trigger)
+    button_values = {m.value for m in BUTTON_EVENT_TRIGGER_MODES}
     if input_type == InputType.ANALOG and trigger_mode.value in button_values:
-        trigger_mode = TriggerMode.SCALED
+        trigger_mode = EventTriggerMode.SCALED
 
     return ActionDefinition(
         name=name,
@@ -96,7 +100,9 @@ def _dict_to_action(name: str, d: dict, group: str = "general") -> ActionDefinit
         input_type=input_type,
         trigger_mode=trigger_mode,
         deadband=float(d.get("deadband", 0.0)),
+        threshold=float(d.get("threshold", 0.5)),
         inversion=bool(d.get("inversion", False)),
+        slew_rate=float(d.get("slew_rate", 0.0)),
         scale=float(d.get("scale", 1.0)),
         extra=d.get("extra", {}),
     )

@@ -53,36 +53,10 @@ _DEFAULT_STATUS = ("Click to add point | Right-click to remove | "
 
 
 # ------------------------------------------------------------------
-# Piecewise-linear evaluation
+# Piecewise-linear evaluation (canonical in utils/math/curves.py)
 # ------------------------------------------------------------------
 
-def default_segment_points() -> list[dict]:
-    """Generate default 3-point linear control points (y = x)."""
-    return [
-        {"x": -1.0, "y": -1.0},
-        {"x": 0.0, "y": 0.0},
-        {"x": 1.0, "y": 1.0},
-    ]
-
-
-def evaluate_segments(points: list[dict], x: float) -> float:
-    """Evaluate the piecewise-linear curve at input *x*.
-
-    Linearly interpolates between adjacent control points.
-    """
-    if not points or len(points) < 2:
-        return x
-    x = max(points[0]["x"], min(points[-1]["x"], x))
-    for i in range(len(points) - 1):
-        x0, x1 = points[i]["x"], points[i + 1]["x"]
-        if x <= x1 or i == len(points) - 2:
-            dx = x1 - x0
-            if dx == 0:
-                return points[i]["y"]
-            t = (x - x0) / dx
-            y0, y1 = points[i]["y"], points[i + 1]["y"]
-            return y0 + t * (y1 - y0)
-    return x
+from utils.math.curves import evaluate_segments, default_segment_points
 
 
 # ------------------------------------------------------------------

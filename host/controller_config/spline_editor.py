@@ -71,64 +71,15 @@ _DEFAULT_STATUS = ("Click to add point | Right-click to remove | "
 
 
 # ------------------------------------------------------------------
-# Spline math
+# Spline math (canonical implementations in utils/math/curves.py)
 # ------------------------------------------------------------------
 
-def _hermite_eval(y0, m0, y1, m1, dx, t):
-    """Evaluate one cubic hermite segment at parameter *t* in [0, 1].
-
-    Args:
-        y0, y1: endpoint Y values
-        m0, m1: endpoint slopes (dy/dx)
-        dx: segment width (x1 - x0)
-        t: parameter in [0, 1]
-    """
-    t2 = t * t
-    t3 = t2 * t
-    h00 = 2 * t3 - 3 * t2 + 1
-    h10 = t3 - 2 * t2 + t
-    h01 = -2 * t3 + 3 * t2
-    h11 = t3 - t2
-    return h00 * y0 + h10 * dx * m0 + h01 * y1 + h11 * dx * m1
-
-
-def default_points() -> list[dict]:
-    """Generate default 3-point linear control points (y = x)."""
-    return [
-        {"x": -1.0, "y": -1.0, "tangent": 1.0},
-        {"x": 0.0, "y": 0.0, "tangent": 1.0},
-        {"x": 1.0, "y": 1.0, "tangent": 1.0},
-    ]
-
-
-def evaluate_spline(points: list[dict], x: float) -> float:
-    """Evaluate the cubic hermite spline at input *x*, returning output *y*.
-
-    Mathematically identical to wpimath.spline.CubicHermiteSpline
-    (see module docstring for the wpimath construction recipe).
-    """
-    if not points or len(points) < 2:
-        return x
-    x = max(points[0]["x"], min(points[-1]["x"], x))
-    for i in range(len(points) - 1):
-        x0, x1 = points[i]["x"], points[i + 1]["x"]
-        if x <= x1 or i == len(points) - 2:
-            dx = x1 - x0
-            if dx == 0:
-                return points[i]["y"]
-            t = (x - x0) / dx
-            return _hermite_eval(
-                points[i]["y"], points[i]["tangent"],
-                points[i + 1]["y"], points[i + 1]["tangent"],
-                dx, t)
-    return x
-
-
-def _numerical_slope(points: list[dict], x: float) -> float:
-    """Estimate dy/dx at *x* by central difference."""
-    eps = 0.001
-    return (evaluate_spline(points, x + eps)
-            - evaluate_spline(points, x - eps)) / (2 * eps)
+from utils.math.curves import (
+    hermite_eval as _hermite_eval,
+    evaluate_spline,
+    default_spline_points as default_points,
+    numerical_slope as _numerical_slope,
+)
 
 
 # ------------------------------------------------------------------

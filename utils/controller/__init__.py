@@ -12,24 +12,24 @@ from .config_io import (
     save_config,
 )
 from .model import (
-    ANALOG_TRIGGER_MODES,
+    ANALOG_EVENT_TRIGGER_MODES,
     ActionDefinition,
-    BUTTON_TRIGGER_MODES,
+    BUTTON_EVENT_TRIGGER_MODES,
     ControllerConfig,
     FullConfig,
     InputType,
-    TriggerMode,
+    EventTriggerMode,
     parse_qualified_name,
 )
 
 __all__ = [
-    "ANALOG_TRIGGER_MODES",
+    "ANALOG_EVENT_TRIGGER_MODES",
     "ActionDefinition",
-    "BUTTON_TRIGGER_MODES",
+    "BUTTON_EVENT_TRIGGER_MODES",
     "ControllerConfig",
     "FullConfig",
     "InputType",
-    "TriggerMode",
+    "EventTriggerMode",
     "load_actions_from_file",
     "load_assignments_from_file",
     "load_config",

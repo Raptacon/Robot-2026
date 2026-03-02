@@ -9,11 +9,17 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 
-class TriggerMode(Enum):
+class EventTriggerMode(Enum):
     """How a button/analog action is triggered or shaped.
 
-    Button modes control when commands fire.
-    Analog modes control how the analog value is shaped/curved.
+    Button modes control when commands fire via ``commands2.button.Trigger``
+    bindings (not to be confused with the Xbox "trigger" — the analog
+    left_trigger / right_trigger inputs).  Each mode maps to a Trigger
+    binding method: ON_TRUE -> ``.onTrue()``, WHILE_TRUE -> ``.whileTrue()``,
+    etc.
+
+    Analog modes control how the analog value is shaped/curved before
+    it reaches the subsystem.
     """
     # Button modes
     ON_TRUE = "on_true"
@@ -30,28 +36,35 @@ class TriggerMode(Enum):
 
 
 # Which trigger modes apply to which input types
-BUTTON_TRIGGER_MODES = [
-    TriggerMode.ON_TRUE,
-    TriggerMode.ON_FALSE,
-    TriggerMode.WHILE_TRUE,
-    TriggerMode.WHILE_FALSE,
-    TriggerMode.TOGGLE_ON_TRUE,
+BUTTON_EVENT_TRIGGER_MODES = [
+    EventTriggerMode.ON_TRUE,
+    EventTriggerMode.ON_FALSE,
+    EventTriggerMode.WHILE_TRUE,
+    EventTriggerMode.WHILE_FALSE,
+    EventTriggerMode.TOGGLE_ON_TRUE,
 ]
-ANALOG_TRIGGER_MODES = [
-    TriggerMode.SCALED,
-    TriggerMode.SQUARED,
-    TriggerMode.RAW,
-    TriggerMode.SEGMENTED,
-    TriggerMode.SPLINE,
+ANALOG_EVENT_TRIGGER_MODES = [
+    EventTriggerMode.SCALED,
+    EventTriggerMode.SQUARED,
+    EventTriggerMode.RAW,
+    EventTriggerMode.SEGMENTED,
+    EventTriggerMode.SPLINE,
 ]
 
 
 class InputType(Enum):
-    """Type of controller input an action is designed for."""
+    """Type of controller input an action is designed for.
+
+    BOOLEAN_TRIGGER converts an analog axis (e.g. left_trigger) into a
+    boolean using a threshold comparison — not related to
+    ``commands2.button.Trigger``.
+    """
     BUTTON = "button"
     ANALOG = "analog"
     POV = "pov"
     OUTPUT = "output"
+    BOOLEAN_TRIGGER = "boolean_trigger"
+    VIRTUAL_ANALOG = "virtual_analog"
 
 
 @dataclass
@@ -69,9 +82,13 @@ class ActionDefinition:
     description: str = ""
     group: str = "general"
     input_type: InputType = InputType.BUTTON
-    trigger_mode: TriggerMode = TriggerMode.ON_TRUE
+    trigger_mode: EventTriggerMode = EventTriggerMode.ON_TRUE
     deadband: float = 0.0
+    threshold: float = 0.5     # For BOOLEAN_TRIGGER: axis > threshold = True
     inversion: bool = False
+    slew_rate: float = 0.0  # Max output change rate (units/sec), 0 = disabled.
+    # Symmetric by default. For asymmetric, set
+    # extra["negative_slew_rate"] to a negative value.
     scale: float = 1.0
     extra: dict = field(default_factory=dict)
 

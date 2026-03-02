@@ -12,8 +12,8 @@ Shared pure-Python data model used by both the GUI tool and robot code. No wpili
 - `ControllerConfig` — port, name, controller_type, bindings (dict mapping input names to lists of action qualified names)
 - `FullConfig` — actions (dict[str, ActionDefinition]) + controllers (dict[int, ControllerConfig])
 - `InputType` enum: BUTTON, ANALOG, POV, OUTPUT
-- `TriggerMode` enum: button modes (ON_TRUE, ON_FALSE, WHILE_TRUE, WHILE_FALSE, TOGGLE_ON_TRUE) and analog response curves (RAW, SCALED, SQUARED, SEGMENTED, SPLINE)
-- `BUTTON_TRIGGER_MODES` / `ANALOG_TRIGGER_MODES` — lists filtering which trigger modes apply to each input type
+- `EventTriggerMode` enum: button modes (ON_TRUE, ON_FALSE, WHILE_TRUE, WHILE_FALSE, TOGGLE_ON_TRUE) and analog response curves (RAW, SCALED, SQUARED, SEGMENTED, SPLINE)
+- `BUTTON_EVENT_TRIGGER_MODES` / `ANALOG_EVENT_TRIGGER_MODES` — lists filtering which trigger modes apply to each input type
 
 ### `config_io.py` - YAML Serialization
 
@@ -55,7 +55,7 @@ To use GUI-configured bindings on the robot, a future `commands/controller_loade
 1. Call `load_config("data/controller.yaml")` at robot init
 2. For each controller port, create `commands2.button.CommandXboxController(port)`
 3. Map each binding entry to the appropriate trigger (e.g., `controller.a()` for `a_button`, `controller.leftTrigger()` for `left_trigger`)
-4. Apply `TriggerMode` to determine wpilib trigger method (`.onTrue()`, `.whileTrue()`, `.toggleOnTrue()`, etc.)
+4. Apply `EventTriggerMode` to determine wpilib trigger method (`.onTrue()`, `.whileTrue()`, `.toggleOnTrue()`, etc.)
 5. Look up the command by the qualified action name (e.g. `intake.run` -> `IntakeSubsystem.run_command()`)
 
 ## GUI Tool (`host/controller_config/`)

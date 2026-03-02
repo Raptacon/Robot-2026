@@ -14,11 +14,11 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 from utils.controller.model import (
-    ANALOG_TRIGGER_MODES,
+    ANALOG_EVENT_TRIGGER_MODES,
     ActionDefinition,
-    BUTTON_TRIGGER_MODES,
+    BUTTON_EVENT_TRIGGER_MODES,
     InputType,
-    TriggerMode,
+    EventTriggerMode,
 )
 
 # Tooltip delay in milliseconds (500ms balances responsiveness vs flicker)
@@ -353,7 +353,7 @@ class ActionPanel(tk.Frame):
         self._trigger_var = tk.StringVar()
         self._trigger_combo = ttk.Combobox(
             self._detail_frame, textvariable=self._trigger_var,
-            values=[t.value for t in BUTTON_TRIGGER_MODES],
+            values=[t.value for t in BUTTON_EVENT_TRIGGER_MODES],
             state="readonly", width=17,
         )
         self._trigger_combo.grid(row=row, column=1, sticky=tk.EW, pady=2)
@@ -838,11 +838,11 @@ class ActionPanel(tk.Frame):
         self._trigger_combo.grid()
 
         if input_type == InputType.ANALOG:
-            modes = ANALOG_TRIGGER_MODES
-            default = TriggerMode.SCALED
+            modes = ANALOG_EVENT_TRIGGER_MODES
+            default = EventTriggerMode.SCALED
         else:
-            modes = BUTTON_TRIGGER_MODES
-            default = TriggerMode.ON_TRUE
+            modes = BUTTON_EVENT_TRIGGER_MODES
+            default = EventTriggerMode.ON_TRUE
 
         values = [m.value for m in modes]
         self._trigger_combo['values'] = values
@@ -871,7 +871,7 @@ class ActionPanel(tk.Frame):
         # Spline controls: visible only for ANALOG + SPLINE
         trigger_str = self._trigger_var.get()
         show_spline = (is_analog
-                       and trigger_str == TriggerMode.SPLINE.value)
+                       and trigger_str == EventTriggerMode.SPLINE.value)
         for w in self._spline_widgets:
             if show_spline:
                 w.grid()
@@ -880,7 +880,7 @@ class ActionPanel(tk.Frame):
 
         # Segment controls: visible only for ANALOG + SEGMENTED
         show_segments = (is_analog
-                         and trigger_str == TriggerMode.SEGMENTED.value)
+                         and trigger_str == EventTriggerMode.SEGMENTED.value)
         for w in self._segment_widgets:
             if show_segments:
                 w.grid()
@@ -904,9 +904,9 @@ class ActionPanel(tk.Frame):
             action.description = self._desc_var.get()
             action.input_type = InputType(self._input_type_var.get())
             if action.input_type == InputType.OUTPUT:
-                action.trigger_mode = TriggerMode.RAW
+                action.trigger_mode = EventTriggerMode.RAW
             else:
-                action.trigger_mode = TriggerMode(self._trigger_var.get())
+                action.trigger_mode = EventTriggerMode(self._trigger_var.get())
             action.deadband = float(self._deadband_var.get() or 0)
             action.inversion = self._inversion_var.get()
             action.scale = float(self._scale_var.get() or 1.0)
