@@ -112,9 +112,6 @@ class RobotSwerve:
         )
 
     def robotPeriodic(self):
-        self.factory.update()
-        self._sync_control_telemetry()
-
         if self.enableTelemetry and self.telemetry:
             self.telemetry.runDefaultDataCollections()
 
@@ -200,39 +197,22 @@ class RobotSwerve:
             commands2.cmd.runOnce(lambda: self._toggle_drive_scale())
         )
 
-    def _set_drive_scale(self, scale: float) -> None:
-        """Set scale on all drive axes and publish to SmartDashboard."""
+        # Map all drive axes' scale to a shared SmartDashboard entry.
+        # Dashboard changes and Y-button toggles both write to this path;
+        # the factory auto-syncs the value into all three analogs each cycle.
+        _SPEED_NT = "/SmartDashboard/Drivetrain speed"
         for analog in (self.translate_x, self.translate_y, self.rotate):
-            analog.scale = scale
-            if hasattr(analog, 'nt_scale'):
-                analog.nt_scale = scale
-        wpilib.SmartDashboard.putNumber("Drivetrain speed", scale)
+            analog.mapParamToNtPath(_SPEED_NT, "scale")
 
     def _toggle_drive_scale(self) -> None:
-        """Toggle between slow and fast drive scale presets."""
+        """Toggle between slow and fast drive scale presets.
+
+        Writes the new scale to SmartDashboard; the factory auto-syncs
+        it into all three drive analogs via mapParamToNtPath each cycle.
+        """
         self._drive_is_slow = not self._drive_is_slow
         scale = self._drive_scale_slow if self._drive_is_slow else self._drive_scale_fast
-        self._set_drive_scale(scale)
-
-    def _sync_control_telemetry(self) -> None:
-        """Read control tuning values from NT and apply to managed inputs.
-
-        Keeps speed control logic visible at the robot container level.
-        The SmartDashboard "Drivetrain speed" value is the authoritative
-        source — if a dashboard user changes it, that overrides the
-        toggle preset. The Y button toggle writes to SmartDashboard too,
-        so both paths converge here.
-
-        This will be refactored later when the factory supports indirect
-        network bindings natively.
-        """
-        nt_speed = wpilib.SmartDashboard.getNumber(
-            "Drivetrain speed", self._drive_scale_fast)
-        for analog in (self.translate_x, self.translate_y, self.rotate):
-            if analog.scale != nt_speed:
-                analog.scale = nt_speed
-                if hasattr(analog, 'nt_scale'):
-                    analog.nt_scale = nt_speed
+        wpilib.SmartDashboard.putNumber("Drivetrain speed", scale)
 
     def getDeployInfo(self, key: str) -> str:
         """Gets the Git SHA of the deployed robot by parsing ~/deploy.json and returning the git-hash from the JSON key OR if deploy.json is unavailable will return "unknown"
