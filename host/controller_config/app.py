@@ -50,18 +50,16 @@ def load_settings() -> dict:
         if _settings_file.exists():
             return json.loads(_settings_file.read_text())
     except (json.JSONDecodeError, OSError):
-        pass
+        pass  # Corrupt or missing settings file; fall back to defaults
     return {}
 
 # Maps controller input type (str from layout_coords) to compatible action
-# InputType values.  POV inputs are treated as boolean (button) since the
-# angle is filtered to a boolean at runtime.  POV action type is also
-# treated as BUTTON for now.
+# InputType values.  POV directions use "button" type since the factory
+# converts the raw POV angle to individual booleans at runtime.
 _COMPAT_ACTION_TYPES: dict[str, set[InputType]] = {
-    "button": {InputType.BUTTON, InputType.POV},
+    "button": {InputType.BUTTON},
     "axis":   {InputType.ANALOG},
     "output": {InputType.OUTPUT},
-    "pov":    {InputType.BUTTON, InputType.POV},
 }
 
 # Human-readable descriptions of what each input type accepts
@@ -69,7 +67,6 @@ _INPUT_TYPE_DESCRIPTION: dict[str, str] = {
     "button": "Button inputs accept Button actions",
     "axis":   "Axis inputs accept Analog actions",
     "output": "Output inputs accept Output actions",
-    "pov":    "POV inputs accept Button actions (treated as boolean)",
 }
 
 
@@ -317,7 +314,7 @@ class ControllerConfigApp(tk.Tk):
         try:
             _settings_file.write_text(json.dumps(self._settings, indent=2))
         except OSError:
-            pass
+            pass  # Non-fatal: settings are convenience, not critical
 
     def _get_initial_dir(self) -> str:
         """Return the best initial directory for file dialogs."""

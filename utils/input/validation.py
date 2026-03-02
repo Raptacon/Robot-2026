@@ -45,11 +45,11 @@ def _validate_action(action: ActionDefinition) -> list[ValidationIssue]:
                 f"'{action.trigger_mode.value}'",
                 qn))
 
-    elif action.input_type in (InputType.BUTTON, InputType.POV):
+    elif action.input_type == InputType.BUTTON:
         if action.trigger_mode in ANALOG_EVENT_TRIGGER_MODES:
             issues.append(ValidationIssue(
                 "warning",
-                f"Button/POV action uses analog trigger mode "
+                f"Button action uses analog trigger mode "
                 f"'{action.trigger_mode.value}'",
                 qn))
 
@@ -185,11 +185,11 @@ def validate_config(config: FullConfig) -> list[ValidationIssue]:
                         f"button input '{input_name}'",
                         ctrl_ctx))
 
-                if (action.input_type in (InputType.BUTTON, InputType.POV)
+                if (action.input_type == InputType.BUTTON
                         and category == "axis"):
                     issues.append(ValidationIssue(
                         "warning",
-                        f"Button/POV action '{action_name}' bound to "
+                        f"Button action '{action_name}' bound to "
                         f"axis input '{input_name}'",
                         ctrl_ctx))
 

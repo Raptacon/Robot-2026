@@ -104,7 +104,7 @@ def _load_rumble_icon() -> Image.Image | None:
         elif path.suffix != ".svg":
             return Image.open(str(path)).convert("RGBA")
     except Exception:
-        pass
+        pass  # Non-fatal: caller falls back to generated icon
     return None
 
 

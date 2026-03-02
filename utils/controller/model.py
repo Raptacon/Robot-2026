@@ -61,7 +61,6 @@ class InputType(Enum):
     """
     BUTTON = "button"
     ANALOG = "analog"
-    POV = "pov"
     OUTPUT = "output"
     BOOLEAN_TRIGGER = "boolean_trigger"
     VIRTUAL_ANALOG = "virtual_analog"

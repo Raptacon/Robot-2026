@@ -14,10 +14,6 @@ Actions are stored in a nested format grouped by their ``group`` field::
         run:
           description: Run intake
 
-Backward compatibility: old flat-format files (no group nesting) are
-loaded with all actions placed in the ``"general"`` group, and bare
-binding names are upgraded to qualified names automatically.
-
 No wpilib dependencies - pure Python + PyYAML.
 """
 
@@ -36,12 +32,6 @@ from .model import (
 
 # Defaults used to decide which fields to omit from YAML output
 _ACTION_DEFAULTS = ActionDefinition(name="")
-
-# Known ActionDefinition fields used for format detection
-_ACTION_FIELD_NAMES = {
-    "description", "input_type", "trigger_mode",
-    "deadband", "threshold", "inversion", "slew_rate", "scale", "extra",
-}
 
 
 def _action_to_dict(action: ActionDefinition) -> dict:
@@ -68,17 +58,11 @@ def _action_to_dict(action: ActionDefinition) -> dict:
     return d
 
 
-# Backward compat: old configs may use "axis" instead of "analog"
-_INPUT_TYPE_MIGRATION = {"axis": "analog"}
-
-
 def _dict_to_action(name: str, d: dict, group: str = "general") -> ActionDefinition:
     """Deserialize an ActionDefinition from a YAML dict."""
     if d is None:
         d = {}
-    raw_input_type = d.get("input_type", InputType.BUTTON.value)
-    raw_input_type = _INPUT_TYPE_MIGRATION.get(raw_input_type, raw_input_type)
-    input_type = InputType(raw_input_type)
+    input_type = InputType(d.get("input_type", InputType.BUTTON.value))
 
     # Determine appropriate default trigger mode based on input type
     if input_type in (InputType.ANALOG, InputType.VIRTUAL_ANALOG):
@@ -144,36 +128,16 @@ def _dict_to_controller(port: int, d: dict) -> ControllerConfig:
     )
 
 
-# --- Format Detection ---
-
-def _is_nested_format(actions_data: dict) -> bool:
-    """Detect whether actions use nested (grouped) or flat (legacy) format.
-
-    Nested format: ``actions -> group_name -> action_name -> {fields}``
-    Flat format:   ``actions -> action_name -> {fields}``
-
-    Heuristic: if any top-level value is a dict whose keys overlap with
-    known ActionDefinition field names, it's flat format.  Otherwise
-    (values are dicts-of-dicts or None), it's nested.
-    """
-    if not actions_data:
-        return False
-    for value in actions_data.values():
-        if value is None:
-            # ``action_name:`` with no fields -> flat
-            return False
-        if isinstance(value, dict):
-            if value.keys() & _ACTION_FIELD_NAMES:
-                return False
-        else:
-            # Primitive value -> flat
-            return False
-    return True
-
-
 def _load_actions_dict(actions_data: dict
                        ) -> tuple[dict[str, ActionDefinition], set[str]]:
-    """Load actions from either nested or flat YAML format.
+    """Load actions from nested (grouped) YAML format.
+
+    Expected format::
+
+        actions:
+          group_name:
+            action_name:
+              description: ...
 
     Returns (actions_dict, empty_groups) where actions_dict is keyed by
     qualified name and empty_groups contains group names that exist but
@@ -184,20 +148,14 @@ def _load_actions_dict(actions_data: dict
 
     actions = {}
     empty_groups: set[str] = set()
-    if _is_nested_format(actions_data):
-        for group_name, group_actions in actions_data.items():
-            group_name = str(group_name)
-            if not isinstance(group_actions, dict) or not group_actions:
-                empty_groups.add(group_name)
-                continue
-            for action_name, action_dict in group_actions.items():
-                action = _dict_to_action(
-                    str(action_name), action_dict, group=group_name)
-                actions[action.qualified_name] = action
-    else:
-        for action_name, action_dict in actions_data.items():
+    for group_name, group_actions in actions_data.items():
+        group_name = str(group_name)
+        if not isinstance(group_actions, dict) or not group_actions:
+            empty_groups.add(group_name)
+            continue
+        for action_name, action_dict in group_actions.items():
             action = _dict_to_action(
-                str(action_name), action_dict, group="general")
+                str(action_name), action_dict, group=group_name)
             actions[action.qualified_name] = action
 
     return actions, empty_groups
@@ -220,24 +178,6 @@ def _actions_to_nested_dict(actions: dict[str, ActionDefinition],
             groups[group] = {}
         groups[group][action.name] = _action_to_dict(action)
     return groups
-
-
-def _migrate_bindings(controllers: dict[int, ControllerConfig],
-                      actions: dict[str, ActionDefinition]) -> None:
-    """Upgrade bare action names in bindings to qualified names.
-
-    If a binding value ``foo`` is not in *actions* but ``general.foo`` is,
-    replace it.  Handles backward compatibility with old flat configs.
-    """
-    action_keys = set(actions.keys())
-    for ctrl in controllers.values():
-        for input_name, action_list in ctrl.bindings.items():
-            ctrl.bindings[input_name] = [
-                f"general.{a}"
-                if a not in action_keys and f"general.{a}" in action_keys
-                else a
-                for a in action_list
-            ]
 
 
 # --- Public API ---
@@ -263,10 +203,7 @@ def save_config(config: FullConfig, path: str | Path) -> None:
 
 
 def load_config(path: str | Path) -> FullConfig:
-    """Load a FullConfig from a YAML file.
-
-    Supports both nested (grouped) and flat (legacy) action formats.
-    """
+    """Load a FullConfig from a YAML file."""
     path = Path(path)
     with open(path) as f:
         data = yaml.safe_load(f)
@@ -280,8 +217,6 @@ def load_config(path: str | Path) -> FullConfig:
     for port, ctrl_dict in (data.get("controllers") or {}).items():
         port = int(port)
         controllers[port] = _dict_to_controller(port, ctrl_dict)
-
-    _migrate_bindings(controllers, actions)
 
     return FullConfig(actions=actions, controllers=controllers,
                       empty_groups=empty_groups)
