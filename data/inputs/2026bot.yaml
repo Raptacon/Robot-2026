@@ -1,0 +1,46 @@
+actions:
+  drivetrain:
+    translate_x:
+      description: Forward/backward translation
+      input_type: analog
+      trigger_mode: raw
+      deadband: 0.06
+      inversion: true
+    translate_y:
+      description: Left/right strafe
+      input_type: analog
+      trigger_mode: raw
+      deadband: 0.06
+      inversion: true
+    rotate:
+      description: Rotation
+      input_type: analog
+      trigger_mode: raw
+      deadband: 0.1
+      inversion: true
+    robot_relative:
+      description: Hold for robot-relative driving
+      input_type: button
+      trigger_mode: while_true
+    cancel_all:
+      description: Emergency cancel all commands
+      input_type: boolean_trigger
+      trigger_mode: on_true
+      threshold: 0.5
+    speed_toggle:
+      description: Toggle between slow (0.25) and fast (0.8) drive scale
+      input_type: button
+      trigger_mode: on_true
+
+controllers:
+  0:
+    name: Driver
+    bindings:
+      left_stick_y: [drivetrain.translate_x]
+      left_stick_x: [drivetrain.translate_y]
+      right_stick_x: [drivetrain.rotate]
+      right_bumper: [drivetrain.robot_relative]
+      left_trigger: [drivetrain.cancel_all]
+      y_button: [drivetrain.speed_toggle]
+  1:
+    name: Operator

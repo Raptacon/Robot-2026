@@ -5,7 +5,7 @@ Public API::
     from utils.input import InputFactory, get_factory
 
     # In robotInit — create the factory (registers as active):
-    factory = InputFactory(config_path="data/controller.yaml")
+    factory = InputFactory(config_path="data/inputs/controller.yaml")
 
     # Anywhere else — fetch the active factory:
     factory = get_factory()
