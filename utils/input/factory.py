@@ -10,7 +10,7 @@ scheduler cycle via an internal subsystem.
 
 Usage::
 
-    factory = InputFactory(config_path="data/controller.yaml")
+    factory = InputFactory(config_path="data/inputs/controller.yaml")
     speed = factory.getAnalog("drivetrain.speed")
     fire = factory.getButton("intake.run")
     rumble = factory.getRumbleControl("general.rumble_left")
@@ -545,6 +545,13 @@ class InputFactory:
         rumble = klass(action, setter)
         self._rumbles[qn] = rumble
         return rumble
+
+    # --- Controller access ---
+
+    def getController(self, port: int) -> wpilib.XboxController | None:
+        """Get the raw XboxController for a given port (for telemetry/logging)."""
+        state = self._controllers.get(port)
+        return state.controller if state is not None else None
 
     # --- Periodic sync (called automatically by _FactoryUpdater) ---
 
