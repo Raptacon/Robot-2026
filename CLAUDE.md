@@ -133,6 +133,96 @@ GUI tool (`host/controller_config/`): tkinter app for visual controller mapping.
 
 See `host/controller_config/ARCHITECTURE.md` for detailed model, GUI architecture, and design patterns.
 
+### Input Factory (`utils/input/`)
+
+Config-driven controller input management. `InputFactory` loads YAML config, creates `wpilib.XboxController` instances, and provides factory methods returning managed input objects:
+
+- `getButton(name, group, required, default_value)` -> `ManagedButton` (wraps `commands2.button.Trigger`)
+- `getRawButton(name, group, required)` -> `Callable[[], bool]`
+- `getAnalog(name, group, required, default_value)` -> `ManagedAnalog` (shaped axis, callable)
+- `getAnalogRaw(name, group, required, apply_invert, apply_deadband, apply_scale)` -> `Callable[[], float]`
+- `getRumbleControl(name, group, required)` -> `ManagedRumble`
+
+Analog shaping pipeline order: inversion -> deadband -> curve -> scale -> slew rate limit. All action parameters published to NT under `/inputs/actions/<group>/<action>/` via `ntproperty` for runtime dashboard tuning. Call `factory.update()` once per cycle in `robotPeriodic` to sync NT changes (prevents mid-cycle inconsistency).
+
+Input types: BUTTON, ANALOG, POV, OUTPUT, BOOLEAN_TRIGGER (analog->bool via threshold), VIRTUAL_ANALOG (reserved).
+
+**Usage pattern in robot code:**
+1. Create the factory in `robotInit` **before** any subsystems that use `get_factory()`:
+   ```python
+   from utils.input import InputFactory
+   self.factory = InputFactory(config_path="data/controller.yaml")
+   ```
+2. Get managed inputs and pass analogs as callables to subsystems:
+   ```python
+   forward = self.factory.getAnalog("drivetrain.forward")
+   self.swerve = Drivetrain(forward, strafe, rotate)
+   ```
+3. Bind buttons using `.bind()` (auto-selects trigger mode from YAML):
+   ```python
+   self.factory.getButton("intake.run").bind(intake.runCommand())
+   ```
+4. Call `self.factory.update()` once per cycle in `robotPeriodic`.
+5. Subsystems that need their own inputs can use `utils.input.get_factory()` instead of constructor injection:
+   ```python
+   import utils.input
+   self._rumble = utils.input.get_factory().getRumbleControl("feedback.rumble", required=False)
+   ```
+
+The `register_global` constructor arg controls singleton registration: `None` (default) registers only if no factory exists yet, `True` always overrides, `False` never registers.
+
+See `examples/inputFactory/` for a complete working example.
+
+Portable curve math lives in `utils/math/curves.py` (shared by both robot code and host GUI).
+
+## Future: Controller Config GUI Updates
+
+- [ ] Add BOOLEAN_TRIGGER input type to action panel dropdown
+  - Show threshold field when BOOLEAN_TRIGGER selected
+  - Restrict trigger_mode dropdown to button modes
+  - Validation: warn if bound to non-axis input
+- [ ] Add VIRTUAL_ANALOG input type to action panel dropdown
+  - Show on_value/off_value fields
+  - Show ramp_time field
+  - Allow spline/segment editor for ramp shape (x=time, y=output)
+  - Restrict trigger_mode dropdown to analog modes
+- [ ] Add slew_rate field to action panel for ANALOG inputs
+  - Numeric input with 0 = disabled
+  - Optional negative_slew_rate in extra
+- [ ] Add threshold field to action panel for BOOLEAN_TRIGGER inputs
+- [ ] Refactor: spline_editor.py and segment_editor.py already import
+  curve math from utils/math/curves.py (done) — no further changes needed
+
+## Future: NetworkTables Enhancements
+
+- [ ] Eager action creation: pre-create all ManagedButton/ManagedAnalog/ManagedRumble
+  objects at factory init (instead of lazily on first `get*()` call). This publishes
+  all NT entries immediately so the dashboard can inspect and tune every action's
+  parameters before robot code requests them. Also enables future NT-driven
+  reconfiguration (changing deadband, scale, threshold, etc. from the dashboard
+  before autonomous/teleop starts). Requires iterating `self._config.actions` at
+  init and calling the appropriate internal builder for each action based on its
+  `input_type`.
+- [ ] NT persistence: per-action `persist` flag to survive reboots
+- [ ] Dashboard clear-persist button per action (reset to config defaults)
+- [ ] NT override priority: option for NT-persisted values to override config on load
+- [ ] Dynamic remapping via NT: change input->action bindings from dashboard
+
+## Future: Config Cleanup
+
+- [ ] Remove `_INPUT_TYPE_MIGRATION` backward compat in `config_io.py` (migrates `"axis"` -> `"analog"`)
+  - Ensure all YAML files use `"analog"` not `"axis"`, then delete the migration dict and lookup
+- [ ] Remove flat (non-nested) config format support in `config_io.py`
+  - Remove `_is_nested_format()` heuristic detection and flat-format branch in `_load_actions_dict()`
+  - Remove `_migrate_bindings()` (upgrades bare action names to qualified `general.name`)
+  - All current YAML files already use nested format with explicit `general:` group key
+- [ ] Explore adding JSON Schema for controller config YAML validation
+  - A `.schema.json` file would give IDE autocompletion + red squiggles in YAML editors
+  - JSON Schema validates YAML after parsing (YAML is a superset of JSON)
+  - Could also evaluate alternative formats (TOML, StrictYAML) or support multiple
+  - Current `config_io.py` abstraction makes format swaps straightforward — loaders
+    return the same `FullConfig` regardless of source format
+
 ### CAN ID Convention
 
 Drivetrain modules start at CAN ID 50 with 3 consecutive IDs per module (drive, steer, encoder). Additional mechanisms count backwards from CAN ID 40. See `subsystem/CAN_CONFIG.md`.
