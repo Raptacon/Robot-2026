@@ -57,8 +57,7 @@ actions:
           y: 0.9
         - x: 1.0
           y: 0.9
-    new_action:
-      deadband: 0.05
+    new_action: {}
   intake:
     jiggle:
       trigger_mode: while_true

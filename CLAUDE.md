@@ -127,7 +127,7 @@ Autonomous routines are defined as `.auto` and `.path` files in `deploy/pathplan
 
 ### Controller Config (`utils/controller/` and `host/controller_config/`)
 
-Shared data model (`utils/controller/model.py`) defines `ActionDefinition`, `ControllerConfig`, and `FullConfig`. Actions use qualified names: `group.name` (e.g. `intake.run`). Input types: BUTTON, ANALOG, POV, OUTPUT. Config stored in `data/controller.yaml`. YAML I/O in `config_io.py` with backward-compat migration for legacy formats.
+Shared data model (`utils/controller/model.py`) defines `ActionDefinition`, `ControllerConfig`, and `FullConfig`. Actions use qualified names: `group.name` (e.g. `intake.run`). Input types: BUTTON, ANALOG, OUTPUT, BOOLEAN_TRIGGER, VIRTUAL_ANALOG. D-pad directions are treated as buttons (factory converts POV angle to booleans at runtime). Config stored in `data/controller.yaml`. YAML I/O in `config_io.py`.
 
 GUI tool (`host/controller_config/`): tkinter app for visual controller mapping. Run with `python -m host.controller_config [config.yaml]`. CLI export: `--export out.pdf --orientation landscape`.
 
@@ -145,7 +145,7 @@ Config-driven controller input management. `InputFactory` loads YAML config, cre
 
 Analog shaping pipeline order: inversion -> deadband -> curve -> scale -> slew rate limit. All action parameters published to NT under `/inputs/actions/<group>/<action>/` via `ntproperty` for runtime dashboard tuning. NT sync is handled automatically each scheduler cycle.
 
-Input types: BUTTON, ANALOG, POV, OUTPUT, BOOLEAN_TRIGGER (analog->bool via threshold), VIRTUAL_ANALOG (reserved).
+Input types: BUTTON, ANALOG, OUTPUT, BOOLEAN_TRIGGER (analog->bool via threshold), VIRTUAL_ANALOG (reserved). D-pad directions are buttons (factory handles POV angle conversion).
 
 **Usage pattern in robot code:**
 1. Create the factory in `robotInit` **before** any subsystems that use `get_factory()`:
@@ -186,14 +186,12 @@ Portable curve math lives in `utils/math/curves.py` (shared by both robot code a
   - Show ramp_time field
   - Allow spline/segment editor for ramp shape (x=time, y=output)
   - Restrict trigger_mode dropdown to analog modes
-- [ ] Add slew_rate field to action panel for ANALOG inputs
+- [x] Add slew_rate field to action panel for ANALOG inputs
   - Numeric input with 0 = disabled
-  - Optional negative_slew_rate in extra
+  - Optional negative_slew_rate in extra (enable checkbox + spinbox)
 - [ ] Add threshold field to action panel for BOOLEAN_TRIGGER inputs
-- [ ] Disable deadband/inversion/scale/curve fields when trigger_mode is RAW
-  - RAW is true passthrough — no shaping applied
-  - Grey out or hide shaping fields to avoid confusion
-  - Show a note: "RAW mode: no shaping applied. Use SCALED for deadband/inversion/scale."
+- [x] Disable deadband/inversion/scale/slew fields when trigger_mode is RAW
+  - RAW bypasses all shaping — fields greyed out to avoid confusion
 - [ ] Refactor: spline_editor.py and segment_editor.py already import
   curve math from utils/math/curves.py (done) — no further changes needed
 

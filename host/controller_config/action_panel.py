@@ -189,6 +189,7 @@ class ActionPanel(tk.Frame):
         self._empty_groups: set[str] = set()
         self._selected_name: str | None = None
         self._updating_form = False  # Guard against feedback loops
+        self._type_switch_active = False  # True during type-change auto-sets
 
         # Drag-from-tree state
         self._drag_item: str | None = None
@@ -394,6 +395,39 @@ class ActionPanel(tk.Frame):
         self._scale_spin.grid(row=row, column=1, sticky=tk.EW, pady=2)
         self._scale_var.trace_add("write", self._on_field_changed)
 
+        # Slew rate (axis only)
+        row += 1
+        self._slew_label = ttk.Label(self._detail_frame, text="Slew Rate:")
+        self._slew_label.grid(row=row, column=0, sticky=tk.W, pady=2)
+        self._slew_var = tk.StringVar(value="0.0")
+        self._slew_spin = ttk.Spinbox(
+            self._detail_frame, textvariable=self._slew_var,
+            from_=0.0, to=100.0, increment=0.1, width=17,
+        )
+        self._slew_spin.grid(row=row, column=1, sticky=tk.EW, pady=2)
+        self._slew_var.trace_add("write", self._on_field_changed)
+
+        # Negative slew rate (axis only, stored in extra)
+        row += 1
+        self._neg_slew_frame = ttk.Frame(self._detail_frame)
+        self._neg_slew_frame.grid(row=row, column=0, columnspan=2,
+                                  sticky=tk.EW, pady=2)
+        self._neg_slew_enable_var = tk.BooleanVar(value=False)
+        self._neg_slew_check = ttk.Checkbutton(
+            self._neg_slew_frame, text="Neg. Slew Rate:",
+            variable=self._neg_slew_enable_var,
+        )
+        self._neg_slew_check.pack(side=tk.LEFT)
+        self._neg_slew_var = tk.StringVar(value="0.0")
+        self._neg_slew_spin = ttk.Spinbox(
+            self._neg_slew_frame, textvariable=self._neg_slew_var,
+            from_=-100.0, to=0.0, increment=0.1, width=10,
+        )
+        self._neg_slew_spin.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self._neg_slew_spin.config(state="disabled")
+        self._neg_slew_enable_var.trace_add("write", self._on_neg_slew_toggled)
+        self._neg_slew_var.trace_add("write", self._on_field_changed)
+
         # Spline controls (visible only for ANALOG + SPLINE trigger mode)
         row += 1
         self._edit_spline_btn = ttk.Button(
@@ -419,7 +453,10 @@ class ActionPanel(tk.Frame):
             (self._deadband_label, self._deadband_spin),
             (self._inversion_label, self._inversion_check),
             (self._scale_label, self._scale_spin),
+            (self._slew_label, self._slew_spin),
         ]
+        # Neg slew frame handled separately (single frame spanning both columns)
+        self._neg_slew_widgets = [self._neg_slew_frame]
 
         # Spline-only widgets for show/hide
         self._spline_widgets = [self._edit_spline_btn]
@@ -436,9 +473,8 @@ class ActionPanel(tk.Frame):
                       "Type a new name to create a group.")
         _desc_tip = ("Human-readable description of what\n"
                      "this action does on the robot.")
-        _input_tip = ("button: digital on/off input\n"
+        _input_tip = ("button: digital on/off (incl. D-pad)\n"
                       "analog: continuous value (stick, trigger)\n"
-                      "pov: D-pad / hat switch\n"
                       "output: rumble or LED feedback")
         _trigger_tip = ("Button: when the command fires.\n"
                         "Analog: how the input value is shaped.")
@@ -448,6 +484,11 @@ class ActionPanel(tk.Frame):
                           "Useful for reversing stick directions.")
         _scale_tip = ("Multiplier applied to the input value.\n"
                       "Use to limit max speed or amplify input.")
+        _slew_tip = ("Max rate of output change (units/sec).\n"
+                     "0 = disabled (no slew limiting).")
+        _neg_slew_tip = ("Enable asymmetric slew: separate rate\n"
+                         "for decreasing values. Must be negative\n"
+                         "or zero (clamped to max 0).")
 
         _WidgetTooltip(self._name_label, _name_tip)
         _WidgetTooltip(self._name_entry, _name_tip)
@@ -465,6 +506,10 @@ class ActionPanel(tk.Frame):
         _WidgetTooltip(self._inversion_check, _inversion_tip)
         _WidgetTooltip(self._scale_label, _scale_tip)
         _WidgetTooltip(self._scale_spin, _scale_tip)
+        _WidgetTooltip(self._slew_label, _slew_tip)
+        _WidgetTooltip(self._slew_spin, _slew_tip)
+        _WidgetTooltip(self._neg_slew_check, _neg_slew_tip)
+        _WidgetTooltip(self._neg_slew_spin, _neg_slew_tip)
 
         _edit_spline_tip = ("Open the visual spline curve editor.\n"
                             "Click to add points, right-click to remove.")
@@ -490,12 +535,43 @@ class ActionPanel(tk.Frame):
         self._set_detail_enabled(False)
 
     # ------------------------------------------------------------------
+    # Custom-settings tracking
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _is_action_custom(action: ActionDefinition) -> bool:
+        """Check if an action has any non-default field values.
+
+        Used on load to tag actions that were customized in the YAML.
+        """
+        if action.input_type == InputType.ANALOG:
+            default_trigger = EventTriggerMode.SCALED
+        else:
+            default_trigger = EventTriggerMode.ON_TRUE
+        return (
+            action.deadband > 0.01
+            or action.inversion
+            or abs(action.scale - 1.0) > 0.01
+            or action.slew_rate > 0.01
+            or action.trigger_mode != default_trigger
+            or action.extra.get("spline_points")
+            or action.extra.get("segment_points")
+            or action.extra.get("negative_slew_rate") is not None
+        )
+
+    def _tag_actions_custom(self):
+        """Set _has_custom on all actions from current field values."""
+        for action in self._actions.values():
+            action._has_custom = self._is_action_custom(action)
+
+    # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
     def set_actions(self, actions: dict[str, ActionDefinition]):
         """Load a full set of actions (e.g., from file)."""
         self._actions = dict(actions)
+        self._tag_actions_custom()
         self._empty_groups = set()
         self._refresh_tree()
         self._selected_name = None
@@ -800,6 +876,14 @@ class ActionPanel(tk.Frame):
             self._deadband_var.set(str(action.deadband))
             self._inversion_var.set(action.inversion)
             self._scale_var.set(str(action.scale))
+            self._slew_var.set(str(action.slew_rate))
+            neg_slew = action.extra.get("negative_slew_rate")
+            if neg_slew is not None:
+                self._neg_slew_enable_var.set(True)
+                self._neg_slew_var.set(str(min(float(neg_slew), 0.0)))
+            else:
+                self._neg_slew_enable_var.set(False)
+                self._neg_slew_var.set("0.0")
         finally:
             self._updating_form = False
 
@@ -817,6 +901,10 @@ class ActionPanel(tk.Frame):
             elif isinstance(child, ttk.Combobox):
                 child.config(state=readonly_state)
             elif isinstance(child, (ttk.Checkbutton, ttk.Button)):
+                child.config(state=state)
+        # Handle children inside the neg slew frame (nested in a sub-frame)
+        for child in self._neg_slew_frame.winfo_children():
+            if isinstance(child, (ttk.Spinbox, ttk.Checkbutton)):
                 child.config(state=state)
         # The group combo is editable (not readonly) so users can type new names
         if enabled:
@@ -854,7 +942,9 @@ class ActionPanel(tk.Frame):
     def _update_type_visibility(self):
         """Show/hide fields based on input type and trigger mode.
 
-        Analog-specific fields (deadband, inversion, scale) only shown for analog.
+        Analog-specific fields (deadband, inversion, scale, slew) only shown
+        for analog.  When trigger mode is RAW, axis fields are visible but
+        disabled (greyed out) since RAW bypasses all shaping.
         Spline controls only shown for analog + spline trigger mode.
         Trigger mode hidden for output actions.
         """
@@ -867,6 +957,13 @@ class ActionPanel(tk.Frame):
             else:
                 label.grid_remove()
                 widget.grid_remove()
+
+        # Neg slew frame: show/hide with other axis widgets
+        for w in self._neg_slew_widgets:
+            if is_analog:
+                w.grid()
+            else:
+                w.grid_remove()
 
         # Spline controls: visible only for ANALOG + SPLINE
         trigger_str = self._trigger_var.get()
@@ -886,6 +983,22 @@ class ActionPanel(tk.Frame):
                 w.grid()
             else:
                 w.grid_remove()
+
+        # Disable axis fields when trigger mode is RAW (bypasses all shaping)
+        if is_analog:
+            is_raw = trigger_str == EventTriggerMode.RAW.value
+            raw_state = "disabled" if is_raw else "normal"
+            self._deadband_spin.config(state=raw_state)
+            self._inversion_check.config(state=raw_state)
+            self._scale_spin.config(state=raw_state)
+            self._slew_spin.config(state=raw_state)
+            self._neg_slew_check.config(state=raw_state)
+            if is_raw:
+                self._neg_slew_spin.config(state="disabled")
+            else:
+                neg_state = ("normal" if self._neg_slew_enable_var.get()
+                             else "disabled")
+                self._neg_slew_spin.config(state=neg_state)
 
     # ------------------------------------------------------------------
     # Detail Form Changes
@@ -910,6 +1023,12 @@ class ActionPanel(tk.Frame):
             action.deadband = float(self._deadband_var.get() or 0)
             action.inversion = self._inversion_var.get()
             action.scale = float(self._scale_var.get() or 1.0)
+            action.slew_rate = float(self._slew_var.get() or 0.0)
+            if self._neg_slew_enable_var.get():
+                val = float(self._neg_slew_var.get() or 0.0)
+                action.extra["negative_slew_rate"] = min(val, 0.0)
+            else:
+                action.extra.pop("negative_slew_rate", None)
         except (ValueError, KeyError):
             return False
 
@@ -923,7 +1042,20 @@ class ActionPanel(tk.Frame):
             self._on_before_change(500)
         self._update_type_visibility()
         if self._save_detail() and self._on_actions_changed:
+            # Mark as user-customized (unless this is an auto-set
+            # from a type switch — that resets the flag after)
+            if not self._type_switch_active and self._selected_name:
+                action = self._actions.get(self._selected_name)
+                if action:
+                    action._has_custom = True
             self._on_actions_changed()
+
+    def _on_neg_slew_toggled(self, *args):
+        """Enable/disable the negative slew rate spinbox."""
+        enabled = self._neg_slew_enable_var.get()
+        self._neg_slew_spin.config(state="normal" if enabled else "disabled")
+        if not self._updating_form:
+            self._on_field_changed()
 
     def _on_input_type_changed(self, *args):
         """Handle input type dropdown change."""
@@ -933,25 +1065,21 @@ class ActionPanel(tk.Frame):
             except ValueError:
                 input_type = InputType.BUTTON
 
-            # Warn if switching away from ANALOG with configured data
-            if input_type != InputType.ANALOG and self._selected_name:
+            # Warn on any input type change if user-customized settings exist
+            if self._selected_name:
                 action = self._actions.get(self._selected_name)
-                if action and action.input_type == InputType.ANALOG:
-                    has_data = (
-                        action.deadband > 0.01
-                        or abs(action.scale - 1.0) > 0.01
-                        or action.extra.get("spline_points")
-                        or action.extra.get("segment_points")
-                    )
-                    if has_data and not messagebox.askyesno(
+                if (action and input_type != action.input_type
+                        and getattr(action, '_has_custom', False)):
+                    if not messagebox.askyesno(
                         "Change Input Type",
-                        "Changing from analog will reset deadband,\n"
-                        "scale, and curve editor data. Continue?",
+                        "Changing input type may reset or\n"
+                        "invalidate current settings (deadband,\n"
+                        "scale, curves, bindings). Continue?",
                     ):
                         self._updating_form = True
                         try:
                             self._input_type_var.set(
-                                InputType.ANALOG.value)
+                                action.input_type.value)
                         finally:
                             self._updating_form = False
                         return
@@ -968,12 +1096,33 @@ class ActionPanel(tk.Frame):
                         current_db = 0.0
                     if current_db == 0.0:
                         self._deadband_var.set("0.05")
+                else:
+                    # Reset analog-specific fields to defaults
+                    self._deadband_var.set("0.0")
+                    self._inversion_var.set(False)
+                    self._scale_var.set("1.0")
+                    self._slew_var.set("0.0")
+                    self._neg_slew_enable_var.set(False)
+                    self._neg_slew_var.set("0.0")
+                    action = self._actions.get(self._selected_name)
+                    if action:
+                        action.extra.pop("spline_points", None)
+                        action.extra.pop("segment_points", None)
+                        action.extra.pop("negative_slew_rate", None)
                 # Update trigger mode options and default
                 self._update_trigger_mode_options(input_type)
             finally:
                 self._updating_form = False
-        self._update_type_visibility()
-        self._on_field_changed()
+
+            # Save fields and update visibility, but suppress the
+            # _has_custom flag — type switches reset it to False
+            self._type_switch_active = True
+            self._update_type_visibility()
+            self._on_field_changed()
+            self._type_switch_active = False
+            action = self._actions.get(self._selected_name)
+            if action:
+                action._has_custom = False
 
     def _on_edit_spline(self):
         """Open the spline editor dialog for the selected action."""
@@ -1161,6 +1310,7 @@ class ActionPanel(tk.Frame):
 
         qname = f"{group}.{name}"
         action = ActionDefinition(name=name, group=group)
+        action._has_custom = False
         self._actions[qname] = action
         self._empty_groups.discard(group)
         self._refresh_tree()

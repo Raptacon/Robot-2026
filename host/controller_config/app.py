@@ -54,14 +54,12 @@ def load_settings() -> dict:
     return {}
 
 # Maps controller input type (str from layout_coords) to compatible action
-# InputType values.  POV inputs are treated as boolean (button) since the
-# angle is filtered to a boolean at runtime.  POV action type is also
-# treated as BUTTON for now.
+# InputType values.  POV directions use "button" type since the factory
+# converts the raw POV angle to individual booleans at runtime.
 _COMPAT_ACTION_TYPES: dict[str, set[InputType]] = {
-    "button": {InputType.BUTTON, InputType.POV},
+    "button": {InputType.BUTTON},
     "axis":   {InputType.ANALOG},
     "output": {InputType.OUTPUT},
-    "pov":    {InputType.BUTTON, InputType.POV},
 }
 
 # Human-readable descriptions of what each input type accepts
@@ -69,7 +67,6 @@ _INPUT_TYPE_DESCRIPTION: dict[str, str] = {
     "button": "Button inputs accept Button actions",
     "axis":   "Axis inputs accept Analog actions",
     "output": "Output inputs accept Output actions",
-    "pov":    "POV inputs accept Button actions (treated as boolean)",
 }
 
 

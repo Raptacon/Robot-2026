@@ -11,7 +11,7 @@ Shared pure-Python data model used by both the GUI tool and robot code. No wpili
 - `ActionDefinition` — name, description, group, input_type, trigger_mode, deadband, inversion, scale, extra. Qualified name is `group.name` (e.g. `intake.run`).
 - `ControllerConfig` — port, name, controller_type, bindings (dict mapping input names to lists of action qualified names)
 - `FullConfig` — actions (dict[str, ActionDefinition]) + controllers (dict[int, ControllerConfig])
-- `InputType` enum: BUTTON, ANALOG, POV, OUTPUT
+- `InputType` enum: BUTTON, ANALOG, OUTPUT, BOOLEAN_TRIGGER, VIRTUAL_ANALOG
 - `EventTriggerMode` enum: button modes (ON_TRUE, ON_FALSE, WHILE_TRUE, WHILE_FALSE, TOGGLE_ON_TRUE) and analog response curves (RAW, SCALED, SQUARED, SEGMENTED, SPLINE)
 - `BUTTON_EVENT_TRIGGER_MODES` / `ANALOG_EVENT_TRIGGER_MODES` — lists filtering which trigger modes apply to each input type
 

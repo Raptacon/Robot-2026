@@ -106,21 +106,23 @@ XBOX_INPUTS: list[InputCoord] = [
                _fx(1210), _fy(965), _fx(941), _fy(709)),
 
     # --- POV / D-pad (center ~683, 900) ---
-    InputCoord("pov_up", "D-Pad Up", "pov",
+    # D-pad directions are treated as buttons; the factory converts
+    # the raw POV angle to individual boolean values at runtime.
+    InputCoord("pov_up", "D-Pad Up", "button",
                _fx(683), _fy(840), _fx(496), _fy(1012)),
-    InputCoord("pov_up_right", "D-Pad Up-Right", "pov",
+    InputCoord("pov_up_right", "D-Pad Up-Right", "button",
                _fx(740), _fy(840), _fx(685), _fy(1098)),
-    InputCoord("pov_right", "D-Pad Right", "pov",
+    InputCoord("pov_right", "D-Pad Right", "button",
                _fx(740), _fy(900), _fx(804), _fy(1191)),
-    InputCoord("pov_down_right", "D-Pad Down-Right", "pov",
+    InputCoord("pov_down_right", "D-Pad Down-Right", "button",
                _fx(740), _fy(960), _fx(694), _fy(1310)),
-    InputCoord("pov_down", "D-Pad Down", "pov",
+    InputCoord("pov_down", "D-Pad Down", "button",
                _fx(683), _fy(960), _fx(504), _fy(1420)),
-    InputCoord("pov_down_left", "D-Pad Down-Left", "pov",
+    InputCoord("pov_down_left", "D-Pad Down-Left", "button",
                _fx(626), _fy(960), _fx(292), _fy(1309)),
-    InputCoord("pov_left", "D-Pad Left", "pov",
+    InputCoord("pov_left", "D-Pad Left", "button",
                _fx(626), _fy(900), _fx(178), _fy(1198)),
-    InputCoord("pov_up_left", "D-Pad Up-Left", "pov",
+    InputCoord("pov_up_left", "D-Pad Up-Left", "button",
                _fx(626), _fy(840), _fx(300), _fy(1091)),
 
     # --- Outputs (rumble) ---

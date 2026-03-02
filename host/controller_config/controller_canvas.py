@@ -766,7 +766,7 @@ class ControllerCanvas(tk.Frame):
                 return "Y Axis float [-1 (Up), 1 (Down)]"
             else:
                 return "Axis float [0 (Released), 1 (Pressed)]"
-        elif inp.input_type == "pov":
+        elif inp.name.startswith("pov_"):
             pov_degrees = {
                 "pov_up": 0, "pov_up_right": 45,
                 "pov_right": 90, "pov_down_right": 135,
@@ -774,7 +774,7 @@ class ControllerCanvas(tk.Frame):
                 "pov_left": 270, "pov_up_left": 315,
             }
             deg = pov_degrees.get(inp.name, "?")
-            return f"POV [{deg}\u00b0, Boolean]"
+            return f"D-Pad [{deg}\u00b0, Button]"
         elif inp.input_type == "output":
             return "Output float [0.0 (Off), 1.0 (Max)]"
         else:
