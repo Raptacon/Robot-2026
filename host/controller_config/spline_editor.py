@@ -75,7 +75,6 @@ _DEFAULT_STATUS = ("Click to add point | Right-click to remove | "
 # ------------------------------------------------------------------
 
 from utils.math.curves import (
-    hermite_eval as _hermite_eval,
     evaluate_spline,
     default_spline_points as default_points,
     numerical_slope as _numerical_slope,

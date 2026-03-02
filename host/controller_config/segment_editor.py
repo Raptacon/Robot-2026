@@ -56,7 +56,7 @@ _DEFAULT_STATUS = ("Click to add point | Right-click to remove | "
 # Piecewise-linear evaluation (canonical in utils/math/curves.py)
 # ------------------------------------------------------------------
 
-from utils.math.curves import evaluate_segments, default_segment_points
+from utils.math.curves import default_segment_points
 
 
 # ------------------------------------------------------------------
