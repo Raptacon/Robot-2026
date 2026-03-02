@@ -179,23 +179,32 @@ class TestDeadband:
 class TestShaperPipeline:
 
     def test_raw_passthrough(self):
-        """RAW mode: inversion + deadband + scale, no curve."""
+        """RAW mode: true passthrough, no shaping applied."""
         pipeline = build_shaping_pipeline(
             inversion=False, deadband=0.0,
             trigger_mode=EventTriggerMode.RAW, scale=1.0, extra={})
         approx(pipeline(0.5), 0.5)
         approx(pipeline(-0.5), -0.5)
 
-    def test_raw_with_scale(self):
+    def test_raw_ignores_all_shaping(self):
+        """RAW mode ignores inversion, deadband, and scale."""
+        pipeline = build_shaping_pipeline(
+            inversion=True, deadband=0.1,
+            trigger_mode=EventTriggerMode.RAW, scale=5.5, extra={})
+        # RAW returns the raw value regardless of params
+        approx(pipeline(0.5), 0.5)
+        approx(pipeline(-0.3), -0.3)
+
+    def test_scaled_with_scale(self):
         pipeline = build_shaping_pipeline(
             inversion=False, deadband=0.0,
-            trigger_mode=EventTriggerMode.RAW, scale=5.5, extra={})
+            trigger_mode=EventTriggerMode.SCALED, scale=5.5, extra={})
         approx(pipeline(1.0), 5.5)
 
     def test_inversion(self):
         pipeline = build_shaping_pipeline(
             inversion=True, deadband=0.0,
-            trigger_mode=EventTriggerMode.RAW, scale=1.0, extra={})
+            trigger_mode=EventTriggerMode.SCALED, scale=1.0, extra={})
         approx(pipeline(0.5), -0.5)
 
     def test_scaled_mode(self):

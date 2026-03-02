@@ -190,6 +190,10 @@ Portable curve math lives in `utils/math/curves.py` (shared by both robot code a
   - Numeric input with 0 = disabled
   - Optional negative_slew_rate in extra
 - [ ] Add threshold field to action panel for BOOLEAN_TRIGGER inputs
+- [ ] Disable deadband/inversion/scale/curve fields when trigger_mode is RAW
+  - RAW is true passthrough — no shaping applied
+  - Grey out or hide shaping fields to avoid confusion
+  - Show a note: "RAW mode: no shaping applied. Use SCALED for deadband/inversion/scale."
 - [ ] Refactor: spline_editor.py and segment_editor.py already import
   curve math from utils/math/curves.py (done) — no further changes needed
 

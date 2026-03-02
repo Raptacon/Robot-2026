@@ -81,6 +81,12 @@ class ControllerState:
         self.action_to_input: dict[str, str] = {}
         for input_name, action_list in config.bindings.items():
             for action_name in action_list:
+                if action_name in self.action_to_input:
+                    log.warning(
+                        "Action '%s' is bound to both '%s' and '%s' "
+                        "on controller %d — using '%s' (last wins)",
+                        action_name, self.action_to_input[action_name],
+                        input_name, port, input_name)
                 self.action_to_input[action_name] = input_name
 
 
@@ -234,9 +240,9 @@ def sync_button_nt(btn: ManagedButton) -> None:
     if 'threshold' in mapped:
         return
 
-    # BOOLEAN_TRIGGER threshold changes require rebuilding the
-    # condition — this is a future enhancement. For now we just
-    # read and log.
+    nt_thresh = btn.nt_threshold
+    if nt_thresh != btn.threshold:
+        btn.threshold = nt_thresh
 
 
 # ---------------------------------------------------------------------------
@@ -252,8 +258,16 @@ def make_button_condition(
     state: ControllerState,
     input_name: str,
     action: ActionDefinition,
+    threshold_ref: list[float] | None = None,
 ) -> Callable[[], bool]:
     """Build a boolean condition for a button/POV/BOOLEAN_TRIGGER.
+
+    Args:
+        threshold_ref: For BOOLEAN_TRIGGER — a single-element list
+            ``[threshold]`` shared with ManagedButton.  The condition
+            closure reads ``threshold_ref[0]`` each cycle, so threshold
+            changes via NT are picked up immediately without rebuilding
+            the Trigger.
 
     Returns False when the controller is disconnected to avoid
     per-cycle warning spam from wpilib in simulation.
@@ -275,6 +289,10 @@ def make_button_condition(
     elif category == "axis":
         # BOOLEAN_TRIGGER — axis > threshold = True
         axis_fn = AXIS_ACCESSORS[input_name]
+        if threshold_ref is not None:
+            return lambda: (
+                axis_fn(ctrl) > threshold_ref[0]
+                if _is_connected(port) else False)
         threshold = action.threshold
         return lambda: (
             axis_fn(ctrl) > threshold

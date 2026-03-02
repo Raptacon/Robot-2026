@@ -46,7 +46,27 @@ class ManagedButton(NtMappingMixin):
         self._default_value = default_value
         self._trigger = Trigger(condition)
 
+        # Mutable threshold ref for BOOLEAN_TRIGGER live-tuning.
+        # The factory sets this to a shared list that the condition
+        # closure also reads, so threshold changes take effect
+        # without rebuilding the Trigger or losing command bindings.
+        self._threshold_ref: list[float] | None = None
+
         self._init_nt_mapping()
+
+    # --- Threshold property (BOOLEAN_TRIGGER live-tuning) ---
+
+    @property
+    def threshold(self) -> float:
+        """Current threshold value for BOOLEAN_TRIGGER conditions."""
+        if self._threshold_ref is not None:
+            return self._threshold_ref[0]
+        return self._action.threshold if self._action is not None else 0.5
+
+    @threshold.setter
+    def threshold(self, value: float) -> None:
+        if self._threshold_ref is not None:
+            self._threshold_ref[0] = float(value)
 
     # --- Mixin overrides for threshold-specific behavior ---
 
@@ -62,18 +82,17 @@ class ManagedButton(NtMappingMixin):
         return None
 
     def _get_param_value(self, param: str):
-        """Read threshold from the action definition or nt_threshold."""
+        """Read threshold from the property (which reads _threshold_ref)."""
         if param == "threshold":
-            if hasattr(self, 'nt_threshold'):
-                return self.nt_threshold
-            return (self._action.threshold
-                    if self._action is not None else 0.5)
+            return self.threshold
         return getattr(self, param)
 
     def _set_param_value(self, param: str, value) -> None:
-        """Write threshold to nt_threshold if available."""
-        if param == "threshold" and hasattr(self, 'nt_threshold'):
-            self.nt_threshold = value
+        """Write threshold via the property and sync NT if available."""
+        if param == "threshold":
+            self.threshold = value
+            if hasattr(self, 'nt_threshold'):
+                self.nt_threshold = value
         else:
             setattr(self, param, value)
 

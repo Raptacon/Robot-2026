@@ -157,6 +157,7 @@ class ManagedAnalog(NtMappingMixin):
         shaped = self._pipeline(self._accessor())
         if self._slew_limiter is not None:
             shaped = self._slew_limiter.calculate(shaped)
+        self._last_slew_output = shaped
         return shaped
 
     def getRaw(self) -> float:
@@ -177,6 +178,8 @@ class ManagedAnalog(NtMappingMixin):
             trigger_mode=self._trigger_mode,
             scale=self._scale,
             extra=self._extra,
+            action_name=(
+                self._action.qualified_name if self._action else ""),
         )
 
     def _rebuild_slew_limiter(self) -> None:
@@ -189,6 +192,10 @@ class ManagedAnalog(NtMappingMixin):
         The negative (decreasing) rate defaults to ``-slew_rate`` but
         can be overridden via ``extra["negative_slew_rate"]`` in the
         action's YAML config for asymmetric limiting.
+
+        Preserves the last output value so changing the rate at runtime
+        doesn't cause a transient glitch (the new limiter starts from
+        where the old one left off rather than resetting to 0).
         """
         if self._slew_rate <= 0:
             self._slew_limiter = None
@@ -197,8 +204,9 @@ class ManagedAnalog(NtMappingMixin):
             from wpimath.filter import SlewRateLimiter
             neg_rate = self._extra.get(
                 "negative_slew_rate", -self._slew_rate)
+            initial = getattr(self, '_last_slew_output', 0.0)
             self._slew_limiter = SlewRateLimiter(
-                self._slew_rate, neg_rate, 0.0)
+                self._slew_rate, neg_rate, initial)
         except ImportError:
             # Graceful degradation in test environments
             self._slew_limiter = None

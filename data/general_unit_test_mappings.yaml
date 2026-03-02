@@ -72,12 +72,12 @@ actions:
       deadband: 0.05
     general_analog_raw_deadzone:
       input_type: analog
-      trigger_mode: raw
+      trigger_mode: scaled
       deadband: 0.05
       scale: 5.5
     general_analog_raw_inverted:
       input_type: analog
-      trigger_mode: raw
+      trigger_mode: scaled
       inversion: true
     general_analog_spline:
       input_type: analog
@@ -126,11 +126,11 @@ actions:
           y: 1.0
     general_analog_raw_inverted_trigger:
       input_type: analog
-      trigger_mode: raw
+      trigger_mode: scaled
       inversion: true
     general_analog_scaled_trigger:
       input_type: analog
-      trigger_mode: raw
+      trigger_mode: scaled
       scale: -2.0
     general_duplidcate_press: {}
   test_group:
@@ -150,7 +150,7 @@ actions:
       deadband: 0.05
     analog:
       input_type: analog
-      trigger_mode: raw
+      trigger_mode: scaled
       deadband: 0.05
     duplidcate_press: {}
 controllers:

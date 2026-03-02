@@ -27,7 +27,7 @@ def _make_action(
     name="test_action",
     group="test",
     input_type=InputType.ANALOG,
-    trigger_mode=EventTriggerMode.RAW,
+    trigger_mode=EventTriggerMode.SCALED,
     deadband=0.05,
     scale=1.0,
     inversion=False,

@@ -86,9 +86,21 @@ class _FactoryUpdater(commands2.Subsystem):
     before any user subsystems, this updater is the first registered
     subsystem and its ``periodic()`` runs before all others — ensuring
     managed inputs have fresh NT values before any subsystem reads them.
+
+    Multiple factories each create their own updater.  The first one
+    registered runs first; subsequent updaters log a warning.
     """
 
+    _instance_count: int = 0
+
     def __init__(self, factory: "InputFactory"):
+        _FactoryUpdater._instance_count += 1
+        if _FactoryUpdater._instance_count > 1:
+            log.warning(
+                "Multiple InputFactory instances (%d total) — "
+                "this factory's NT sync will not run first in the "
+                "scheduler cycle.",
+                _FactoryUpdater._instance_count)
         super().__init__()
         self._factory = factory
 
@@ -165,6 +177,8 @@ class InputFactory:
         self._buttons: dict[str, ManagedButton] = {}
         self._analogs: dict[str, ManagedAnalog] = {}
         self._rumbles: dict[str, ManagedRumble] = {}
+        self._raw_buttons: dict[str, Callable[[], bool]] = {}
+        self._raw_analogs: dict[tuple, Callable[[], float]] = {}
 
         # Register as the active factory for get_factory().
         # register_global=None (default): register only if no factory exists yet.
@@ -276,12 +290,22 @@ class InputFactory:
             return btn
 
         state, input_name = binding
-        condition = make_button_condition(state, input_name, action)
+
+        # For BOOLEAN_TRIGGER, create a shared mutable threshold ref
+        # so the condition closure reads the latest value each cycle
+        # without needing to rebuild the Trigger.
+        threshold_ref = None
+        if action.input_type == InputType.BOOLEAN_TRIGGER:
+            threshold_ref = [action.threshold]
+        condition = make_button_condition(
+            state, input_name, action, threshold_ref=threshold_ref)
 
         # Create NT-enabled subclass
         nt_path = f"{_NT_BASE}/actions/{action.group}/{action.name}"
         klass = make_button_nt_class(nt_path, action)
         btn = klass(action, condition, default_value)
+        if threshold_ref is not None:
+            btn._threshold_ref = threshold_ref
         self._buttons[qn] = btn
         return btn
 
@@ -295,6 +319,7 @@ class InputFactory:
 
         No Trigger wrapping, no command binding — just a function.
         For BOOLEAN_TRIGGER: returns lambda applying threshold comparison.
+        Results are cached — same name returns the same callable.
 
         Args:
             name: Action name — either qualified "group.name" or short
@@ -304,6 +329,10 @@ class InputFactory:
             required: If True, raise KeyError when not found/not bound.
         """
         qn = self._resolve_name(name, group)
+
+        if qn in self._raw_buttons:
+            return self._raw_buttons[qn]
+
         action = self._config.actions.get(qn)
         binding = self._find_binding(qn)
 
@@ -313,10 +342,14 @@ class InputFactory:
                     f"Action '{qn}' not found or not bound "
                     f"({self._config_source})")
             log.warning("Action '%s' unavailable, returning False", qn)
-            return lambda: False
+            fn = lambda: False
+            self._raw_buttons[qn] = fn
+            return fn
 
         state, input_name = binding
-        return make_button_condition(state, input_name, action)
+        fn = make_button_condition(state, input_name, action)
+        self._raw_buttons[qn] = fn
+        return fn
 
     def getAnalog(
         self,
@@ -360,6 +393,14 @@ class InputFactory:
             return analog
 
         if action.input_type == InputType.VIRTUAL_ANALOG:
+            if not required:
+                log.warning(
+                    "Action '%s' is VIRTUAL_ANALOG (not yet implemented), "
+                    "returning default", qn)
+                analog = ManagedAnalog(
+                    action, lambda: default_value, default_value)
+                self._analogs[qn] = analog
+                return analog
             raise NotImplementedError(
                 f"VIRTUAL_ANALOG is reserved for future use "
                 f"(action '{qn}') ({self._config_source})")
@@ -398,6 +439,8 @@ class InputFactory:
 
         Only applies the requested transformations.  Does not create
         a managed object — returns a plain callable.
+        Results are cached by (name, apply_invert, apply_deadband,
+        apply_scale) — same args return the same callable.
 
         Args:
             name: Action name — either qualified "group.name" or short
@@ -410,6 +453,11 @@ class InputFactory:
             apply_scale: Apply scale from config.
         """
         qn = self._resolve_name(name, group)
+        cache_key = (qn, apply_invert, apply_deadband, apply_scale)
+
+        if cache_key in self._raw_analogs:
+            return self._raw_analogs[cache_key]
+
         action = self._config.actions.get(qn)
         binding = self._find_binding(qn)
 
@@ -419,22 +467,27 @@ class InputFactory:
                     f"Action '{qn}' not found or not bound "
                     f"({self._config_source})")
             log.warning("Action '%s' unavailable, returning 0.0", qn)
-            return lambda: 0.0
+            fn = lambda: 0.0
+            self._raw_analogs[cache_key] = fn
+            return fn
 
         state, input_name = binding
         raw_accessor = make_axis_accessor(state, input_name)
 
-        # Build a selective pipeline
+        # Build a selective pipeline using SCALED mode
+        # (applies only the requested transformations)
         pipeline = build_shaping_pipeline(
             inversion=action.inversion if apply_invert else False,
             deadband=action.deadband if apply_deadband else 0.0,
-            trigger_mode=EventTriggerMode.RAW,
+            trigger_mode=EventTriggerMode.SCALED,
             scale=action.scale if apply_scale else 1.0,
             extra={},
+            action_name=qn,
         )
 
         def _selective():
             return pipeline(raw_accessor())
+        self._raw_analogs[cache_key] = _selective
         return _selective
 
     def getRumbleControl(
