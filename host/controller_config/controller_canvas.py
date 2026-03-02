@@ -206,7 +206,7 @@ class ControllerCanvas(tk.Frame):
                     self._rumble_base_image = Image.open(
                         str(rumble_path)).convert("RGBA")
             except Exception:
-                pass
+                pass  # Non-fatal: fallback icon is generated below
         # Fallback: draw a simple rumble icon with PIL if SVG couldn't load
         if self._rumble_base_image is None:
             self._rumble_base_image = self._make_rumble_fallback(64)
@@ -219,7 +219,7 @@ class ControllerCanvas(tk.Frame):
                 self._gear_base_image = Image.open(
                     str(gear_path)).convert("RGBA")
             except Exception:
-                pass
+                pass  # Non-fatal: gear overlay is optional decoration
 
     @staticmethod
     def _make_rumble_fallback(size: int) -> Image.Image:
