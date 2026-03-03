@@ -3,7 +3,6 @@ from typing import Tuple
 
 # Third-party imports
 from wpimath.geometry import Rotation2d
-import rev
 
 class OperatorRobotConfig:
     # Default start position for red alliance using always-blue-alliance coordinates
@@ -58,3 +57,4 @@ class OperatorRobotConfig:
     shooterRangeInterval = 0.2
     shooterOffsetIncrement = 100
     shooterOffsetDecrement = -100
+    # intake_roller_pid: Tuple[float] = [0, 0, 0, 1 / 565]

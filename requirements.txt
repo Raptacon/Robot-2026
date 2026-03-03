@@ -1,19 +1,28 @@
+#Common Python Libs
 cryptography==44.0.1
 pyflakes
 py2app
 macholib
 modulegraph
+
+#Package and testing tools
 flake8
 coverage
 wheel
-# numpy
-robotpy[all]==2026.*
-robotpy-rev==2026.0.1
-robotpy-navx==2026.0.0
-robotpy-pathplannerlib==2026.1.1
-phoenix6==26.1.0
-photonlibpy==2026.1.1rc4
-# pyntcore==2025.*
+pdoc
 
-
+#Raptacon base lib
 # raptacon3200>=2025.0.1
+
+#FRC-specific packages
+robotpy[all]==2026.*
+robotpy-rev==2026.*
+robotpy-navx==2026.*
+robotpy-pathplannerlib==2026.*
+robotpy-urcl==2026.*
+phoenix6==26.*
+photonlibpy==2026.*
+robotpy-urcl
+
+
+

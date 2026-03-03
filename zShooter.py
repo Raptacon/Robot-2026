@@ -5,9 +5,6 @@ from pathlib import Path
 from typing import Callable
 
 # Internal imports
-from data.telemetry import Telemetry
-from vision import Vision
-from commands.default_swerve_drive import DefaultDrive
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
 from config import OperatorRobotConfig
 
@@ -15,10 +12,6 @@ from config import OperatorRobotConfig
 import commands2
 import rev
 import wpilib
-import wpimath
-from commands2.button import Trigger
-from pathplannerlib.auto import AutoBuilder
-from pathplannerlib.path import PathPlannerPath
 from subsystem.z_Shooter import zShooter as Shooter
 import typing
 
