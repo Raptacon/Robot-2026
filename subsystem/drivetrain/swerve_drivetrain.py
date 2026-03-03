@@ -360,7 +360,7 @@ class SwerveDrivetrain(Subsystem):
         mode change events.
 
         Args:
-            alliance: the current alliance as read from the driver station 
+            alliance: the current alliance as read from the driver station
 
         Returns:
             None: alliance flip attribute updated in-place
