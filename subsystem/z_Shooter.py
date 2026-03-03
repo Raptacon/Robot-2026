@@ -18,6 +18,7 @@ class zShooter():
         self.lookupTable = ([1000]*25) + ([2000]*25) + ([3000]*25) + ([4000]*25)
 
         # Instantiate motors
+        # Check if top or bottom motor needs to be a follower
         self.intakeMotor = rev.SparkFlex(14, rev.SparkLowLevel.MotorType.kBrushless)
         self.topMotor = rev.SparkFlex(10, rev.SparkLowLevel.MotorType.kBrushless)
         self.bottomMotor = rev.SparkMax(6, rev.SparkLowLevel.MotorType.kBrushless)
@@ -48,18 +49,19 @@ class zShooter():
         }
 
         # Set up configs for each motor
-        # Change k.NoPersistParameters to k.PersistParameters when done tuning
-        self.configs.closedLoop.pidf(*self.robotConfigs.intake_motor_pidf, rev.ClosedLoopSlot.kSlot0)
-        self.configs.inverted(self.robotConfigs.inverted[0])
-        self.intakeMotor.configure(self.configs, rev.ResetMode.kNoResetSafeParameters, rev.PersistMode.kNoPersistParameters)
+        # Check if motors should be inverted
+        # Create method to combine PIDF values and inverted
+        self.configs.closedLoop.pidf(*self.robotConfigs.shooterIntakeMotorPIDF, rev.ClosedLoopSlot.kSlot0)
+        self.configs.inverted(self.robotConfigs.shooterInverted[0])
+        self.intakeMotor.configure(self.configs, rev.ResetMode.kNoResetSafeParameters, rev.PersistMode.kPersistParameters)
         
-        self.configs.closedLoop.pidf(*self.robotConfigs.top_motor_pidf, rev.ClosedLoopSlot.kSlot0)
-        self.configs.inverted(self.robotConfigs.inverted[0])
-        self.topMotor.configure(self.configs, rev.ResetMode.kNoResetSafeParameters, rev.PersistMode.kNoPersistParameters)
+        self.configs.closedLoop.pidf(*self.robotConfigs.shooterTopMotorPIDF, rev.ClosedLoopSlot.kSlot0)
+        self.configs.inverted(self.robotConfigs.shooterInverted[0])
+        self.topMotor.configure(self.configs, rev.ResetMode.kNoResetSafeParameters, rev.PersistMode.kPersistParameters)
         
-        self.configs.closedLoop.pidf(*self.robotConfigs.bottom_motor_pidf, rev.ClosedLoopSlot.kSlot0)
-        self.configs.inverted(self.robotConfigs.inverted[0])
-        self.bottomMotor.configure(self.configs, rev.ResetMode.kNoResetSafeParameters, rev.PersistMode.kNoPersistParameters)
+        self.configs.closedLoop.pidf(*self.robotConfigs.shooterBottomMotorPIDF, rev.ClosedLoopSlot.kSlot0)
+        self.configs.inverted(self.robotConfigs.shooterInverted[0])
+        self.bottomMotor.configure(self.configs, rev.ResetMode.kNoResetSafeParameters, rev.PersistMode.kPersistParameters)
 
     def setMotorVoltage(self, motorName: str, voltage: float):
         """
@@ -117,9 +119,9 @@ class zShooter():
         self.distance = a*RPM + b*RPM**2 + c*angle + d*angle**2
         return self.distance
 
-    def calculate_rpm_or_angle_from_distance(self, a, b, distance):
+    def calculateRpmFromDistance(self, a, b, distance):
         """
-        Calculate either the rpm or angle needed to travel a certain distance
+        Calculate either the rpm needed to travel a certain distance
         
         Args:
             a: Some constant
@@ -127,10 +129,12 @@ class zShooter():
             distance: the length in meters(?) the ball needs to travel
         
         Returns:
-            RPM or angle the ball needs to be at to travel a certain distance
+            None
         """
-        self.inputs = -(a) + sqrt(a**2 - 4(a)(distance)) / 2*b
-        return self.inputs + self.offsetAmount
+        discriminant = a**2 - (4*b*distance)
+        if (not (discriminant < 0)) and (b != 0):
+            newRPM = max([-(a) + sqrt(discriminant) / (2*b), -(a) - sqrt(discriminant) / (2*b)] )
+            self.RPM = newRPM + self.offsetAmount
 
     # def calculate_RPM(self, a, b, c, d, distance, angle):
     #     self.angle = -(a) + sqrt(a**2 - ((4*b)*(c*angle + d*angle**2)) + 4*b*distance ) / 2*b
@@ -147,7 +151,7 @@ class zShooter():
             RPM needed to hit distance target
         """
         # Get an index number from the distance given
-        lookupIndex = abs(int(floor(distance / self.robotConfigs.rangeInterval)))
+        lookupIndex = abs(int(floor(distance / self.robotConfigs.shooterRangeInterval)))
         # Check if index number has exceeded the length of the list, else set RPM as 0
         if lookupIndex < len(self.lookupTable):
             self.RPM = self.lookupTable[lookupIndex] + self.offsetAmount
@@ -167,7 +171,7 @@ class zShooter():
         Returns:
             None
         """
-        self.offsetAmount = self.offsetAmount + self.robotConfigs.offsetIncrement
+        self.offsetAmount = self.offsetAmount + self.robotConfigs.shooterOffsetIncrement
 
     def decreaseOffset(self):
         """
@@ -179,7 +183,7 @@ class zShooter():
         Returns:
             None
         """
-        self.offsetAmount = self.offsetAmount + self.robotConfigs.offsetDecrement
+        self.offsetAmount = self.offsetAmount + self.robotConfigs.shooterOffsetDecrement
 
     def resetOffset(self):
         """
@@ -204,3 +208,8 @@ class zShooter():
             None
         """
         return self.offsetAmount
+
+    def periodic(self):
+        self.setMotorReference('intake', self.RPM)
+        self.setMotorReference('top', self.RPM)
+        self.setMotorReference('bottom', self.RPM)

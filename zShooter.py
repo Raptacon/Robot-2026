@@ -37,7 +37,7 @@ class RobotSwerve:
     def robotPeriodic(self):
         pass
     def disabledInit(self):
-        pass
+        self.shooter.RPM = 0
     def disabledPeriodic(self):
         pass
 
@@ -52,21 +52,23 @@ class RobotSwerve:
         wpilib.SmartDashboard.putNumberArray("Top PIDF", [0, 0, 0, 0])
         wpilib.SmartDashboard.putNumberArray("Bottom PIDF", [0, 0, 0, 0])
 
-    def teleopPeriodic(self):
-        wpilib.SmartDashboard.putNumber("In_Velocity", self.shooter.getVelocity('intake'))
-        wpilib.SmartDashboard.putNumber("Top_Velocity", self.shooter.getVelocity('top'))
-        wpilib.SmartDashboard.putNumber("Bottom_Velocity", self.shooter.getVelocity('bottom'))
-
         # Offset RPM by +100
         self.xbox.povUp().onTrue(commands2.cmd.runOnce(lambda: self.shooter.increaseOffset, self.shooter))
         # Offset RPM by -100
         self.xbox.povDown().onTrue(commands2.cmd.runOnce(lambda: self.shooter.decreaseOffset, self.shooter))
 
+    def teleopPeriodic(self):
+        wpilib.SmartDashboard.putNumber("In_Velocity", self.shooter.getVelocity('intake'))
+        wpilib.SmartDashboard.putNumber("Top_Velocity", self.shooter.getVelocity('top'))
+        wpilib.SmartDashboard.putNumber("Bottom_Velocity", self.shooter.getVelocity('bottom'))
+
+        self.shooter.getLookupTable(1)
+
     def testInit(self):
         commands2.CommandScheduler.getInstance().cancelAll()
 
-    def testPeriodic(self):
         # For tuning robot
+        # Create methods to set each motor reference and remove parallel command
         self.xbox.x().onTrue(commands2.cmd.parallel(           
             commands2.cmd.runOnce(lambda: self.shooter.setMotorReference('intake', 0), self.shooter),
             commands2.cmd.runOnce(lambda: self.shooter.setMotorReference('top', 0), self.shooter),
@@ -85,6 +87,7 @@ class RobotSwerve:
             commands2.cmd.runOnce(lambda: self.shooter.setMotorReference('bottom', 4500), self.shooter))
         )
 
+    def testPeriodic(self):
         self.intakeMotorPIDF: typing.Tuple[float, float, float, float] = wpilib.SmartDashboard.getNumberArray("Intake PIDF", [0, 0, 0, 0])
         self.topMotorPIDF: typing.Tuple[float, float, float, float] = wpilib.SmartDashboard.getNumberArray("Top PIDF", [0, 0, 0, 0])
         self.bottomMotorPIDF: typing.Tuple[float, float, float, float] = wpilib.SmartDashboard.getNumberArray("Bottom PIDF", [0, 0, 0, 0])
