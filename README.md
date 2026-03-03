@@ -6,6 +6,19 @@
 
 Please take a look at the [wiki](https://github.com/Raptacon/Robot-2023/wiki) for the most up to date documenation
 
+Browse the auto-generated [API documentation](http://raptacon.github.io/Robot-2026/robot.html)
+
+### Testing docs from a branch
+
+By default, docs only build and deploy on pushes to `main`. To test from a feature branch:
+
+1. In `.github/workflows/robot_ci.yml`, update the `BuildDocs` job's `if:` condition to include your branch:
+   ```yaml
+   if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/your-branch-name')
+   ```
+2. Ask a mentor to add your branch to the [GitHub Pages environment deployment rules](https://github.com/Raptacon/Robot-2026/settings/environments/).
+3. Revert the `if:` condition before merging to `main`.
+
 Also make sure to check out the [Kanban board](https://github.com/Raptacon/Robot-2023/projects/1)
 test
 
@@ -164,6 +177,36 @@ Extra things:
 
 # Stream Deck
 To use our Stream Deck, you need to run the Raptacon streamdeck repo along with the robot code. We do this because we do not want too many 3rd party libraries in the robot code.
+
+# Testing
+
+Tests run automatically when you deploy code (`make deploy`) and on every pull request in GitHub. If tests fail, your code won't deploy and your PR can't be merged. This keeps broken code off the robot.
+
+## Running tests locally
+
+```bash
+# Run all tests
+python -m robotpy test
+
+# Run just the fuzz tests
+python -m robotpy test -- tests/test_fuzz_teleop.py -v
+
+# Run a single test by name
+python -m robotpy test -- tests/test_fuzz_teleop.py::test_fuzz_teleop_short -v
+```
+
+## Fuzz Tests (`tests/test_fuzz_teleop.py`)
+
+Fuzz tests feed **random controller inputs** to the robot in simulation to make sure no button combination can crash it. Think of it like a toddler mashing every button on the Xbox controller hundreds of times in a row.
+
+Each test uses a **seed number** so the "random" inputs are the same every time. If a test fails, anyone on the team can re-run it and get the exact same crash. Check the test file's docstring for detailed instructions on what to do when a fuzz test fails.
+
+**What the tests cover:**
+- `test_fuzz_teleop_default` - Full match flow (disabled -> auto -> teleop) with 500 cycles
+- `test_fuzz_teleop_skip_auto` - Same inputs but skips auto, catches code that assumes auto ran first
+- `test_fuzz_teleop_short` - Quick 100-cycle smoke test
+- `test_fuzz_teleop_all_extremes` - Only uses boundary stick values (-1, 0, +1)
+- `test_fuzz_teleop_long` - Thorough 5000-cycle test (runs in CI)
 
 # Information
 

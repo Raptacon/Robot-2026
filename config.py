@@ -49,3 +49,5 @@ class OperatorRobotConfig:
     # Values to give are: max translation velocity (mps), max translation acceleration (mps^2),
     # max angular velocity (dps), max angular acceleration (dps^2).
     teleop_pathplan_constraints: Tuple[float] = (2.5, 2.0, 360.0, 360.0)
+
+    # intake_roller_pid: Tuple[float] = [0, 0, 0, 1 / 565]
