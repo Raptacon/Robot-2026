@@ -3,7 +3,6 @@ from typing import Tuple
 
 # Third-party imports
 from wpimath.geometry import Rotation2d
-import rev
 
 class OperatorRobotConfig:
     # Default start position for red alliance using always-blue-alliance coordinates
