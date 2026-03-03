@@ -58,3 +58,4 @@ class OperatorRobotConfig:
     rangeInterval = 0.2
     offsetIncrement = 100
     offsetDecrement = -100
+    # intake_roller_pid: Tuple[float] = [0, 0, 0, 1 / 565]
