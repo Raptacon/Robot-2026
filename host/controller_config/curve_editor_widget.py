@@ -16,9 +16,26 @@ from tkinter import ttk, filedialog, messagebox
 
 import yaml
 
+from host.controller_config.colors import (
+    BG_INACTIVE,
+    BG_WHITE,
+    CURVE_LINE,
+    ENDPOINT_FILL,
+    GRID_AXIS,
+    GRID_MAJOR,
+    GRID_MINOR,
+    HANDLE_FILL,
+    HANDLE_LINE,
+    LABEL_COLOR,
+    MIRROR_LINE,
+    POINT_FILL,
+    POINT_OUTLINE,
+)
 from utils.controller.model import (
     ActionDefinition,
     EventTriggerMode,
+    EXTRA_SEGMENT_POINTS,
+    EXTRA_SPLINE_POINTS,
     InputType,
 )
 from utils.math.curves import (
@@ -40,23 +57,23 @@ _HANDLE_RADIUS = 5
 _CURVE_SAMPLES_PER_SEG = 80
 _VIS_SAMPLES = 200          # samples for visualization curves
 
-# Colors
-_BG = "#ffffff"
-_BG_INACTIVE = "#f0f0f0"
-_GRID = "#e8e8e8"
-_GRID_MAJOR = "#c8c8c8"
-_AXIS = "#909090"
-_CURVE = "#2060c0"
-_POINT_FILL = "#c02020"
-_POINT_OUTLINE = "#801010"
-_ENDPOINT_FILL = "#802020"
-_HANDLE_FILL = "#40a040"
-_HANDLE_LINE = "#80c080"
-_LABEL = "#505050"
+# Colors (shared palette imported from colors.py)
+_BG = BG_WHITE
+_BG_INACTIVE = BG_INACTIVE
+_GRID = GRID_MINOR
+_GRID_MAJOR = GRID_MAJOR
+_AXIS = GRID_AXIS
+_CURVE = CURVE_LINE
+_POINT_FILL = POINT_FILL
+_POINT_OUTLINE = POINT_OUTLINE
+_ENDPOINT_FILL = ENDPOINT_FILL
+_HANDLE_FILL = HANDLE_FILL
+_HANDLE_LINE = HANDLE_LINE
+_LABEL = LABEL_COLOR
 _DEADBAND_FILL = "#e0e0e0"
 _SCALE_HANDLE = "#d08020"
 _SCALE_HANDLE_OUTLINE = "#906010"
-_MIRROR_FILL = "#c0a0a0"
+_MIRROR_FILL = MIRROR_LINE
 _TRACKER_FILL = "#ff6600"
 _TRACKER_RADIUS = 4
 _TRACKER_TAG = "tracker"
@@ -361,17 +378,17 @@ class CurveEditorWidget(ttk.Frame):
 
         # Load points for editable modes
         if self._mode == "spline":
-            pts = action.extra.get("spline_points")
+            pts = action.extra.get(EXTRA_SPLINE_POINTS)
             if not pts:
                 pts = default_spline_points()
-                action.extra["spline_points"] = pts
+                action.extra[EXTRA_SPLINE_POINTS] = pts
             self._points = [dict(p) for p in pts]
             self._points.sort(key=lambda p: p["x"])
         elif self._mode == "segment":
-            pts = action.extra.get("segment_points")
+            pts = action.extra.get(EXTRA_SEGMENT_POINTS)
             if not pts:
                 pts = default_segment_points()
-                action.extra["segment_points"] = pts
+                action.extra[EXTRA_SEGMENT_POINTS] = pts
             self._points = [{"x": p["x"], "y": p["y"]} for p in pts]
             self._points.sort(key=lambda p: p["x"])
         else:
@@ -1222,9 +1239,9 @@ class CurveEditorWidget(ttk.Frame):
         if push_app_undo and self._on_before_change:
             self._on_before_change(200)
         if self._mode == "spline":
-            self._action.extra["spline_points"] = deepcopy(self._points)
+            self._action.extra[EXTRA_SPLINE_POINTS] = deepcopy(self._points)
         elif self._mode == "segment":
-            self._action.extra["segment_points"] = deepcopy(self._points)
+            self._action.extra[EXTRA_SEGMENT_POINTS] = deepcopy(self._points)
         if self._on_curve_changed:
             self._on_curve_changed()
 

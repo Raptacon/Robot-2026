@@ -11,10 +11,22 @@ import math
 import tkinter as tk
 from tkinter import ttk
 
+from host.controller_config.colors import (
+    BG_INACTIVE,
+    BG_WHITE,
+    CURVE_LINE,
+    GRID_AXIS,
+    GRID_MAJOR,
+    GRID_MINOR,
+    LABEL_COLOR,
+)
 from host.controller_config.gamepad_input import GamepadPoller
 from utils.controller.model import (
     ActionDefinition,
     EventTriggerMode,
+    EXTRA_NEGATIVE_SLEW_RATE,
+    EXTRA_SEGMENT_POINTS,
+    EXTRA_SPLINE_POINTS,
     InputType,
 )
 from utils.math.curves import evaluate_segments, evaluate_spline
@@ -24,13 +36,13 @@ from utils.math.curves import evaluate_segments, evaluate_spline
 # Colors
 # ---------------------------------------------------------------------------
 
-_BG = "#ffffff"
-_BG_INACTIVE = "#f0f0f0"
-_GRID = "#e8e8e8"
-_GRID_MAJOR = "#c8c8c8"
-_AXIS = "#909090"
-_LABEL = "#505050"
-_DOT_COLOR = "#2060c0"
+_BG = BG_WHITE
+_BG_INACTIVE = BG_INACTIVE
+_GRID = GRID_MINOR
+_GRID_MAJOR = GRID_MAJOR
+_AXIS = GRID_AXIS
+_LABEL = LABEL_COLOR
+_DOT_COLOR = CURVE_LINE
 _DOT_OUTLINE = "#103060"
 _TRAIL_NEWEST = (0x20, 0x60, 0xc0)   # bright blue
 _TRAIL_OLDEST = (0xe0, 0xe0, 0xe0)   # near-white
@@ -472,8 +484,8 @@ class PreviewWidget(ttk.Frame):
         deadband = action.deadband
         scale = action.scale
         extra = action.extra or {}
-        spline_pts = extra.get("spline_points")
-        segment_pts = extra.get("segment_points")
+        spline_pts = extra.get(EXTRA_SPLINE_POINTS)
+        segment_pts = extra.get(EXTRA_SEGMENT_POINTS)
 
         if mode == EventTriggerMode.SQUARED:
             def pipeline(raw):
@@ -508,7 +520,7 @@ class PreviewWidget(ttk.Frame):
         slew_rate = action.slew_rate
         if slew_rate > 0:
             extra = action.extra or {}
-            neg_rate = extra.get("negative_slew_rate")
+            neg_rate = extra.get(EXTRA_NEGATIVE_SLEW_RATE)
             if neg_rate is None:
                 neg_rate = -slew_rate
             else:

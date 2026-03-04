@@ -17,6 +17,10 @@ from utils.controller.model import (
     ANALOG_EVENT_TRIGGER_MODES,
     ActionDefinition,
     BUTTON_EVENT_TRIGGER_MODES,
+    DEFAULT_GROUP,
+    EXTRA_NEGATIVE_SLEW_RATE,
+    EXTRA_SEGMENT_POINTS,
+    EXTRA_SPLINE_POINTS,
     InputType,
     EventTriggerMode,
 )
@@ -530,9 +534,9 @@ class ActionPanel(tk.Frame):
             or abs(action.scale - 1.0) > 0.01
             or action.slew_rate > 0.01
             or action.trigger_mode != default_trigger
-            or action.extra.get("spline_points")
-            or action.extra.get("segment_points")
-            or action.extra.get("negative_slew_rate") is not None
+            or action.extra.get(EXTRA_SPLINE_POINTS)
+            or action.extra.get(EXTRA_SEGMENT_POINTS)
+            or action.extra.get(EXTRA_NEGATIVE_SLEW_RATE) is not None
         )
 
     def _tag_actions_custom(self):
@@ -580,7 +584,7 @@ class ActionPanel(tk.Frame):
         The "general" group is always included so actions can be
         assigned to it even when it has no members.
         """
-        groups: dict[str, list[str]] = {"general": []}
+        groups: dict[str, list[str]] = {DEFAULT_GROUP: []}
         for qname, action in self._actions.items():
             groups.setdefault(action.group, []).append(qname)
         for g in self._empty_groups:
@@ -590,7 +594,7 @@ class ActionPanel(tk.Frame):
 
     def _sorted_group_names(self, groups: dict[str, list[str]]) -> list[str]:
         """Sort group names with 'general' first."""
-        return sorted(groups.keys(), key=lambda g: (g != "general", g))
+        return sorted(groups.keys(), key=lambda g: (g != DEFAULT_GROUP, g))
 
     # Prefix for placeholder items in empty groups
     _EMPTY_PREFIX = "empty::"
@@ -863,7 +867,7 @@ class ActionPanel(tk.Frame):
             self._inversion_var.set(action.inversion)
             self._scale_var.set(str(action.scale))
             self._slew_var.set(str(action.slew_rate))
-            neg_slew = action.extra.get("negative_slew_rate")
+            neg_slew = action.extra.get(EXTRA_NEGATIVE_SLEW_RATE)
             if neg_slew is not None:
                 self._neg_slew_enable_var.set(True)
                 self._neg_slew_var.set(str(min(float(neg_slew), 0.0)))
@@ -1013,9 +1017,9 @@ class ActionPanel(tk.Frame):
             action.slew_rate = float(self._slew_var.get() or 0.0)
             if self._neg_slew_enable_var.get():
                 val = float(self._neg_slew_var.get() or 0.0)
-                action.extra["negative_slew_rate"] = min(val, 0.0)
+                action.extra[EXTRA_NEGATIVE_SLEW_RATE] = min(val, 0.0)
             else:
-                action.extra.pop("negative_slew_rate", None)
+                action.extra.pop(EXTRA_NEGATIVE_SLEW_RATE, None)
         except (ValueError, KeyError):
             return False
 
@@ -1102,9 +1106,9 @@ class ActionPanel(tk.Frame):
                     self._neg_slew_var.set("0.0")
                     action = self._actions.get(self._selected_name)
                     if action:
-                        action.extra.pop("spline_points", None)
-                        action.extra.pop("segment_points", None)
-                        action.extra.pop("negative_slew_rate", None)
+                        action.extra.pop(EXTRA_SPLINE_POINTS, None)
+                        action.extra.pop(EXTRA_SEGMENT_POINTS, None)
+                        action.extra.pop(EXTRA_NEGATIVE_SLEW_RATE, None)
                 # Update trigger mode options and default
                 self._update_trigger_mode_options(input_type)
             finally:
@@ -1132,7 +1136,7 @@ class ActionPanel(tk.Frame):
             SplineEditorDialog, default_points,
         )
 
-        points = action.extra.get("spline_points")
+        points = action.extra.get(EXTRA_SPLINE_POINTS)
         if not points:
             points = default_points()
 
@@ -1140,7 +1144,7 @@ class ActionPanel(tk.Frame):
         other_curves = {}
         for qname, act in self._actions.items():
             if qname != self._selected_name:
-                pts = act.extra.get("spline_points")
+                pts = act.extra.get(EXTRA_SPLINE_POINTS)
                 if pts:
                     other_curves[qname] = pts
 
@@ -1151,7 +1155,7 @@ class ActionPanel(tk.Frame):
         if result is not None:
             if self._on_before_change:
                 self._on_before_change(0)
-            action.extra["spline_points"] = result
+            action.extra[EXTRA_SPLINE_POINTS] = result
             if self._on_actions_changed:
                 self._on_actions_changed()
 
@@ -1167,7 +1171,7 @@ class ActionPanel(tk.Frame):
             SegmentEditorDialog, default_segment_points,
         )
 
-        points = action.extra.get("segment_points")
+        points = action.extra.get(EXTRA_SEGMENT_POINTS)
         if not points:
             points = default_segment_points()
 
@@ -1175,7 +1179,7 @@ class ActionPanel(tk.Frame):
         other_curves = {}
         for qname, act in self._actions.items():
             if qname != self._selected_name:
-                pts = act.extra.get("segment_points")
+                pts = act.extra.get(EXTRA_SEGMENT_POINTS)
                 if pts:
                     other_curves[qname] = pts
 
@@ -1186,7 +1190,7 @@ class ActionPanel(tk.Frame):
         if result is not None:
             if self._on_before_change:
                 self._on_before_change(0)
-            action.extra["segment_points"] = result
+            action.extra[EXTRA_SEGMENT_POINTS] = result
             if self._on_actions_changed:
                 self._on_actions_changed()
 
@@ -1760,7 +1764,7 @@ class ActionPanel(tk.Frame):
                 return item_id[len(self._GROUP_PREFIX):]
             if item_id in self._actions:
                 return self._actions[item_id].group
-        return "general"
+        return DEFAULT_GROUP
 
     def _get_selected_group_name(self) -> str | None:
         """Return the group name if a group node is selected, else None."""

@@ -21,6 +21,9 @@ from utils.controller.model import (
     ANALOG_EVENT_TRIGGER_MODES,
     ActionDefinition,
     BUTTON_EVENT_TRIGGER_MODES,
+    EXTRA_NEGATIVE_SLEW_RATE,
+    EXTRA_SEGMENT_POINTS,
+    EXTRA_SPLINE_POINTS,
     InputType,
     EventTriggerMode,
 )
@@ -539,7 +542,7 @@ class ActionEditorTab(ttk.Frame):
             self._inversion_var.set(action.inversion)
             self._scale_var.set(str(action.scale))
             self._slew_var.set(str(action.slew_rate))
-            neg_slew = action.extra.get("negative_slew_rate")
+            neg_slew = action.extra.get(EXTRA_NEGATIVE_SLEW_RATE)
             if neg_slew is not None:
                 self._neg_slew_enable_var.set(True)
                 self._neg_slew_var.set(str(min(float(neg_slew), 0.0)))
@@ -616,7 +619,7 @@ class ActionEditorTab(ttk.Frame):
         """Return curves from other actions for 'Copy from...'."""
         if not self._get_all_actions:
             return {}
-        key = "spline_points" if mode == "spline" else "segment_points"
+        key = EXTRA_SPLINE_POINTS if mode == "spline" else EXTRA_SEGMENT_POINTS
         all_actions = self._get_all_actions()
         curves = {}
         for qname, action in all_actions.items():
@@ -984,11 +987,11 @@ class ActionEditorTab(ttk.Frame):
         if self._neg_slew_enable_var.get():
             try:
                 val = float(self._neg_slew_var.get() or 0.0)
-                action.extra["negative_slew_rate"] = min(val, 0.0)
+                action.extra[EXTRA_NEGATIVE_SLEW_RATE] = min(val, 0.0)
             except ValueError:
                 pass
         else:
-            action.extra.pop("negative_slew_rate", None)
+            action.extra.pop(EXTRA_NEGATIVE_SLEW_RATE, None)
 
         if not self._type_switch_active:
             action._has_custom = True

@@ -24,6 +24,18 @@ from tkinter import ttk, filedialog, messagebox
 
 import yaml
 
+from host.controller_config.colors import (
+    BG_WHITE,
+    CURVE_LINE,
+    ENDPOINT_FILL,
+    GRID_AXIS,
+    GRID_MAJOR,
+    GRID_MINOR,
+    LABEL_COLOR,
+    POINT_FILL,
+    POINT_OUTLINE,
+)
+
 # Canvas layout (pixels)
 _CANVAS_W = 600
 _CANVAS_H = 600
@@ -37,31 +49,31 @@ _POINT_RADIUS = 7
 # Minimum gap between adjacent control point X positions
 _MIN_X_GAP = 0.04
 
-# Colors
-_BG = "#ffffff"
-_GRID = "#e8e8e8"
-_GRID_MAJOR = "#c8c8c8"
-_AXIS = "#909090"
-_CURVE = "#2060c0"
-_POINT_FILL = "#c02020"
-_POINT_OUTLINE = "#801010"
-_ENDPOINT_FILL = "#802020"
-_LABEL = "#505050"
+# Colors (shared palette imported from colors.py)
+_BG = BG_WHITE
+_GRID = GRID_MINOR
+_GRID_MAJOR = GRID_MAJOR
+_AXIS = GRID_AXIS
+_CURVE = CURVE_LINE
+_POINT_FILL = POINT_FILL
+_POINT_OUTLINE = POINT_OUTLINE
+_ENDPOINT_FILL = ENDPOINT_FILL
+_LABEL = LABEL_COLOR
 
 _DEFAULT_STATUS = ("Click to add point | Right-click to remove | "
                    "Drag to adjust")
 
 
-# ------------------------------------------------------------------
-# Piecewise-linear evaluation (canonical in utils/math/curves.py)
-# ------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+#   Piecewise-linear evaluation (canonical in utils/math/curves.py)
+# ---------------------------------------------------------------------------
 
 from utils.math.curves import default_segment_points
 
 
-# ------------------------------------------------------------------
-# SegmentEditorDialog
-# ------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+#   SegmentEditorDialog
+# ---------------------------------------------------------------------------
 
 class SegmentEditorDialog(tk.Toplevel):
     """Modal dialog for visually editing a piecewise-linear response curve.

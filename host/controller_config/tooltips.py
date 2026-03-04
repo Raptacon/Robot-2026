@@ -4,7 +4,9 @@ Both ActionPanel (sidebar) and ActionEditorTab reference these so
 that the same field always shows the same help text.
 """
 
-# -- Action identity fields --------------------------------------------------
+# ---------------------------------------------------------------------------
+#   Action identity fields
+# ---------------------------------------------------------------------------
 
 TIP_NAME = ("Short action name (no dots). Combined\n"
             "with group to form qualified name: group.name")
@@ -20,7 +22,9 @@ TIP_INPUT_TYPE = ("Input type determines available options:\n"
                   "  analog — continuous value (stick, trigger)\n"
                   "  output — rumble or LED feedback")
 
-# -- Trigger mode -------------------------------------------------------------
+# ---------------------------------------------------------------------------
+#   Trigger mode
+# ---------------------------------------------------------------------------
 
 # Combined tooltip (sidebar uses one combo for both button + analog modes)
 TIP_TRIGGER = ("Button modes — when the command fires:\n"
@@ -52,7 +56,9 @@ TIP_TRIGGER_ANALOG = ("How the analog input value is shaped:\n"
                       "  spline — custom cubic hermite curve\n"
                       "  segmented — custom piecewise-linear curve")
 
-# -- Analog shaping fields ----------------------------------------------------
+# ---------------------------------------------------------------------------
+#   Analog shaping fields
+# ---------------------------------------------------------------------------
 
 TIP_DEADBAND = ("Dead zone around center (0.0–1.0).\n"
                 "Input below this threshold reads as 0.\n"
@@ -72,7 +78,9 @@ TIP_NEG_SLEW = ("Separate slew rate for decreasing values.\n"
                 "Enables asymmetric acceleration/braking.\n"
                 "Must be negative or zero.")
 
-# -- Curve editor buttons (sidebar) -------------------------------------------
+# ---------------------------------------------------------------------------
+#   Curve editor buttons (sidebar)
+# ---------------------------------------------------------------------------
 
 TIP_EDIT_SPLINE = ("Open the visual spline curve editor.\n"
                    "Click to add points, right-click to remove.")
@@ -80,7 +88,9 @@ TIP_EDIT_SPLINE = ("Open the visual spline curve editor.\n"
 TIP_EDIT_SEGMENTS = ("Open the piecewise-linear curve editor.\n"
                      "Click to add points, right-click to remove.")
 
-# -- Bindings pane (action editor) --------------------------------------------
+# ---------------------------------------------------------------------------
+#   Bindings pane (action editor)
+# ---------------------------------------------------------------------------
 
 TIP_ASSIGN_INPUT = ("Select a controller input and click +\n"
                     "to bind it to this action.")
@@ -92,7 +102,9 @@ TIP_BOUND_LIST = ("Currently assigned inputs.\n"
 
 TIP_UNASSIGN_BTN = "Remove the selected binding"
 
-# -- Filter bar (sidebar) -----------------------------------------------------
+# ---------------------------------------------------------------------------
+#   Filter bar (sidebar)
+# ---------------------------------------------------------------------------
 
 TIP_FILTER = ("Filter by name, group, or description.\n"
               "Wildcards: * = any chars, ? = one char.\n"
