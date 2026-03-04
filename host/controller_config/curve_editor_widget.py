@@ -188,7 +188,7 @@ class CurveEditorWidget(ttk.Frame):
                   font=("TkDefaultFont", 7)).pack(
                       fill=tk.X, padx=2, pady=(0, 2))
 
-        self.bind("<Control-z>", lambda e: self._pop_undo())
+        self.bind("<Control-z>", self._on_ctrl_z)
 
         # Start with toolbar hidden
         self._toolbar.pack_forget()
@@ -1190,12 +1190,17 @@ class CurveEditorWidget(ttk.Frame):
         if len(self._undo_stack) > 30:
             self._undo_stack.pop(0)
 
+    def _on_ctrl_z(self, event):
+        """Handle Ctrl+Z within the curve editor."""
+        self._pop_undo()
+        return "break"  # Prevent app-level bind_all undo from firing
+
     def _pop_undo(self):
         if not self._undo_stack:
             self._status_var.set("Nothing to undo")
             return
         self._points = self._undo_stack.pop()
-        self._save_to_action()
+        self._save_to_action(push_app_undo=False)
         self._draw()
         self._status_var.set(f"Undo ({len(self._undo_stack)} remaining)")
 
@@ -1203,11 +1208,18 @@ class CurveEditorWidget(ttk.Frame):
     # Data Sync
     # ------------------------------------------------------------------
 
-    def _save_to_action(self):
-        """Write points back to the action and notify."""
+    def _save_to_action(self, push_app_undo=True):
+        """Write points back to the action and notify.
+
+        Args:
+            push_app_undo: if True, push an undo snapshot to the app
+                before saving. Set to False when called from _pop_undo
+                so the curve editor's undo doesn't create a new app-level
+                undo entry.
+        """
         if not self._action:
             return
-        if self._on_before_change:
+        if push_app_undo and self._on_before_change:
             self._on_before_change(200)
         if self._mode == "spline":
             self._action.extra["spline_points"] = deepcopy(self._points)

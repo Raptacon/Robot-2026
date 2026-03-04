@@ -538,10 +538,11 @@ class ActionEditorTab(ttk.Frame):
             else:
                 self._neg_slew_enable_var.set(False)
                 self._neg_slew_var.set("0.0")
+
+            self._update_pane_states()
         finally:
             self._updating_form = False
 
-        self._update_pane_states()
         self._refresh_bindings()
         self._curve_editor.load_action(
             action, qname, self._get_bound_input_names())

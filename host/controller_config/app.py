@@ -164,6 +164,8 @@ class ControllerConfigApp(tk.Tk):
         self._redo_stack: list[tuple[FullConfig, set[str]]] = []
         self._last_undo_time: float = 0.0
         self._restoring: bool = False  # Guard against spurious pushes
+        # Snapshot of config at last save/load for accurate dirty tracking
+        self._clean_config: FullConfig = deepcopy(self._config)
 
         # Drag-and-drop state
         self._drag_action: str | None = None
@@ -370,6 +372,7 @@ class ControllerConfigApp(tk.Tk):
         self._dirty = False
         self._undo_stack.clear()
         self._redo_stack.clear()
+        self._clean_config = deepcopy(self._config)
         self._sync_ui_from_config()
         self._update_title()
         self._status_var.set("New configuration created")
@@ -393,6 +396,7 @@ class ControllerConfigApp(tk.Tk):
             self._dirty = False
             self._undo_stack.clear()
             self._redo_stack.clear()
+            self._clean_config = deepcopy(self._config)
             self._sync_ui_from_config()
             self._update_title()
             self._status_var.set(f"Opened: {path.name}")
@@ -423,6 +427,7 @@ class ControllerConfigApp(tk.Tk):
             save_config(self._config, path)
             self._current_file = path.resolve()
             self._dirty = False
+            self._clean_config = deepcopy(self._config)
             self._update_title()
             self._status_var.set(f"Saved: {path.name}")
             self._settings["last_file"] = str(self._current_file)
@@ -491,6 +496,11 @@ class ControllerConfigApp(tk.Tk):
         self._update_title()
         self._action_panel.update_binding_tags()
 
+    def _is_config_clean(self) -> bool:
+        """Check whether current config matches the last saved/loaded state."""
+        self._sync_config_from_ui()
+        return self._config == self._clean_config
+
     # --- Undo / Redo ---
 
     _UNDO_LIMIT = 50
@@ -521,7 +531,8 @@ class ControllerConfigApp(tk.Tk):
         self._redo_stack.clear()
         self._last_undo_time = now
 
-    def _restore_snapshot(self, config: FullConfig, empty_groups: set[str]):
+    def _restore_snapshot(self, config: FullConfig, empty_groups: set[str],
+                          restore_selection: str | None = None):
         """Restore a config snapshot and re-sync the UI."""
         self._restoring = True
         try:
@@ -529,7 +540,7 @@ class ControllerConfigApp(tk.Tk):
             # Merge legacy undo-stack empty_groups into config
             self._config.empty_groups = (
                 self._config.empty_groups | empty_groups)
-            self._sync_ui_from_config()
+            self._sync_ui_from_config(restore_selection)
         finally:
             self._restoring = False
 
@@ -538,10 +549,11 @@ class ControllerConfigApp(tk.Tk):
         if not self._undo_stack:
             self._status_var.set("Nothing to undo")
             return
+        selected = self._action_panel._selected_name
         self._redo_stack.append(self._take_snapshot())
         config, empty_groups = self._undo_stack.pop()
-        self._restore_snapshot(config, empty_groups)
-        self._dirty = bool(self._undo_stack)
+        self._restore_snapshot(config, empty_groups, selected)
+        self._dirty = not self._is_config_clean()
         self._update_title()
         self._status_var.set("Undo")
 
@@ -550,17 +562,23 @@ class ControllerConfigApp(tk.Tk):
         if not self._redo_stack:
             self._status_var.set("Nothing to redo")
             return
+        selected = self._action_panel._selected_name
         self._undo_stack.append(self._take_snapshot())
         config, empty_groups = self._redo_stack.pop()
-        self._restore_snapshot(config, empty_groups)
-        self._dirty = True
+        self._restore_snapshot(config, empty_groups, selected)
+        self._dirty = not self._is_config_clean()
         self._update_title()
         self._status_var.set("Redo")
 
     # --- UI <-> Config Sync ---
 
-    def _sync_ui_from_config(self):
-        """Push config data to all UI elements."""
+    def _sync_ui_from_config(self, restore_selection: str | None = None):
+        """Push config data to all UI elements.
+
+        Args:
+            restore_selection: if provided, re-select this action after
+                rebuilding the tree (used by undo/redo to preserve context).
+        """
         # Update action panel
         self._action_panel.set_actions(self._config.actions)
         self._action_panel.set_empty_groups(self._config.empty_groups)
@@ -593,8 +611,12 @@ class ControllerConfigApp(tk.Tk):
                 ctrl = self._config.controllers[port]
                 self._create_controller_tab(port, ctrl)
 
-        # Refresh Action Editor tab for current selection
-        self._action_editor.clear()
+        # Restore selection or clear the Action Editor
+        if (restore_selection
+                and restore_selection in self._config.actions):
+            self._action_panel._reselect(restore_selection)
+        else:
+            self._action_editor.clear()
 
     def _sync_config_from_ui(self):
         """Pull current UI state back into the config."""
