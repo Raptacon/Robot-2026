@@ -56,9 +56,15 @@ jobs:
         if: matrix.sign && runner.os == 'Windows' && env.CERT_BASE64 != ''
         shell: pwsh
         run: |
+          # Find signtool.exe from the Windows SDK
+          $signtool = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits" -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
+              Where-Object { $_.FullName -match 'x64' } |
+              Select-Object -First 1 -ExpandProperty FullName
+          if (-not $signtool) { throw "signtool.exe not found" }
+          Write-Host "Using: $signtool"
           $certBytes = [Convert]::FromBase64String($env:CERT_BASE64)
           [IO.File]::WriteAllBytes("$env:RUNNER_TEMP\cert.pfx", $certBytes)
-          & signtool sign /f "$env:RUNNER_TEMP\cert.pfx" /p $env:CERT_PASSWORD `
+          & $signtool sign /f "$env:RUNNER_TEMP\cert.pfx" /p $env:CERT_PASSWORD `
               /fd sha256 /tr http://timestamp.digicert.com /td sha256 `
               /d "Raptacon Controller Config" dist\ControllerConfig.exe
           Remove-Item "$env:RUNNER_TEMP\cert.pfx"
