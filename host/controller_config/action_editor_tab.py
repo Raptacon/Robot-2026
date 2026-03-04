@@ -543,8 +543,10 @@ class ActionEditorTab(ttk.Frame):
 
         self._update_pane_states()
         self._refresh_bindings()
-        self._curve_editor.load_action(action, qname)
-        self._preview.load_action(action, qname)
+        self._curve_editor.load_action(
+            action, qname, self._get_bound_input_names())
+        self._preview.load_action(
+            action, qname, self._get_bound_input_names())
 
     def clear(self):
         """Clear all panes (no action selected)."""
@@ -616,7 +618,9 @@ class ActionEditorTab(ttk.Frame):
     def _update_curve_editor(self):
         """Refresh the curve editor when action parameters change."""
         if self._action:
-            self._curve_editor.load_action(self._action, self._qname)
+            self._curve_editor.load_action(
+                self._action, self._qname,
+                self._get_bound_input_names())
 
     # ------------------------------------------------------------------
     # Pane State Management
@@ -738,6 +742,10 @@ class ActionEditorTab(ttk.Frame):
         else:
             self._assign_var.set("")
 
+    def _get_bound_input_names(self) -> list[str]:
+        """Return list of input names currently bound to this action."""
+        return [inp for _, inp in self._bound_map.values()]
+
     def _on_assign(self):
         """Assign the selected input to the current action."""
         if not self._qname:
@@ -752,6 +760,9 @@ class ActionEditorTab(ttk.Frame):
         if self._on_assign_action:
             self._on_assign_action(self._qname, port, input_name)
         self._refresh_bindings()
+        bound = self._get_bound_input_names()
+        self._curve_editor.update_bindings(bound)
+        self._preview.update_bindings(bound)
         if self._on_field_changed:
             self._on_field_changed()
 
@@ -772,6 +783,9 @@ class ActionEditorTab(ttk.Frame):
         if self._on_unassign_action:
             self._on_unassign_action(self._qname, port, input_name)
         self._refresh_bindings()
+        bound = self._get_bound_input_names()
+        self._curve_editor.update_bindings(bound)
+        self._preview.update_bindings(bound)
         if self._on_field_changed:
             self._on_field_changed()
 

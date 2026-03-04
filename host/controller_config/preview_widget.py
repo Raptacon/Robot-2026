@@ -126,6 +126,9 @@ class PreviewWidget(ttk.Frame):
         self._plot_w = 0
         self._plot_h = 0
 
+        # X-axis range: -1..1 for sticks, 0..1 for triggers
+        self._x_min = -1.0
+
         # Y-axis range: auto-scaled from pipeline output
         self._y_min = -1.0
         self._y_max = 1.0
@@ -199,12 +202,25 @@ class PreviewWidget(ttk.Frame):
     # Public API
     # ------------------------------------------------------------------
 
-    def load_action(self, action: ActionDefinition, qname: str):
-        """Load an action and start the preview if it's analog."""
+    # Input names that only produce 0..1 (Xbox triggers)
+    _TRIGGER_INPUTS = {"left_trigger", "right_trigger"}
+
+    def load_action(self, action: ActionDefinition, qname: str,
+                    bound_inputs: list[str] | None = None):
+        """Load an action and start the preview if it's analog.
+
+        Args:
+            bound_inputs: list of input names bound to this action.
+                If any are trigger inputs (0..1 range), the X axis
+                adjusts from -1..1 to 0..1.
+        """
         self._action = action
         self._qname = qname
         self._trail.clear()
         self._motor_angle = 0.0
+
+        # Detect trigger-range inputs
+        self._update_x_range(bound_inputs)
         self._build_pipeline()
 
         if self._pipeline:
@@ -242,6 +258,41 @@ class PreviewWidget(ttk.Frame):
             self._canvas.config(bg=_BG_INACTIVE)
             self._draw_inactive_message()
             self._readout_var.set("")
+
+    def update_bindings(self, bound_inputs: list[str] | None = None):
+        """Update X range when bindings change (assign/unassign)."""
+        old_x_min = self._x_min
+        self._update_x_range(bound_inputs)
+        if self._x_min != old_x_min:
+            self._trail.clear()
+            self._build_pipeline()
+            if self._pipeline:
+                self._draw()
+
+    def _update_x_range(self, bound_inputs: list[str] | None):
+        """Set X range based on bound input types.
+
+        If ALL bound inputs are triggers (0..1), use 0..1.
+        Otherwise use -1..1 (sticks, or no bindings).
+        """
+        if bound_inputs and all(
+                inp in self._TRIGGER_INPUTS for inp in bound_inputs):
+            new_min = 0.0
+        else:
+            new_min = -1.0
+
+        if new_min != self._x_min:
+            self._x_min = new_min
+            # Update slider ranges
+            self._syncing_slider = True
+            self._x_slider.config(from_=new_min)
+            self._y_slider.config(from_=new_min)
+            # Clamp current value into range
+            cur = self._x_slider.get()
+            if cur < new_min:
+                self._x_slider.set(new_min)
+                self._y_slider.set(new_min)
+            self._syncing_slider = False
 
     # ------------------------------------------------------------------
     # Pipeline Construction
@@ -316,7 +367,7 @@ class PreviewWidget(ttk.Frame):
     _Y_RANGE_SAMPLES = 200
 
     def _compute_y_range(self):
-        """Auto-scale Y axis by sampling pipeline output across -1..1."""
+        """Auto-scale Y axis by sampling pipeline output across x range."""
         if not self._pipeline:
             self._y_min = -1.0
             self._y_max = 1.0
@@ -324,8 +375,9 @@ class PreviewWidget(ttk.Frame):
         y_min = 0.0
         y_max = 0.0
         n = self._Y_RANGE_SAMPLES
+        x_span = 1.0 - self._x_min
         for i in range(n + 1):
-            x = -1.0 + 2.0 * i / n
+            x = self._x_min + x_span * i / n
             y = self._pipeline(x)
             y_min = min(y_min, y)
             y_max = max(y_max, y)
@@ -375,8 +427,11 @@ class PreviewWidget(ttk.Frame):
             self._draw_inactive_message()
 
     def _d2c(self, x: float, y: float) -> tuple[float, float]:
-        """Data coords to canvas pixels. X is -1..1, Y uses _y_min/_y_max."""
-        cx = self._margin_x + (x + 1) / 2 * self._plot_w
+        """Data coords to canvas pixels. X uses _x_min..1, Y uses _y_min/_y_max."""
+        x_range = 1.0 - self._x_min
+        if x_range == 0:
+            x_range = 2.0
+        cx = self._margin_x + (x - self._x_min) / x_range * self._plot_w
         y_range = self._y_max - self._y_min
         if y_range == 0:
             y_range = 2.0
@@ -387,7 +442,10 @@ class PreviewWidget(ttk.Frame):
         """Canvas pixel coords to data coords."""
         if self._plot_w == 0 or self._plot_h == 0:
             return 0.0, 0.0
-        x = (cx - self._margin_x) / self._plot_w * 2 - 1
+        x_range = 1.0 - self._x_min
+        if x_range == 0:
+            x_range = 2.0
+        x = (cx - self._margin_x) / self._plot_w * x_range + self._x_min
         y_range = self._y_max - self._y_min
         if y_range == 0:
             y_range = 2.0
@@ -439,12 +497,17 @@ class PreviewWidget(ttk.Frame):
         ph = self._plot_h
         font = ("TkDefaultFont", 7)
 
-        # X gridlines (always -1..1)
-        for v in (-1.0, -0.5, 0.0, 0.5, 1.0):
+        # X gridlines (dynamic based on x_min)
+        if self._x_min >= 0:
+            x_vals = [0.0, 0.25, 0.5, 0.75, 1.0]
+        else:
+            x_vals = [-1.0, -0.5, 0.0, 0.5, 1.0]
+        for v in x_vals:
             cx, _ = self._d2c(v, 0)
-            is_axis = v == 0
+            is_axis = abs(v) < 0.01
+            is_boundary = abs(v - self._x_min) < 0.01 or abs(v - 1.0) < 0.01
             color = _AXIS if is_axis else (
-                _GRID_MAJOR if abs(v) == 1.0 else _GRID)
+                _GRID_MAJOR if is_boundary else _GRID)
             w = 1.5 if is_axis else 1
             c.create_line(cx, my, cx, my + ph, fill=color, width=w)
 
@@ -461,7 +524,7 @@ class PreviewWidget(ttk.Frame):
             v += y_step
 
         # X labels (below)
-        for v in (-1.0, -0.5, 0.0, 0.5, 1.0):
+        for v in x_vals:
             cx, _ = self._d2c(v, 0)
             c.create_text(cx, my + ph + 12,
                           text=f"{v:g}", fill=_LABEL, font=font)
@@ -537,7 +600,7 @@ class PreviewWidget(ttk.Frame):
         # Rotating dot on the rim
         orbit_r = _MOTOR_RADIUS - _MOTOR_DOT_RADIUS - 2
         dot_x = motor_cx + orbit_r * math.cos(self._motor_angle)
-        dot_y = motor_cy - orbit_r * math.sin(self._motor_angle)
+        dot_y = motor_cy + orbit_r * math.sin(self._motor_angle)
         c.create_oval(
             dot_x - _MOTOR_DOT_RADIUS, dot_y - _MOTOR_DOT_RADIUS,
             dot_x + _MOTOR_DOT_RADIUS, dot_y + _MOTOR_DOT_RADIUS,

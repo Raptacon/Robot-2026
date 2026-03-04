@@ -108,6 +108,9 @@ class CurveEditorWidget(ttk.Frame):
         self._plot_w = 0
         self._plot_h = 0
 
+        # X-axis range: -1..1 for sticks, 0..1 for triggers
+        self._x_min = -1.0
+
         # Y-axis range: defaults to (-1, 1), auto-scaled for visualization
         self._y_min = -1.0
         self._y_max = 1.0
@@ -220,8 +223,11 @@ class CurveEditorWidget(ttk.Frame):
     # ------------------------------------------------------------------
 
     def _d2c(self, x: float, y: float) -> tuple[float, float]:
-        """Data coords to canvas pixels. X is always -1..1, Y uses _y_min/_y_max."""
-        cx = self._margin_x + (x + 1) / 2 * self._plot_w
+        """Data coords to canvas pixels. X uses _x_min..1, Y uses _y_min/_y_max."""
+        x_range = 1.0 - self._x_min
+        if x_range == 0:
+            x_range = 2.0
+        cx = self._margin_x + (x - self._x_min) / x_range * self._plot_w
         y_range = self._y_max - self._y_min
         if y_range == 0:
             y_range = 2.0
@@ -232,7 +238,10 @@ class CurveEditorWidget(ttk.Frame):
         """Canvas pixels to data coords."""
         if self._plot_w == 0 or self._plot_h == 0:
             return 0.0, 0.0
-        x = (cx - self._margin_x) / self._plot_w * 2 - 1
+        x_range = 1.0 - self._x_min
+        if x_range == 0:
+            x_range = 2.0
+        x = (cx - self._margin_x) / self._plot_w * x_range + self._x_min
         y_range = self._y_max - self._y_min
         if y_range == 0:
             y_range = 2.0
@@ -265,7 +274,10 @@ class CurveEditorWidget(ttk.Frame):
         visually match the scaled curve direction.
         """
         # Pixels per data unit in each axis
-        ppx = self._plot_w / 2  # X range is always 2.0
+        x_range = 1.0 - self._x_min
+        if x_range == 0:
+            x_range = 2.0
+        ppx = self._plot_w / x_range
         y_range = self._y_max - self._y_min
         if y_range == 0:
             y_range = 2.0
@@ -284,7 +296,10 @@ class CurveEditorWidget(ttk.Frame):
 
     def _offset_to_tangent(self, dx: float, dy: float) -> float:
         """Canvas-pixel offset back to raw tangent slope (un-scaled)."""
-        ppx = self._plot_w / 2
+        x_range = 1.0 - self._x_min
+        if x_range == 0:
+            x_range = 2.0
+        ppx = self._plot_w / x_range
         y_range = self._y_max - self._y_min
         if y_range == 0:
             y_range = 2.0
@@ -306,8 +321,19 @@ class CurveEditorWidget(ttk.Frame):
     # Public API
     # ------------------------------------------------------------------
 
-    def load_action(self, action: ActionDefinition, qname: str):
-        """Populate the widget from the given action."""
+    # Input names that only produce 0..1 (Xbox triggers)
+    _TRIGGER_INPUTS = {"left_trigger", "right_trigger"}
+
+    def load_action(self, action: ActionDefinition, qname: str,
+                    bound_inputs: list[str] | None = None):
+        """Populate the widget from the given action.
+
+        Args:
+            bound_inputs: list of input names bound to this action.
+                If all are trigger inputs (0..1 range), the X axis
+                adjusts from -1..1 to 0..1.
+        """
+        self._update_x_range(bound_inputs)
         self._action = action
         self._qname = qname
         self._undo_stack.clear()
@@ -382,6 +408,28 @@ class CurveEditorWidget(ttk.Frame):
         else:
             self._draw()
 
+    def update_bindings(self, bound_inputs: list[str] | None = None):
+        """Update X range when bindings change (assign/unassign)."""
+        old_x_min = self._x_min
+        self._update_x_range(bound_inputs)
+        if self._x_min != old_x_min:
+            self._draw()
+
+    def _update_x_range(self, bound_inputs: list[str] | None):
+        """Set X range based on bound input types.
+
+        If ALL bound inputs are triggers (0..1), use 0..1.
+        Otherwise use -1..1 (sticks, or no bindings).
+        None means 'keep current' (e.g. refresh without rebinding).
+        """
+        if bound_inputs is None:
+            return
+        if bound_inputs and all(
+                inp in self._TRIGGER_INPUTS for inp in bound_inputs):
+            self._x_min = 0.0
+        else:
+            self._x_min = -1.0
+
     # ------------------------------------------------------------------
     # Toolbar Management
     # ------------------------------------------------------------------
@@ -440,8 +488,9 @@ class CurveEditorWidget(ttk.Frame):
                 and self._action and self._wide_range_var.get()):
             y_min = 0.0
             y_max = 0.0
+            x_span = 1.0 - self._x_min
             for i in range(_VIS_SAMPLES + 1):
-                x = -1.0 + 2.0 * i / _VIS_SAMPLES
+                x = self._x_min + x_span * i / _VIS_SAMPLES
                 y = self._compute_shaped_value(x)
                 y_min = min(y_min, y)
                 y_max = max(y_max, y)
@@ -536,8 +585,12 @@ class CurveEditorWidget(ttk.Frame):
         c = self._canvas
         small = self._plot_w < 200
 
-        # X gridlines (always -1..1)
-        for v in [i / 4 for i in range(-4, 5)]:
+        # X gridlines (dynamic based on x_min)
+        if self._x_min >= 0:
+            x_grid = [i / 4 for i in range(0, 5)]  # 0, 0.25, 0.5, 0.75, 1
+        else:
+            x_grid = [i / 4 for i in range(-4, 5)]  # -1..1 by 0.25
+        for v in x_grid:
             cx, _ = self._d2c(v, 0)
             is_axis = abs(v) < 0.01
             is_major = abs(v * 2) % 1 < 0.01
@@ -568,7 +621,11 @@ class CurveEditorWidget(ttk.Frame):
         if self._plot_w >= 100:
             font_size = 7 if self._plot_w < 250 else 8
             # X labels
-            for v in [-1.0, -0.5, 0.0, 0.5, 1.0]:
+            if self._x_min >= 0:
+                x_labels = [0.0, 0.25, 0.5, 0.75, 1.0]
+            else:
+                x_labels = [-1.0, -0.5, 0.0, 0.5, 1.0]
+            for v in x_labels:
                 cx, _ = self._d2c(v, 0)
                 c.create_text(cx, self._margin_y + self._plot_h + 12,
                               text=f"{v:g}", fill=_LABEL,
@@ -635,8 +692,9 @@ class CurveEditorWidget(ttk.Frame):
         """Draw the visualization curve for raw/scaled/squared modes."""
         c = self._canvas
         coords = []
+        x_span = 1.0 - self._x_min
         for i in range(_VIS_SAMPLES + 1):
-            x = -1.0 + 2.0 * i / _VIS_SAMPLES
+            x = self._x_min + x_span * i / _VIS_SAMPLES
             y = self._compute_shaped_value(x)
             cx, cy = self._d2c(x, y)
             coords.extend([cx, cy])
@@ -759,7 +817,7 @@ class CurveEditorWidget(ttk.Frame):
         if self._mode is None or self._drag_type is not None:
             return
         x, _ = self._c2d(event.x, event.y)
-        if x < -1.0 or x > 1.0:
+        if x < self._x_min or x > 1.0:
             return
         y = self._evaluate_display_y(x)
         if y is None:
