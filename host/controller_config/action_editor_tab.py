@@ -10,6 +10,12 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 
 from .action_panel import _WidgetTooltip
+from .tooltips import (
+    TIP_NAME, TIP_GROUP, TIP_DESC, TIP_INPUT_TYPE,
+    TIP_TRIGGER_BUTTON, TIP_TRIGGER_ANALOG,
+    TIP_DEADBAND, TIP_INVERSION, TIP_SCALE, TIP_SLEW, TIP_NEG_SLEW,
+    TIP_ASSIGN_INPUT, TIP_ASSIGN_BTN, TIP_BOUND_LIST, TIP_UNASSIGN_BTN,
+)
 
 from utils.controller.model import (
     ANALOG_EVENT_TRIGGER_MODES,
@@ -98,16 +104,23 @@ class ActionEditorTab(ttk.Frame):
     # UI Construction
     # ------------------------------------------------------------------
 
+    # Minimum pane fraction (20% of total paned window dimension)
+    _MIN_PANE_FRAC = 0.20
+    _MIN_UPPER_H = 100   # upper section min height (px)
+    _MIN_LOWER_H = 150   # lower section min height (px)
+
     def _build_ui(self):
         # Top/bottom split — upper gets less weight so lower has more room
-        self._vpaned = ttk.PanedWindow(self, orient=tk.VERTICAL)
+        self._vpaned = tk.PanedWindow(
+            self, orient=tk.VERTICAL, sashwidth=5, sashrelief=tk.RAISED)
         self._vpaned.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
         # --- Upper section: 3 panes ---
         upper = ttk.Frame(self._vpaned)
-        self._vpaned.add(upper, weight=0)
+        self._vpaned.add(upper, minsize=self._MIN_UPPER_H)
 
-        self._hpaned = ttk.PanedWindow(upper, orient=tk.HORIZONTAL)
+        self._hpaned = tk.PanedWindow(
+            upper, orient=tk.HORIZONTAL, sashwidth=5, sashrelief=tk.RAISED)
         self._hpaned.pack(fill=tk.BOTH, expand=True)
 
         self._build_common_pane(self._hpaned)
@@ -117,125 +130,108 @@ class ActionEditorTab(ttk.Frame):
         # Set sash positions once the paned window is visible and sized
         self._saved_sash: list[int] | None = None
         self._sash_applied = False
-        self._hpaned.bind("<Configure>", self._on_first_configure)
+        self._hpaned.bind("<Configure>", self._on_h_configure)
 
-        # --- Lower section: placeholders ---
+        # --- Lower section ---
         lower = ttk.Frame(self._vpaned)
-        self._vpaned.add(lower, weight=1)
+        self._vpaned.add(lower, minsize=self._MIN_LOWER_H)
         self._build_lower_section(lower)
         self._setup_tooltips()
 
+        # Dynamically update minsize on resize to enforce 20% minimum
+        self._lower_paned.bind("<Configure>", self._update_lower_minsize)
+
     def _setup_tooltips(self):
         """Attach tooltip help text to all labels and fields."""
-        # --- Common pane ---
         _tip = _WidgetTooltip
-        name_tip = ("Action name (combined with group\n"
-                    "to form qualified name: group.name)")
-        _tip(self._name_label, name_tip)
-        _tip(self._name_entry, name_tip)
-
-        group_tip = ("Group this action belongs to.\n"
-                     "Type a new name to create a group.")
-        _tip(self._group_label, group_tip)
-        _tip(self._group_combo, group_tip)
-
-        desc_tip = ("Human-readable description of\n"
-                    "what this action does on the robot.")
-        _tip(self._desc_label, desc_tip)
-        _tip(self._desc_text, desc_tip)
-
-        type_tip = ("Input type determines available options:\n"
-                    "  button — digital on/off (incl. D-pad)\n"
-                    "  analog — continuous value (stick, trigger)\n"
-                    "  output — robot-to-driver (e.g. rumble)")
-        _tip(self._type_label, type_tip)
-
+        # --- Common pane ---
+        _tip(self._name_label, TIP_NAME)
+        _tip(self._name_entry, TIP_NAME)
+        _tip(self._group_label, TIP_GROUP)
+        _tip(self._group_combo, TIP_GROUP)
+        _tip(self._desc_label, TIP_DESC)
+        _tip(self._desc_text, TIP_DESC)
+        _tip(self._type_label, TIP_INPUT_TYPE)
         # --- Bindings pane ---
-        assign_tip = ("Select a controller input and click +\n"
-                      "to bind it to this action.")
-        _tip(self._assign_label, assign_tip)
-        _tip(self._assign_combo, assign_tip)
-        _tip(self._assign_btn, "Assign selected input to this action")
-        _tip(self._bound_listbox,
-             "Currently assigned inputs.\n"
-             "Double-click to remove a binding.")
-        _tip(self._unassign_btn,
-             "Remove the selected binding")
-
+        _tip(self._assign_label, TIP_ASSIGN_INPUT)
+        _tip(self._assign_combo, TIP_ASSIGN_INPUT)
+        _tip(self._assign_btn, TIP_ASSIGN_BTN)
+        _tip(self._bound_listbox, TIP_BOUND_LIST)
+        _tip(self._unassign_btn, TIP_UNASSIGN_BTN)
         # --- Button options pane ---
-        btn_trigger_tip = ("When the button command fires:\n"
-                           "  on_true — while held\n"
-                           "  on_false — while released\n"
-                           "  toggle_on_true — toggle on press\n"
-                           "  toggle_on_false — toggle on release\n"
-                           "  when_pressed — once on press\n"
-                           "  when_released — once on release")
-        _tip(self._btn_trigger_label, btn_trigger_tip)
-        _tip(self._btn_trigger_combo, btn_trigger_tip)
-
+        _tip(self._btn_trigger_label, TIP_TRIGGER_BUTTON)
+        _tip(self._btn_trigger_combo, TIP_TRIGGER_BUTTON)
         # --- Analog options pane ---
-        analog_trigger_tip = ("How analog input is shaped:\n"
-                              "  raw — no processing\n"
-                              "  scaled — linear with scale\n"
-                              "  squared — quadratic response\n"
-                              "  spline — custom cubic hermite curve\n"
-                              "  segmented — custom piecewise-linear")
-        _tip(self._analog_trigger_label, analog_trigger_tip)
-        _tip(self._analog_trigger_combo, analog_trigger_tip)
+        _tip(self._analog_trigger_label, TIP_TRIGGER_ANALOG)
+        _tip(self._analog_trigger_combo, TIP_TRIGGER_ANALOG)
+        _tip(self._deadband_label, TIP_DEADBAND)
+        _tip(self._deadband_spin, TIP_DEADBAND)
+        _tip(self._inversion_label, TIP_INVERSION)
+        _tip(self._inversion_check, TIP_INVERSION)
+        _tip(self._scale_label, TIP_SCALE)
+        _tip(self._scale_spin, TIP_SCALE)
+        _tip(self._slew_label, TIP_SLEW)
+        _tip(self._slew_spin, TIP_SLEW)
+        _tip(self._neg_slew_check, TIP_NEG_SLEW)
+        _tip(self._neg_slew_spin, TIP_NEG_SLEW)
 
-        deadband_tip = ("Dead zone around center (0-1).\n"
-                        "Input below this value reads as 0.")
-        _tip(self._deadband_label, deadband_tip)
-        _tip(self._deadband_spin, deadband_tip)
-
-        inv_tip = ("Negate the input value.\n"
-                   "Flips the axis direction.")
-        _tip(self._inversion_label, inv_tip)
-        _tip(self._inversion_check, inv_tip)
-
-        scale_tip = ("Multiply output by this value.\n"
-                     "Use to limit max speed or amplify input.")
-        _tip(self._scale_label, scale_tip)
-        _tip(self._scale_spin, scale_tip)
-
-        slew_tip = ("Max rate of change per second (0 = off).\n"
-                    "Smooths sudden input changes.")
-        _tip(self._slew_label, slew_tip)
-        _tip(self._slew_spin, slew_tip)
-
-        neg_slew_tip = ("Separate slew rate for decreasing values.\n"
-                        "Enable for asymmetric acceleration/braking.")
-        _tip(self._neg_slew_check, neg_slew_tip)
-        _tip(self._neg_slew_spin, neg_slew_tip)
-
-    def _on_first_configure(self, event):
-        """Set sash positions once the paned window has a real size."""
-        w = event.width
-        if w < 50 or self._sash_applied:
+    def _on_h_configure(self, event):
+        """Handle upper paned window configure: restore sash + update minsize."""
+        pw = self._hpaned
+        w = pw.winfo_width()
+        if w < 50:
             return
-        self._sash_applied = True
-        self._hpaned.unbind("<Configure>")
+        # Update dynamic minsize (20% of current width, capped at 30%)
+        mn = max(80, int(w * min(self._MIN_PANE_FRAC, 0.30)))
+        for child in (self._common_frame, self._bindings_frame,
+                      self._options_container):
+            try:
+                pw.paneconfigure(child, minsize=mn)
+            except Exception:
+                pass
+        # First configure: restore saved sash positions or default to 33% each
+        # Use after_idle so minsize settles before we place sashes.
+        if not self._sash_applied:
+            self._sash_applied = True
+            self.after_idle(self._apply_saved_sash, w)
+
+    def _apply_saved_sash(self, fallback_w):
+        """Apply saved sash positions (deferred so minsize is settled)."""
+        pw = self._hpaned
         if self._saved_sash:
             try:
                 for i, pos in enumerate(self._saved_sash):
-                    self._hpaned.sashpos(i, pos)
+                    pw.sash_place(i, pos, 0)
+                return
             except Exception:
                 pass
-        else:
-            third = w // 3
-            self._hpaned.sashpos(0, third)
-            self._hpaned.sashpos(1, third * 2)
+        third = fallback_w // 3
+        pw.sash_place(0, third, 0)
+        pw.sash_place(1, third * 2, 0)
 
     def set_sash_positions(self, positions: list[int]):
         """Store saved sash positions to apply on first configure."""
         self._saved_sash = positions
+
+    def _update_lower_minsize(self, _event=None):
+        """Update native minsize on lower 2 panes to 28% of current width."""
+        pw = self._lower_paned
+        w = pw.winfo_width()
+        if w < 50:
+            return
+        mn = max(120, int(w * self._MIN_PANE_FRAC))
+        for child in pw.panes():
+            try:
+                pw.paneconfigure(child, minsize=mn)
+            except Exception:
+                pass
 
     # --- Common Pane (left, compact) ---
 
     def _build_common_pane(self, parent):
         self._common_frame = ttk.LabelFrame(
             parent, text="Action", padding=6)
-        parent.add(self._common_frame, weight=1)
+        parent.add(self._common_frame, minsize=80, stretch="always")
 
         self._common_frame.columnconfigure(1, weight=1)
 
@@ -298,7 +294,7 @@ class ActionEditorTab(ttk.Frame):
     def _build_bindings_pane(self, parent):
         self._bindings_frame = ttk.LabelFrame(
             parent, text="Assigned Inputs", padding=6)
-        parent.add(self._bindings_frame, weight=1)
+        parent.add(self._bindings_frame, minsize=80, stretch="always")
 
         # Assign input
         row = 0
@@ -345,7 +341,7 @@ class ActionEditorTab(ttk.Frame):
         """Build button and analog frames that swap in the right pane."""
         # Container frame that holds whichever is active
         self._options_container = ttk.Frame(parent)
-        parent.add(self._options_container, weight=1)
+        parent.add(self._options_container, minsize=80, stretch="always")
 
         self._build_button_options()
         self._build_analog_options()
@@ -478,13 +474,15 @@ class ActionEditorTab(ttk.Frame):
     def _build_lower_section(self, parent):
         from .curve_editor_widget import CurveEditorWidget
 
-        lower_paned = ttk.PanedWindow(parent, orient=tk.HORIZONTAL)
+        self._lower_paned = tk.PanedWindow(
+            parent, orient=tk.HORIZONTAL, sashwidth=5, sashrelief=tk.RAISED)
+        lower_paned = self._lower_paned
         lower_paned.pack(fill=tk.BOTH, expand=True)
 
         # Left: Curve Editor
         curve_frame = ttk.LabelFrame(
             lower_paned, text="Curve Editor", padding=4)
-        lower_paned.add(curve_frame, weight=1)
+        lower_paned.add(curve_frame, minsize=120)
 
         self._curve_editor = CurveEditorWidget(
             curve_frame,
@@ -497,7 +495,7 @@ class ActionEditorTab(ttk.Frame):
         # Right: Preview placeholder (Phase 3)
         preview_frame = ttk.LabelFrame(
             lower_paned, text="Preview", padding=10)
-        lower_paned.add(preview_frame, weight=1)
+        lower_paned.add(preview_frame, minsize=120)
         ttk.Label(
             preview_frame, text="Available in Phase 3",
             foreground="#888888", font=("TkDefaultFont", 10),
@@ -823,11 +821,9 @@ class ActionEditorTab(ttk.Frame):
                 "invalidate current settings (deadband,\n"
                 "scale, curves, bindings). Continue?",
             ):
-                self._updating_form = True
-                try:
-                    self._input_type_var.set(self._action.input_type.value)
-                finally:
-                    self._updating_form = False
+                # Defer revert — setting a var inside its own trace is unreliable
+                old_val = self._action.input_type.value
+                self.after_idle(self._revert_input_type, old_val)
                 return
 
         if self._on_before_change:
@@ -853,6 +849,14 @@ class ActionEditorTab(ttk.Frame):
         self._action._has_custom = False
         if self._on_field_changed:
             self._on_field_changed()
+
+    def _revert_input_type(self, old_val):
+        """Revert the input type radio after user cancelled type switch."""
+        self._updating_form = True
+        try:
+            self._input_type_var.set(old_val)
+        finally:
+            self._updating_form = False
 
     def _on_neg_slew_toggled(self, *args):
         """Enable/disable the negative slew rate spinbox."""

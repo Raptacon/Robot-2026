@@ -461,13 +461,14 @@ class ControllerConfigApp(tk.Tk):
                 self._notebook.select())
         except Exception:
             pass
-        # Save Action Editor pane positions
-        try:
-            self._settings["editor_hsash"] = list(
-                self._action_editor._hpaned.sashpos(i)
-                for i in range(2))
-        except Exception:
-            pass
+        # Save Action Editor pane positions (skip if user just reset layout)
+        if not getattr(self, '_sash_reset', False):
+            try:
+                self._settings["editor_hsash"] = [
+                    self._action_editor._hpaned.sash_coord(i)[0]
+                    for i in range(2)]
+            except Exception:
+                pass
         self._save_settings()
         self.destroy()
 
@@ -777,6 +778,7 @@ class ControllerConfigApp(tk.Tk):
         """Reset GUI layout settings (geometry, tabs, panes) but keep labels."""
         for key in ("geometry", "active_tab", "editor_hsash", "show_borders"):
             self._settings.pop(key, None)
+        self._sash_reset = True  # prevent _on_close from re-saving
         self._save_settings()
 
         # Reset window geometry
@@ -794,8 +796,8 @@ class ControllerConfigApp(tk.Tk):
             w = self._action_editor._hpaned.winfo_width()
             if w > 50:
                 third = w // 3
-                self._action_editor._hpaned.sashpos(0, third)
-                self._action_editor._hpaned.sashpos(1, third * 2)
+                self._action_editor._hpaned.sash_place(0, third, 0)
+                self._action_editor._hpaned.sash_place(1, third * 2, 0)
                 self._action_editor._sash_applied = True
         except Exception:
             pass

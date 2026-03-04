@@ -20,6 +20,13 @@ from utils.controller.model import (
     InputType,
     EventTriggerMode,
 )
+from .tooltips import (
+    TIP_NAME, TIP_GROUP, TIP_DESC, TIP_INPUT_TYPE,
+    TIP_TRIGGER, TIP_DEADBAND, TIP_INVERSION, TIP_SCALE,
+    TIP_SLEW, TIP_NEG_SLEW,
+    TIP_EDIT_SPLINE, TIP_EDIT_SEGMENTS,
+    TIP_FILTER, TIP_FILTER_UNASSIGNED, TIP_FILTER_MULTI,
+)
 
 # Tooltip delay in milliseconds (500ms balances responsiveness vs flicker)
 _TOOLTIP_DELAY_MS = 500
@@ -332,7 +339,7 @@ class ActionPanel(tk.Frame):
         # Description (multi-line wrapped text)
         row += 1
         self._desc_label = ttk.Label(self._detail_frame, text="Description:",
-                                         width=8, wraplength=55)
+                                         width=12)
         self._desc_label.grid(row=row, column=0, sticky=tk.NW, pady=2)
         self._desc_text = tk.Text(self._detail_frame, width=23, height=3,
                                   wrap=tk.WORD, font=("TkDefaultFont", 9),
@@ -472,71 +479,34 @@ class ActionPanel(tk.Frame):
         self._segment_widgets = [self._edit_segments_btn]
         self._edit_segments_btn.grid_remove()
 
-        # Tooltips for detail form fields (label + widget share the same text)
-        _name_tip = ("Short action name (no dots). Combined with\n"
-                     "group to form qualified name: group.name")
-        _group_tip = ("Group this action belongs to.\n"
-                      "Type a new name to create a group.")
-        _desc_tip = ("Human-readable description of what\n"
-                     "this action does on the robot.")
-        _input_tip = ("button: digital on/off (incl. D-pad)\n"
-                      "analog: continuous value (stick, trigger)\n"
-                      "output: rumble or LED feedback")
-        _trigger_tip = ("Button: when the command fires.\n"
-                        "Analog: how the input value is shaped.")
-        _deadband_tip = ("Ignore input values below this threshold.\n"
-                         "Prevents drift from stick center (0.0-1.0).")
-        _inversion_tip = ("Negate the input value.\n"
-                          "Useful for reversing stick directions.")
-        _scale_tip = ("Multiplier applied to the input value.\n"
-                      "Use to limit max speed or amplify input.")
-        _slew_tip = ("Max rate of output change (units/sec).\n"
-                     "0 = disabled (no slew limiting).")
-        _neg_slew_tip = ("Enable asymmetric slew: separate rate\n"
-                         "for decreasing values. Must be negative\n"
-                         "or zero (clamped to max 0).")
-
-        _WidgetTooltip(self._name_label, _name_tip)
-        _WidgetTooltip(self._name_entry, _name_tip)
-        _WidgetTooltip(self._group_label, _group_tip)
-        _WidgetTooltip(self._group_combo, _group_tip)
-        _WidgetTooltip(self._desc_label, _desc_tip)
-        _WidgetTooltip(self._desc_text, _desc_tip)
-        _WidgetTooltip(self._input_type_label, _input_tip)
-        _WidgetTooltip(self._input_type_combo, _input_tip)
-        self._trigger_tooltip = _WidgetTooltip(self._trigger_label, _trigger_tip)
-        _WidgetTooltip(self._trigger_combo, _trigger_tip)
-        _WidgetTooltip(self._deadband_label, _deadband_tip)
-        _WidgetTooltip(self._deadband_spin, _deadband_tip)
-        _WidgetTooltip(self._inversion_label, _inversion_tip)
-        _WidgetTooltip(self._inversion_check, _inversion_tip)
-        _WidgetTooltip(self._scale_label, _scale_tip)
-        _WidgetTooltip(self._scale_spin, _scale_tip)
-        _WidgetTooltip(self._slew_label, _slew_tip)
-        _WidgetTooltip(self._slew_spin, _slew_tip)
-        _WidgetTooltip(self._neg_slew_check, _neg_slew_tip)
-        _WidgetTooltip(self._neg_slew_spin, _neg_slew_tip)
-
-        _edit_spline_tip = ("Open the visual spline curve editor.\n"
-                            "Click to add points, right-click to remove.")
-        _WidgetTooltip(self._edit_spline_btn, _edit_spline_tip)
-
-        _edit_seg_tip = ("Open the piecewise-linear curve editor.\n"
-                         "Click to add points, right-click to remove.")
-        _WidgetTooltip(self._edit_segments_btn, _edit_seg_tip)
-
+        # Tooltips for detail form fields
+        _WidgetTooltip(self._name_label, TIP_NAME)
+        _WidgetTooltip(self._name_entry, TIP_NAME)
+        _WidgetTooltip(self._group_label, TIP_GROUP)
+        _WidgetTooltip(self._group_combo, TIP_GROUP)
+        _WidgetTooltip(self._desc_label, TIP_DESC)
+        _WidgetTooltip(self._desc_text, TIP_DESC)
+        _WidgetTooltip(self._input_type_label, TIP_INPUT_TYPE)
+        _WidgetTooltip(self._input_type_combo, TIP_INPUT_TYPE)
+        self._trigger_tooltip = _WidgetTooltip(
+            self._trigger_label, TIP_TRIGGER)
+        _WidgetTooltip(self._trigger_combo, TIP_TRIGGER)
+        _WidgetTooltip(self._deadband_label, TIP_DEADBAND)
+        _WidgetTooltip(self._deadband_spin, TIP_DEADBAND)
+        _WidgetTooltip(self._inversion_label, TIP_INVERSION)
+        _WidgetTooltip(self._inversion_check, TIP_INVERSION)
+        _WidgetTooltip(self._scale_label, TIP_SCALE)
+        _WidgetTooltip(self._scale_spin, TIP_SCALE)
+        _WidgetTooltip(self._slew_label, TIP_SLEW)
+        _WidgetTooltip(self._slew_spin, TIP_SLEW)
+        _WidgetTooltip(self._neg_slew_check, TIP_NEG_SLEW)
+        _WidgetTooltip(self._neg_slew_spin, TIP_NEG_SLEW)
+        _WidgetTooltip(self._edit_spline_btn, TIP_EDIT_SPLINE)
+        _WidgetTooltip(self._edit_segments_btn, TIP_EDIT_SEGMENTS)
         # Filter bar tooltips
-        _WidgetTooltip(self._filter_entry,
-                       "Filter by name, group, or description.\n"
-                       "Wildcards: * = any chars, ? = one char.\n"
-                       "e.g. r*n = starts with r ends with n,\n"
-                       "*ee* = contains ee. Escape to clear.")
-        _WidgetTooltip(self._filter_unassigned_cb,
-                       "Show only actions not assigned\n"
-                       "to any controller input.")
-        _WidgetTooltip(self._filter_multi_cb,
-                       "Show only actions bound to\n"
-                       "more than one input.")
+        _WidgetTooltip(self._filter_entry, TIP_FILTER)
+        _WidgetTooltip(self._filter_unassigned_cb, TIP_FILTER_UNASSIGNED)
+        _WidgetTooltip(self._filter_multi_cb, TIP_FILTER_MULTI)
 
         self._set_detail_enabled(False)
 
