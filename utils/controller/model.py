@@ -17,6 +17,17 @@ EXTRA_SPLINE_POINTS = "spline_points"
 EXTRA_SEGMENT_POINTS = "segment_points"
 EXTRA_NEGATIVE_SLEW_RATE = "negative_slew_rate"
 
+# Stick axis natural pairs (wpilib input names)
+STICK_PAIRS = {
+    "left_stick_x": "left_stick_y",
+    "left_stick_y": "left_stick_x",
+    "right_stick_x": "right_stick_y",
+    "right_stick_y": "right_stick_x",
+}
+
+# Input names that only produce 0..1 range (Xbox analog triggers)
+TRIGGER_INPUTS = {"left_trigger", "right_trigger"}
+
 
 class EventTriggerMode(Enum):
     """How a button/analog action is triggered or shaped.

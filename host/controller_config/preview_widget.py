@@ -20,6 +20,7 @@ from host.controller_config.colors import (
     GRID_MINOR,
     LABEL_COLOR,
 )
+from host.controller_config.editor_utils import nice_grid_step
 from host.controller_config.gamepad_input import GamepadPoller
 from utils.controller.model import (
     ActionDefinition,
@@ -28,6 +29,8 @@ from utils.controller.model import (
     EXTRA_SEGMENT_POINTS,
     EXTRA_SPLINE_POINTS,
     InputType,
+    STICK_PAIRS,
+    TRIGGER_INPUTS,
 )
 from utils.math.curves import evaluate_segments, evaluate_spline
 
@@ -36,13 +39,6 @@ from utils.math.curves import evaluate_segments, evaluate_spline
 # Colors
 # ---------------------------------------------------------------------------
 
-_BG = BG_WHITE
-_BG_INACTIVE = BG_INACTIVE
-_GRID = GRID_MINOR
-_GRID_MAJOR = GRID_MAJOR
-_AXIS = GRID_AXIS
-_LABEL = LABEL_COLOR
-_DOT_COLOR = CURVE_LINE
 _DOT_OUTLINE = "#103060"
 _TRAIL_NEWEST = (0x20, 0x60, 0xc0)   # bright blue
 _TRAIL_OLDEST = (0xe0, 0xe0, 0xe0)   # near-white
@@ -76,7 +72,7 @@ _OVERLAY_MARGIN = 8      # padding from plot corner
 _OVERLAY_BG = "#f4f4f4"
 _OVERLAY_BORDER = "#a0a0a0"
 _OVERLAY_CROSSHAIR = "#d0d0d0"
-_OVERLAY_DOT_COLOR = "#c04020"
+_OVERLAYCURVE_LINE = "#c04020"
 _OVERLAY_DOT_RADIUS = 4
 _OVERLAY_TRAIL_NEWEST = (0xc0, 0x40, 0x20)
 _OVERLAY_TRAIL_OLDEST = (0xe8, 0xe0, 0xde)
@@ -86,14 +82,6 @@ _OVERLAY_GRID_SAMPLES = 30       # points per grid line
 
 # Controller refresh interval (ms)
 _CONTROLLER_REFRESH_MS = 2000
-
-# Stick axis pairs (wpilib input names)
-_STICK_PAIRS = {
-    "left_stick_x": "left_stick_y",
-    "left_stick_y": "left_stick_x",
-    "right_stick_x": "right_stick_y",
-    "right_stick_y": "right_stick_x",
-}
 
 # Vertical stick axes (primary bound to one of these → swap slider mapping)
 _Y_AXES = {"left_stick_y", "right_stick_y"}
@@ -248,7 +236,7 @@ class PreviewWidget(ttk.Frame):
         right = ttk.Frame(plot_area)
         right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        self._canvas = tk.Canvas(right, bg=_BG_INACTIVE,
+        self._canvas = tk.Canvas(right, bg=BG_INACTIVE,
                                  highlightthickness=0)
         self._canvas.pack(fill=tk.BOTH, expand=True, padx=(0, 2), pady=(2, 0))
         self._canvas.bind("<Configure>", self._on_canvas_configure)
@@ -285,7 +273,7 @@ class PreviewWidget(ttk.Frame):
             "<<ComboboxSelected>>", self._on_input_source_changed)
 
         # Synced checkbox — locks X and Y sliders together in manual mode
-        self._sync_var = tk.BooleanVar(value=True)
+        self._sync_var = tk.BooleanVar(value=False)
         self._sync_check = ttk.Checkbutton(
             input_frame, text="Synced", variable=self._sync_var,
             style="TCheckbutton")
@@ -298,8 +286,6 @@ class PreviewWidget(ttk.Frame):
     # Public API
     # ------------------------------------------------------------------
 
-    # Input names that only produce 0..1 (Xbox triggers)
-    _TRIGGER_INPUTS = {"left_trigger", "right_trigger"}
 
     def load_action(self, action: ActionDefinition, qname: str,
                     bound_inputs: list[str] | None = None,
@@ -331,7 +317,7 @@ class PreviewWidget(ttk.Frame):
             _, inp = self._binding_details[0]
             self._primary_input_name = inp
             self._primary_is_y = inp in _Y_AXES
-            paired = _STICK_PAIRS.get(inp)
+            paired = STICK_PAIRS.get(inp)
             if paired:
                 self._paired_input_name = paired
 
@@ -352,11 +338,11 @@ class PreviewWidget(ttk.Frame):
         self._build_paired_pipeline()
 
         if self._pipeline:
-            self._canvas.config(bg=_BG)
+            self._canvas.config(bg=BG_WHITE)
             self._start_tick()
         else:
             self._stop_tick()
-            self._canvas.config(bg=_BG_INACTIVE)
+            self._canvas.config(bg=BG_INACTIVE)
             self._draw_inactive_message()
             self._readout_var.set("")
 
@@ -379,7 +365,7 @@ class PreviewWidget(ttk.Frame):
         self._last_paired_input = 0.0
         self._last_paired_output = 0.0
         self._stop_tick()
-        self._canvas.config(bg=_BG_INACTIVE)
+        self._canvas.config(bg=BG_INACTIVE)
         self._draw_inactive_message()
         self._readout_var.set("")
 
@@ -393,11 +379,11 @@ class PreviewWidget(ttk.Frame):
         self._build_pipeline()
         self._build_paired_pipeline()
         if self._pipeline:
-            self._canvas.config(bg=_BG)
+            self._canvas.config(bg=BG_WHITE)
             self._start_tick()
         else:
             self._stop_tick()
-            self._canvas.config(bg=_BG_INACTIVE)
+            self._canvas.config(bg=BG_INACTIVE)
             self._draw_inactive_message()
             self._readout_var.set("")
 
@@ -416,7 +402,7 @@ class PreviewWidget(ttk.Frame):
             _, inp = self._binding_details[0]
             self._primary_input_name = inp
             self._primary_is_y = inp in _Y_AXES
-            paired = _STICK_PAIRS.get(inp)
+            paired = STICK_PAIRS.get(inp)
             if paired:
                 self._paired_input_name = paired
 
@@ -444,7 +430,7 @@ class PreviewWidget(ttk.Frame):
         Otherwise use -1..1 (sticks, or no bindings).
         """
         if bound_inputs and all(
-                inp in self._TRIGGER_INPUTS for inp in bound_inputs):
+                inp in TRIGGER_INPUTS for inp in bound_inputs):
             new_min = 0.0
         else:
             new_min = -1.0
@@ -604,19 +590,7 @@ class PreviewWidget(ttk.Frame):
     @staticmethod
     def _nice_grid_step(span: float) -> float:
         """Choose a nice gridline step for the given data span."""
-        if span <= 0:
-            return 0.5
-        raw = span / 4  # aim for ~4 gridlines
-        mag = 10 ** math.floor(math.log10(raw))
-        norm = raw / mag
-        if norm < 1.5:
-            return mag
-        elif norm < 3.5:
-            return 2 * mag
-        elif norm < 7.5:
-            return 5 * mag
-        else:
-            return 10 * mag
+        return nice_grid_step(span)
 
     # ------------------------------------------------------------------
     # Canvas Sizing & Coordinate Conversion
@@ -722,8 +696,8 @@ class PreviewWidget(ttk.Frame):
             cx, _ = self._d2c(v, 0)
             is_axis = abs(v) < 0.01
             is_boundary = abs(v - self._x_min) < 0.01 or abs(v - 1.0) < 0.01
-            color = _AXIS if is_axis else (
-                _GRID_MAJOR if is_boundary else _GRID)
+            color = GRID_AXIS if is_axis else (
+                GRID_MAJOR if is_boundary else GRID_MINOR)
             w = 1.5 if is_axis else 1
             c.create_line(cx, my, cx, my + ph, fill=color, width=w)
 
@@ -734,7 +708,7 @@ class PreviewWidget(ttk.Frame):
         while v <= self._y_max + y_step * 0.01:
             _, cy = self._d2c(0, v)
             is_axis = abs(v) < y_step * 0.01
-            color = _AXIS if is_axis else _GRID_MAJOR
+            color = GRID_AXIS if is_axis else GRID_MAJOR
             w = 1.5 if is_axis else 1
             c.create_line(mx, cy, mx + pw, cy, fill=color, width=w)
             v += y_step
@@ -743,14 +717,14 @@ class PreviewWidget(ttk.Frame):
         for v in x_vals:
             cx, _ = self._d2c(v, 0)
             c.create_text(cx, my + ph + 12,
-                          text=f"{v:g}", fill=_LABEL, font=font)
+                          text=f"{v:g}", fill=LABEL_COLOR, font=font)
 
         # Y labels (left, dynamic)
         v = y_start
         while v <= self._y_max + y_step * 0.01:
             _, cy = self._d2c(0, v)
             c.create_text(mx - 18, cy,
-                          text=f"{v:g}", fill=_LABEL, font=font)
+                          text=f"{v:g}", fill=LABEL_COLOR, font=font)
             v += y_step
 
         # Reference lines at +/-1 when Y extends beyond
@@ -825,7 +799,7 @@ class PreviewWidget(ttk.Frame):
             cx, cy = self._d2c(self._last_input, self._last_output)
             c.create_oval(cx - _DOT_RADIUS, cy - _DOT_RADIUS,
                           cx + _DOT_RADIUS, cy + _DOT_RADIUS,
-                          fill=_DOT_COLOR, outline=_DOT_OUTLINE, width=1.5)
+                          fill=CURVE_LINE, outline=_DOT_OUTLINE, width=1.5)
 
     def _draw_motor_at(self, cx, cy, angle, label, color):
         """Draw a spinning motor indicator at the given center position."""
@@ -870,7 +844,7 @@ class PreviewWidget(ttk.Frame):
         if x_active:
             rcx = mx + pw - _MOTOR_RADIUS - _MOTOR_MARGIN
             rcy = my + ph - _MOTOR_RADIUS - _MOTOR_MARGIN
-            x_color = _X_AXIS_COLOR if both else _DOT_COLOR
+            x_color = _X_AXIS_COLOR if both else CURVE_LINE
             self._draw_motor_at(
                 rcx, rcy, self._x_motor_angle, "X", x_color)
 
@@ -878,7 +852,7 @@ class PreviewWidget(ttk.Frame):
         if y_active:
             lcx = mx + _MOTOR_RADIUS + _MOTOR_MARGIN
             lcy = my + ph - _MOTOR_RADIUS - _MOTOR_MARGIN
-            y_color = _Y_AXIS_COLOR if both else _DOT_COLOR
+            y_color = _Y_AXIS_COLOR if both else CURVE_LINE
             self._draw_motor_at(
                 lcx, lcy, self._y_motor_angle, "Y", y_color)
 
@@ -1001,7 +975,7 @@ class PreviewWidget(ttk.Frame):
         c.create_oval(
             px - _OVERLAY_DOT_RADIUS, py - _OVERLAY_DOT_RADIUS,
             px + _OVERLAY_DOT_RADIUS, py + _OVERLAY_DOT_RADIUS,
-            fill=_OVERLAY_DOT_COLOR, outline="")
+            fill=_OVERLAYCURVE_LINE, outline="")
 
         # Label — show stick name if known
         if self._primary_input_name and "left" in self._primary_input_name:

@@ -26,15 +26,8 @@ from utils.controller.model import (
     EXTRA_SPLINE_POINTS,
     InputType,
     EventTriggerMode,
+    STICK_PAIRS,
 )
-
-# Stick axis pairs for 2D preview overlay
-_STICK_PAIRS = {
-    "left_stick_x": "left_stick_y",
-    "left_stick_y": "left_stick_x",
-    "right_stick_x": "right_stick_y",
-    "right_stick_y": "right_stick_x",
-}
 
 
 # ---------------------------------------------------------------------------
@@ -776,7 +769,7 @@ class ActionEditorTab(ttk.Frame):
         primary_port = None
         paired_input = None
         for _label, (port, input_name) in self._bound_map.items():
-            paired = _STICK_PAIRS.get(input_name)
+            paired = STICK_PAIRS.get(input_name)
             if paired:
                 primary_port = port
                 paired_input = paired
