@@ -34,6 +34,7 @@ from utils.controller.config_io import (
 )
 
 from .action_panel import ActionPanel
+from .action_editor_tab import ActionEditorTab
 from .binding_dialog import BindingDialog
 from .controller_canvas import ControllerCanvas
 from .import_dialog import ImportConflictDialog
@@ -163,6 +164,8 @@ class ControllerConfigApp(tk.Tk):
         self._redo_stack: list[tuple[FullConfig, set[str]]] = []
         self._last_undo_time: float = 0.0
         self._restoring: bool = False  # Guard against spurious pushes
+        # Snapshot of config at last save/load for accurate dirty tracking
+        self._clean_config: FullConfig = deepcopy(self._config)
 
         # Drag-and-drop state
         self._drag_action: str | None = None
@@ -185,6 +188,13 @@ class ControllerConfigApp(tk.Tk):
 
         self._update_title()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+        # Pre-load saved sash positions so they're ready when <Map> fires,
+        # then restore the active tab after idle (needs geometry).
+        saved_sash = self._settings.get("editor_hsash")
+        if saved_sash and len(saved_sash) >= 2:
+            self._action_editor.set_sash_positions(saved_sash)
+        self.after_idle(self._restore_tab_state)
 
     def _build_menu(self):
         menubar = tk.Menu(self)
@@ -247,6 +257,9 @@ class ControllerConfigApp(tk.Tk):
                                   command=self._toggle_hide_unassigned)
         view_menu.add_command(label="Reset Label Positions",
                               command=self._reset_label_positions)
+        view_menu.add_separator()
+        view_menu.add_command(label="Reset GUI Layout",
+                              command=self._reset_gui_layout)
 
         self.bind_all("<Control-n>", lambda e: self._new_config())
         self.bind_all("<Control-o>", lambda e: self._open_dialog())
@@ -277,6 +290,7 @@ class ControllerConfigApp(tk.Tk):
             get_compatible_inputs=self._get_compatible_inputs_with_display,
             is_action_bound=self._is_action_bound_to,
             on_action_renamed=self._on_action_renamed,
+            on_selection_changed=self._on_action_selection_changed,
         )
         self._paned.add(self._action_panel, weight=0)
 
@@ -293,6 +307,21 @@ class ControllerConfigApp(tk.Tk):
 
         self._notebook = ttk.Notebook(right_frame)
         self._notebook.pack(fill=tk.BOTH, expand=True, pady=(5, 0))
+
+        # Action Editor tab (first tab, before controller tabs)
+        self._action_editor = ActionEditorTab(
+            self._notebook,
+            on_before_change=self._on_before_action_change,
+            on_field_changed=self._on_action_editor_changed,
+            get_binding_info=self._get_binding_info_for_action,
+            on_assign_action=self._context_assign_action,
+            on_unassign_action=self._context_unassign_action,
+            get_all_controllers=self._get_all_controllers,
+            get_compatible_inputs=self._get_compatible_inputs_with_display,
+            is_action_bound=self._is_action_bound_to,
+            get_all_actions=lambda: self._config.actions,
+        )
+        self._notebook.add(self._action_editor, text="Action Editor")
 
         self._controller_canvases: dict[int, ControllerCanvas] = {}
 
@@ -343,6 +372,7 @@ class ControllerConfigApp(tk.Tk):
         self._dirty = False
         self._undo_stack.clear()
         self._redo_stack.clear()
+        self._clean_config = deepcopy(self._config)
         self._sync_ui_from_config()
         self._update_title()
         self._status_var.set("New configuration created")
@@ -366,6 +396,7 @@ class ControllerConfigApp(tk.Tk):
             self._dirty = False
             self._undo_stack.clear()
             self._redo_stack.clear()
+            self._clean_config = deepcopy(self._config)
             self._sync_ui_from_config()
             self._update_title()
             self._status_var.set(f"Opened: {path.name}")
@@ -396,6 +427,7 @@ class ControllerConfigApp(tk.Tk):
             save_config(self._config, path)
             self._current_file = path.resolve()
             self._dirty = False
+            self._clean_config = deepcopy(self._config)
             self._update_title()
             self._status_var.set(f"Saved: {path.name}")
             self._settings["last_file"] = str(self._current_file)
@@ -428,8 +460,31 @@ class ControllerConfigApp(tk.Tk):
             if not self._handle_unsaved_changes():
                 return
         self._settings["geometry"] = self.geometry()
+        # Save active notebook tab
+        try:
+            self._settings["active_tab"] = self._notebook.index(
+                self._notebook.select())
+        except Exception:
+            pass
+        # Save Action Editor pane positions (skip if user just reset layout)
+        if not getattr(self, '_sash_reset', False):
+            try:
+                self._settings["editor_hsash"] = [
+                    self._action_editor._hpaned.sash_coord(i)[0]
+                    for i in range(2)]
+            except Exception:
+                pass
         self._save_settings()
         self.destroy()
+
+    def _restore_tab_state(self):
+        """Restore saved notebook tab selection."""
+        saved_tab = self._settings.get("active_tab")
+        if saved_tab is not None:
+            try:
+                self._notebook.select(saved_tab)
+            except Exception:
+                pass
 
     def _update_title(self):
         name = self._current_file.name if self._current_file else "Untitled"
@@ -440,6 +495,11 @@ class ControllerConfigApp(tk.Tk):
         self._dirty = True
         self._update_title()
         self._action_panel.update_binding_tags()
+
+    def _is_config_clean(self) -> bool:
+        """Check whether current config matches the last saved/loaded state."""
+        self._sync_config_from_ui()
+        return self._config == self._clean_config
 
     # --- Undo / Redo ---
 
@@ -471,7 +531,8 @@ class ControllerConfigApp(tk.Tk):
         self._redo_stack.clear()
         self._last_undo_time = now
 
-    def _restore_snapshot(self, config: FullConfig, empty_groups: set[str]):
+    def _restore_snapshot(self, config: FullConfig, empty_groups: set[str],
+                          restore_selection: str | None = None):
         """Restore a config snapshot and re-sync the UI."""
         self._restoring = True
         try:
@@ -479,7 +540,7 @@ class ControllerConfigApp(tk.Tk):
             # Merge legacy undo-stack empty_groups into config
             self._config.empty_groups = (
                 self._config.empty_groups | empty_groups)
-            self._sync_ui_from_config()
+            self._sync_ui_from_config(restore_selection)
         finally:
             self._restoring = False
 
@@ -488,10 +549,11 @@ class ControllerConfigApp(tk.Tk):
         if not self._undo_stack:
             self._status_var.set("Nothing to undo")
             return
+        selected = self._action_panel._selected_name
         self._redo_stack.append(self._take_snapshot())
         config, empty_groups = self._undo_stack.pop()
-        self._restore_snapshot(config, empty_groups)
-        self._dirty = bool(self._undo_stack)
+        self._restore_snapshot(config, empty_groups, selected)
+        self._dirty = not self._is_config_clean()
         self._update_title()
         self._status_var.set("Undo")
 
@@ -500,17 +562,23 @@ class ControllerConfigApp(tk.Tk):
         if not self._redo_stack:
             self._status_var.set("Nothing to redo")
             return
+        selected = self._action_panel._selected_name
         self._undo_stack.append(self._take_snapshot())
         config, empty_groups = self._redo_stack.pop()
-        self._restore_snapshot(config, empty_groups)
-        self._dirty = True
+        self._restore_snapshot(config, empty_groups, selected)
+        self._dirty = not self._is_config_clean()
         self._update_title()
         self._status_var.set("Redo")
 
     # --- UI <-> Config Sync ---
 
-    def _sync_ui_from_config(self):
-        """Push config data to all UI elements."""
+    def _sync_ui_from_config(self, restore_selection: str | None = None):
+        """Push config data to all UI elements.
+
+        Args:
+            restore_selection: if provided, re-select this action after
+                rebuilding the tree (used by undo/redo to preserve context).
+        """
         # Update action panel
         self._action_panel.set_actions(self._config.actions)
         self._action_panel.set_empty_groups(self._config.empty_groups)
@@ -519,21 +587,36 @@ class ControllerConfigApp(tk.Tk):
         new_ports = sorted(self._config.controllers.keys())
         old_ports = sorted(self._controller_canvases.keys())
 
+        # The Action Editor tab is always at index 0; controller tabs follow
+        ctrl_tab_offset = 1
+
         if new_ports == old_ports:
             # Same controllers — just update bindings and tab labels in place
             for idx, port in enumerate(new_ports):
                 ctrl = self._config.controllers[port]
                 self._controller_canvases[port].set_bindings(ctrl.bindings)
                 label = ctrl.name or f"Controller {port}"
-                self._notebook.tab(idx, text=f"{label} (Port {port})")
+                self._notebook.tab(
+                    idx + ctrl_tab_offset,
+                    text=f"{label} (Port {port})")
         else:
-            # Controller set changed — full rebuild
-            for tab_id in self._notebook.tabs():
-                self._notebook.forget(tab_id)
+            # Controller set changed — remove controller tabs (keep editor)
+            all_tabs = self._notebook.tabs()
+            for tab_id in all_tabs:
+                widget = self._notebook.nametowidget(tab_id)
+                if widget is not self._action_editor:
+                    self._notebook.forget(tab_id)
             self._controller_canvases.clear()
             for port in new_ports:
                 ctrl = self._config.controllers[port]
                 self._create_controller_tab(port, ctrl)
+
+        # Restore selection or clear the Action Editor
+        if (restore_selection
+                and restore_selection in self._config.actions):
+            self._action_panel._reselect(restore_selection)
+        else:
+            self._action_editor.clear()
 
     def _sync_config_from_ui(self):
         """Pull current UI state back into the config."""
@@ -560,10 +643,11 @@ class ControllerConfigApp(tk.Tk):
             if p in self._config.controllers:
                 self._push_undo(coalesce_ms=500)
                 self._config.controllers[p].name = v.get()
-                # Update tab label
+                # Update tab label (offset by 1 for Action Editor tab)
                 idx = sorted(self._config.controllers.keys()).index(p)
                 label_text = v.get() or f"Controller {p}"
-                self._notebook.tab(idx, text=f"{label_text} (Port {p})")
+                self._notebook.tab(
+                    idx + 1, text=f"{label_text} (Port {p})")
                 self._mark_dirty()
 
         name_var.trace_add("write", on_name_change)
@@ -607,10 +691,12 @@ class ControllerConfigApp(tk.Tk):
     def _remove_controller_tab(self):
         """Remove the currently selected controller tab."""
         current = self._notebook.index(self._notebook.select())
+        # Offset by 1 for the Action Editor tab at index 0
+        ctrl_idx = current - 1
         ports = sorted(self._config.controllers.keys())
-        if current >= len(ports):
+        if ctrl_idx < 0 or ctrl_idx >= len(ports):
             return
-        port = ports[current]
+        port = ports[ctrl_idx]
 
         if not messagebox.askyesno("Remove Controller",
                                    f"Remove controller on port {port}?"):
@@ -709,6 +795,38 @@ class ControllerConfigApp(tk.Tk):
         for canvas in self._controller_canvases.values():
             canvas.reset_label_positions()
         self._status_var.set("Label positions reset to defaults")
+
+    def _reset_gui_layout(self):
+        """Reset GUI layout settings (geometry, tabs, panes) but keep labels."""
+        for key in ("geometry", "active_tab", "editor_hsash", "show_borders"):
+            self._settings.pop(key, None)
+        self._sash_reset = True  # prevent _on_close from re-saving
+        self._save_settings()
+
+        # Reset window geometry
+        self.geometry("1200x700")
+
+        # Reset show-borders toggle
+        self._show_borders_var.set(False)
+        for canvas in self._controller_canvases.values():
+            canvas.set_show_borders(False)
+
+        # Reset Action Editor sash to equal thirds
+        self._action_editor._sash_applied = False
+        self._action_editor._saved_sash = None
+        try:
+            w = self._action_editor._hpaned.winfo_width()
+            if w > 50:
+                third = w // 3
+                self._action_editor._hpaned.sash_place(0, third, 0)
+                self._action_editor._hpaned.sash_place(1, third * 2, 0)
+                self._action_editor._sash_applied = True
+        except Exception:
+            pass
+
+        # Switch to first tab (Action Editor)
+        self._notebook.select(0)
+        self._status_var.set("GUI layout reset to defaults")
 
     def _on_label_moved(self, input_name: str, img_x: int, img_y: int):
         """Persist a dragged label position to settings."""
@@ -1002,6 +1120,31 @@ class ControllerConfigApp(tk.Tk):
             return
         self._push_undo(coalesce_ms=coalesce_ms)
 
+    def _on_action_selection_changed(self, qname: str | None):
+        """Sync Action Editor tab when tree selection changes."""
+        if qname:
+            action = self._config.actions.get(qname)
+            if action:
+                self._action_editor.load_action(action, qname)
+                return
+        self._action_editor.clear()
+
+    def _on_action_editor_changed(self):
+        """Sync sidebar and mark dirty when Action Editor edits a field."""
+        if self._restoring:
+            return
+        self._config.actions = self._action_panel.get_actions()
+        # Reload the sidebar detail form to show updated values
+        selected = self._action_panel._selected_name
+        if selected:
+            self._action_panel._load_detail(selected)
+        self._mark_dirty()
+        # Refresh controller canvases in case bindings changed
+        for port, canvas in self._controller_canvases.items():
+            ctrl = self._config.controllers.get(port)
+            if ctrl:
+                canvas.set_bindings(ctrl.bindings)
+
     def _on_actions_changed(self):
         """Called when actions are added/removed/modified in the action panel."""
         if self._restoring:
@@ -1009,6 +1152,14 @@ class ControllerConfigApp(tk.Tk):
         self._config.actions = self._action_panel.get_actions()
         self._mark_dirty()
         self._check_orphan_bindings()
+        # Sync Action Editor tab
+        selected = self._action_panel._selected_name
+        if selected:
+            action = self._config.actions.get(selected)
+            if action:
+                self._action_editor.load_action(action, selected)
+                return
+        self._action_editor.clear()
 
     def _check_orphan_bindings(self):
         """Detect and offer to remove bindings referencing deleted actions."""

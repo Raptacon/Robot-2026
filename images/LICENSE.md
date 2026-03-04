@@ -5,3 +5,8 @@ Source https://commons.wikimedia.org/wiki/File:Xbox_Controller.svg
 rumble.svg
 License: MIT
 https://www.svgrepo.com/svg/503437/motor-alt
+
+xbox-controller-black
+License: CC Attribution
+https://skfb.ly/oVv9D
+
