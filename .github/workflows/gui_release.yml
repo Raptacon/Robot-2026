@@ -1,0 +1,75 @@
+name: Build Controller Config GUI
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  build-gui:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            artifact_name: ControllerConfig.exe
+            spec: controller_config_win.spec
+            sign: true
+          # Stage 2 — uncomment when ready:
+          # - os: macos-latest
+          #   artifact_name: ControllerConfig
+          #   spec: controller_config_mac.spec
+          #   sign: false
+          # - os: ubuntu-latest
+          #   artifact_name: ControllerConfig
+          #   spec: controller_config_linux.spec
+          #   sign: false
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.*'
+
+      - name: Install dependencies
+        run: |
+          pip install pyinstaller
+          pip install -r host/requirements.txt
+
+      - name: Generate ICO (Windows)
+        if: runner.os == 'Windows'
+        run: python host/make_ico.py
+
+      - name: Build executable
+        run: |
+          cd host
+          pyinstaller ${{ matrix.spec }} --distpath ../dist --workpath ../build/gui --clean -y
+
+      - name: Sign EXE (Windows, if cert configured)
+        if: matrix.sign && runner.os == 'Windows' && secrets.CODE_SIGN_CERT != ''
+        shell: pwsh
+        env:
+          CERT_BASE64: ${{ secrets.CODE_SIGN_CERT }}
+          CERT_PASSWORD: ${{ secrets.CODE_SIGN_PASSWORD }}
+        run: |
+          $certBytes = [Convert]::FromBase64String($env:CERT_BASE64)
+          [IO.File]::WriteAllBytes("$env:RUNNER_TEMP\cert.pfx", $certBytes)
+          & signtool sign /f "$env:RUNNER_TEMP\cert.pfx" /p $env:CERT_PASSWORD `
+              /fd sha256 /tr http://timestamp.digicert.com /td sha256 `
+              /d "Raptacon Controller Config" dist\ControllerConfig.exe
+          Remove-Item "$env:RUNNER_TEMP\cert.pfx"
+
+      - name: Upload release asset
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/${{ matrix.artifact_name }}
+
+      - name: Upload build artifact (workflow_dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: gui-${{ runner.os }}
+          path: dist/${{ matrix.artifact_name }}

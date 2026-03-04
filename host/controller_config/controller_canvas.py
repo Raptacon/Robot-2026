@@ -8,6 +8,7 @@ are draggable — custom positions persist across sessions.
 
 import io
 import math
+import sys
 import tkinter as tk
 from pathlib import Path
 
@@ -49,14 +50,21 @@ SHAPE_HOVER_STIPPLE = "gray25"
 _DRAG_THRESHOLD = 5
 
 
+def _image_search_bases() -> list[Path]:
+    """Return candidate base directories for image lookup."""
+    if getattr(sys, 'frozen', False):
+        return [Path(sys._MEIPASS)]
+    here = Path(__file__).resolve().parent
+    return [here, here.parent, here.parent.parent]
+
+
 def _find_image_path() -> Path:
     """Locate the Xbox controller image relative to the project root."""
-    here = Path(__file__).resolve().parent
-    for ancestor in [here, here.parent, here.parent.parent]:
-        svg_path = ancestor / "images" / "Xbox_Controller.svg"
+    for base in _image_search_bases():
+        svg_path = base / "images" / "Xbox_Controller.svg"
         if svg_path.exists():
             return svg_path
-        png_path = ancestor / "images" / "Xbox_Controller.svg.png"
+        png_path = base / "images" / "Xbox_Controller.svg.png"
         if png_path.exists():
             return png_path
     raise FileNotFoundError("Cannot find Xbox_Controller image in images/")
@@ -64,9 +72,8 @@ def _find_image_path() -> Path:
 
 def _find_gear_icon() -> Path | None:
     """Locate the team gear logo image relative to the project root."""
-    here = Path(__file__).resolve().parent
-    for ancestor in [here, here.parent, here.parent.parent]:
-        png_path = ancestor / "images" / "raptacongear.png"
+    for base in _image_search_bases():
+        png_path = base / "images" / "raptacongear.png"
         if png_path.exists():
             return png_path
     return None
@@ -74,12 +81,11 @@ def _find_gear_icon() -> Path | None:
 
 def _find_rumble_icon() -> Path | None:
     """Locate the rumble icon image relative to the project root."""
-    here = Path(__file__).resolve().parent
-    for ancestor in [here, here.parent, here.parent.parent]:
-        svg_path = ancestor / "images" / "rumble.svg"
+    for base in _image_search_bases():
+        svg_path = base / "images" / "rumble.svg"
         if svg_path.exists():
             return svg_path
-        png_path = ancestor / "images" / "rumble.png"
+        png_path = base / "images" / "rumble.png"
         if png_path.exists():
             return png_path
     return None

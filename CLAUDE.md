@@ -219,6 +219,17 @@ Portable curve math lives in `utils/math/curves.py` (shared by both robot code a
   - Current `config_io.py` abstraction makes format swaps straightforward — loaders
     return the same `FullConfig` regardless of source format
 
+## Future: GUI EXE Code Signing
+
+- [ ] Apply to [SignPath Foundation](https://signpath.org/foundation) for free EV code signing
+  - Project qualifies (MIT license, public GitHub repo)
+  - Requires software to be in a released state (at least one GitHub Release with the EXE artifact)
+  - EV certificate provides immediate Windows SmartScreen trust (no "unknown publisher" warning)
+  - Integrates with GitHub Actions — adds a signing step after build
+  - Prerequisites: create a GitHub Release with the unsigned EXE first, then apply
+- [ ] macOS code signing — evaluate Apple Developer Program ($99/yr) for notarization
+- [ ] Add `controller_config_mac.spec` and `controller_config_linux.spec` for cross-platform builds
+
 ### CAN ID Convention
 
 Drivetrain modules start at CAN ID 50 with 3 consecutive IDs per module (drive, steer, encoder). Additional mechanisms count backwards from CAN ID 40. See `subsystem/CAN_CONFIG.md`.
