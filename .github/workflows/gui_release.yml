@@ -25,6 +25,7 @@ jobs:
           #   sign: false
 
     runs-on: ${{ matrix.os }}
+    environment: CODE_SIGN_CERT
 
     env:
       CERT_BASE64: ${{ secrets.CODE_SIGN_CERT }}
