@@ -3,13 +3,15 @@
 Simulates the full analog shaping pipeline in real time with sliders,
 a live output dot, and a decaying history trail.  Reuses the same
 pipeline math as the robot code (utils/input/shaping.py and
-utils/math/curves.py).
+utils/math/curves.py).  Supports controller input via XInput and a
+2D position overlay for paired stick axes.
 """
 
 import math
 import tkinter as tk
 from tkinter import ttk
 
+from host.controller_config.gamepad_input import GamepadPoller
 from utils.controller.model import (
     ActionDefinition,
     EventTriggerMode,
@@ -44,8 +46,45 @@ _MOTOR_DOT_RADIUS = 4   # rotating dot radius (px)
 _MOTOR_MARGIN = 8       # padding from plot corner
 _MOTOR_OUTLINE = "#808080"
 _MOTOR_BG = "#f8f8f8"
-_MOTOR_DOT_COLOR = "#2060c0"
 _MOTOR_SPEED = 6 * math.pi  # rad/s at output = 1.0
+
+# Axis-specific colors (used when both X and Y axes are active)
+_X_AXIS_COLOR = "#2060c0"           # blue
+_X_AXIS_OUTLINE = "#103060"
+_X_TRAIL_NEWEST = (0x20, 0x60, 0xc0)
+_X_TRAIL_OLDEST = (0xe0, 0xe0, 0xf0)
+_Y_AXIS_COLOR = "#c04020"           # red
+_Y_AXIS_OUTLINE = "#601810"
+_Y_TRAIL_NEWEST = (0xc0, 0x40, 0x20)
+_Y_TRAIL_OLDEST = (0xf0, 0xe0, 0xe0)
+
+# 2D overlay inset
+_OVERLAY_SIZE = 64       # inset square side length (px)
+_OVERLAY_MARGIN = 8      # padding from plot corner
+_OVERLAY_BG = "#f4f4f4"
+_OVERLAY_BORDER = "#a0a0a0"
+_OVERLAY_CROSSHAIR = "#d0d0d0"
+_OVERLAY_DOT_COLOR = "#c04020"
+_OVERLAY_DOT_RADIUS = 4
+_OVERLAY_TRAIL_NEWEST = (0xc0, 0x40, 0x20)
+_OVERLAY_TRAIL_OLDEST = (0xe8, 0xe0, 0xde)
+_OVERLAY_TRAIL_MAX = 40
+_OVERLAY_GRID_COLOR = "#b0c8e0"   # light blue for pipeline grid
+_OVERLAY_GRID_SAMPLES = 30       # points per grid line
+
+# Controller refresh interval (ms)
+_CONTROLLER_REFRESH_MS = 2000
+
+# Stick axis pairs (wpilib input names)
+_STICK_PAIRS = {
+    "left_stick_x": "left_stick_y",
+    "left_stick_y": "left_stick_x",
+    "right_stick_x": "right_stick_y",
+    "right_stick_y": "right_stick_x",
+}
+
+# Vertical stick axes (primary bound to one of these → swap slider mapping)
+_Y_AXES = {"left_stick_y", "right_stick_y"}
 
 
 # ---------------------------------------------------------------------------
@@ -103,11 +142,12 @@ class PreviewWidget(ttk.Frame):
 
     Shows a 2-D plot with:
     - X slider (horizontal) simulating the raw input (-1 to 1)
-    - Y slider (vertical) for future 2-axis preview
+    - Y slider (vertical) for paired axis / 2-axis preview
     - A dot at the current (input, output) position
     - A fading history trail of recent positions
     - Output readout label
-    - NT connection placeholder at the bottom
+    - Input source dropdown (Manual sliders or XInput controllers)
+    - 2D position overlay when paired stick axes are available
     """
 
     def __init__(self, parent):
@@ -142,8 +182,35 @@ class PreviewWidget(ttk.Frame):
         self._last_output = 0.0
         self._syncing_slider = False   # guard against slider sync loops
 
-        # Motor visualization angle (radians)
-        self._motor_angle = 0.0
+        # Motor visualization angles (radians) — separate for X and Y axes
+        self._x_motor_angle = 0.0
+        self._y_motor_angle = 0.0
+
+        # --- Controller input ---
+        self._gamepad = GamepadPoller()
+        self._input_mode = "manual"   # "manual" or int (controller index)
+
+        # Binding details: [(port, input_name), ...]
+        self._binding_details: list[tuple[int, str]] = []
+        # Primary binding for controller reading
+        self._primary_input_name: str | None = None
+        # True when primary axis is vertical (left_stick_y, right_stick_y)
+        # — used to swap slider/overlay mapping in controller mode
+        self._primary_is_y = False
+
+        # --- Paired axis / 2D overlay ---
+        self._paired_action: ActionDefinition | None = None
+        self._paired_qname: str | None = None
+        self._paired_pipeline = None
+        self._paired_slew: SimpleSlewLimiter | None = None
+        self._paired_input_name: str | None = None
+        self._paired_trail: list[tuple[float, float]] = []
+        self._paired_1d_trail: list[tuple[float, float]] = []
+        self._last_paired_input = 0.0
+        self._last_paired_output = 0.0
+
+        # Controller list refresh timer
+        self._controller_refresh_id = None
 
         self._build_ui()
 
@@ -189,14 +256,31 @@ class PreviewWidget(ttk.Frame):
                   font=("TkFixedFont", 8), anchor=tk.CENTER,
                   foreground=_READOUT_FG).pack(fill=tk.X, padx=4)
 
-        # NT connection placeholder
-        nt_frame = ttk.LabelFrame(self, text="NT Connection", padding=4)
-        nt_frame.pack(fill=tk.X, padx=4, pady=(2, 4))
+        # Input source selector (replaces NT connection placeholder)
+        input_frame = ttk.Frame(self, padding=(4, 2))
+        input_frame.pack(fill=tk.X, padx=4, pady=(0, 4))
 
-        self._nt_status = ttk.Label(
-            nt_frame, text="Future feature — push/pull config via NT",
-            foreground="#888888", font=("TkDefaultFont", 8))
-        self._nt_status.pack(anchor=tk.W)
+        ttk.Label(input_frame, text="Input:",
+                  font=("TkDefaultFont", 8)).pack(side=tk.LEFT, padx=(0, 4))
+
+        self._input_source_var = tk.StringVar(value="Manual (Sliders)")
+        self._input_combo = ttk.Combobox(
+            input_frame, textvariable=self._input_source_var,
+            state="readonly", font=("TkDefaultFont", 8), width=20)
+        self._input_combo["values"] = ["Manual (Sliders)"]
+        self._input_combo.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self._input_combo.bind(
+            "<<ComboboxSelected>>", self._on_input_source_changed)
+
+        # Synced checkbox — locks X and Y sliders together in manual mode
+        self._sync_var = tk.BooleanVar(value=True)
+        self._sync_check = ttk.Checkbutton(
+            input_frame, text="Synced", variable=self._sync_var,
+            style="TCheckbutton")
+        self._sync_check.pack(side=tk.LEFT, padx=(6, 0))
+
+        # Start periodic controller refresh
+        self._schedule_controller_refresh()
 
     # ------------------------------------------------------------------
     # Public API
@@ -206,22 +290,54 @@ class PreviewWidget(ttk.Frame):
     _TRIGGER_INPUTS = {"left_trigger", "right_trigger"}
 
     def load_action(self, action: ActionDefinition, qname: str,
-                    bound_inputs: list[str] | None = None):
+                    bound_inputs: list[str] | None = None,
+                    binding_details: list[tuple[int, str]] | None = None,
+                    paired_action_info: tuple | None = None):
         """Load an action and start the preview if it's analog.
 
         Args:
             bound_inputs: list of input names bound to this action.
                 If any are trigger inputs (0..1 range), the X axis
                 adjusts from -1..1 to 0..1.
+            binding_details: list of (port, input_name) tuples for
+                controller input and paired axis detection.
+            paired_action_info: (ActionDefinition, qname) for the
+                paired stick axis action, or None.
         """
         self._action = action
         self._qname = qname
         self._trail.clear()
-        self._motor_angle = 0.0
+        self._x_motor_angle = 0.0
+        self._y_motor_angle = 0.0
+
+        # Store binding info
+        self._binding_details = binding_details or []
+        self._primary_input_name = None
+        self._paired_input_name = None
+        self._primary_is_y = False
+        if self._binding_details:
+            _, inp = self._binding_details[0]
+            self._primary_input_name = inp
+            self._primary_is_y = inp in _Y_AXES
+            paired = _STICK_PAIRS.get(inp)
+            if paired:
+                self._paired_input_name = paired
+
+        # Store paired action
+        if paired_action_info:
+            self._paired_action, self._paired_qname = paired_action_info
+        else:
+            self._paired_action = None
+            self._paired_qname = None
+        self._paired_trail.clear()
+        self._paired_1d_trail.clear()
+        self._last_paired_input = 0.0
+        self._last_paired_output = 0.0
 
         # Detect trigger-range inputs
         self._update_x_range(bound_inputs)
         self._build_pipeline()
+        self._build_paired_pipeline()
 
         if self._pipeline:
             self._canvas.config(bg=_BG)
@@ -239,6 +355,17 @@ class PreviewWidget(ttk.Frame):
         self._pipeline = None
         self._slew = None
         self._trail.clear()
+        self._binding_details = []
+        self._primary_input_name = None
+        self._paired_action = None
+        self._paired_qname = None
+        self._paired_pipeline = None
+        self._paired_slew = None
+        self._paired_input_name = None
+        self._paired_trail.clear()
+        self._paired_1d_trail.clear()
+        self._last_paired_input = 0.0
+        self._last_paired_output = 0.0
         self._stop_tick()
         self._canvas.config(bg=_BG_INACTIVE)
         self._draw_inactive_message()
@@ -249,7 +376,10 @@ class PreviewWidget(ttk.Frame):
         if not self._action:
             return
         self._trail.clear()
+        self._paired_trail.clear()
+        self._paired_1d_trail.clear()
         self._build_pipeline()
+        self._build_paired_pipeline()
         if self._pipeline:
             self._canvas.config(bg=_BG)
             self._start_tick()
@@ -259,9 +389,35 @@ class PreviewWidget(ttk.Frame):
             self._draw_inactive_message()
             self._readout_var.set("")
 
-    def update_bindings(self, bound_inputs: list[str] | None = None):
-        """Update X range when bindings change (assign/unassign)."""
+    def update_bindings(self, bound_inputs: list[str] | None = None,
+                        binding_details: list[tuple[int, str]] | None = None,
+                        paired_action_info: tuple | None = None):
+        """Update when bindings change (assign/unassign)."""
         old_x_min = self._x_min
+
+        # Update binding details
+        self._binding_details = binding_details or []
+        self._primary_input_name = None
+        self._paired_input_name = None
+        self._primary_is_y = False
+        if self._binding_details:
+            _, inp = self._binding_details[0]
+            self._primary_input_name = inp
+            self._primary_is_y = inp in _Y_AXES
+            paired = _STICK_PAIRS.get(inp)
+            if paired:
+                self._paired_input_name = paired
+
+        # Update paired action
+        if paired_action_info:
+            self._paired_action, self._paired_qname = paired_action_info
+        else:
+            self._paired_action = None
+            self._paired_qname = None
+        self._paired_trail.clear()
+        self._paired_1d_trail.clear()
+        self._build_paired_pipeline()
+
         self._update_x_range(bound_inputs)
         if self._x_min != old_x_min:
             self._trail.clear()
@@ -298,28 +454,24 @@ class PreviewWidget(ttk.Frame):
     # Pipeline Construction
     # ------------------------------------------------------------------
 
-    def _build_pipeline(self):
-        """Build a shaping closure from the current action parameters."""
-        action = self._action
+    @staticmethod
+    def _make_pipeline_fn(action: ActionDefinition):
+        """Build a shaping closure from action parameters.
+
+        Returns (pipeline_fn, is_raw).  Returns (None, False) when
+        the action is not ANALOG.
+        """
         if not action or action.input_type != InputType.ANALOG:
-            self._pipeline = None
-            self._slew = None
-            return
+            return None, False
 
         mode = action.trigger_mode
+        if mode == EventTriggerMode.RAW:
+            return (lambda raw: raw), True
+
         inversion = action.inversion
         deadband = action.deadband
         scale = action.scale
         extra = action.extra or {}
-
-        # RAW — true passthrough
-        if mode == EventTriggerMode.RAW:
-            self._pipeline = lambda raw: raw
-            self._y_min = -1.0
-            self._y_max = 1.0
-            self._slew = None
-            return
-
         spline_pts = extra.get("spline_points")
         segment_pts = extra.get("segment_points")
 
@@ -348,26 +500,71 @@ class PreviewWidget(ttk.Frame):
                 v = _apply_deadband(v, deadband) if deadband > 0 else v
                 return v * scale
 
-        self._pipeline = pipeline
-        self._compute_y_range()
+        return pipeline, False
 
-        # Slew rate limiter
+    @staticmethod
+    def _make_slew_limiter(action: ActionDefinition):
+        """Build a SimpleSlewLimiter from action params, or None."""
         slew_rate = action.slew_rate
         if slew_rate > 0:
+            extra = action.extra or {}
             neg_rate = extra.get("negative_slew_rate")
             if neg_rate is None:
                 neg_rate = -slew_rate
             else:
                 neg_rate = float(neg_rate)
-            self._slew = SimpleSlewLimiter(
+            return SimpleSlewLimiter(
                 slew_rate, neg_rate, dt=_TICK_MS / 1000.0)
-        else:
+        return None
+
+    def _build_pipeline(self):
+        """Build the primary shaping pipeline from the current action."""
+        self._pipeline, is_raw = self._make_pipeline_fn(self._action)
+        if self._pipeline is None:
             self._slew = None
+            return
+        if is_raw:
+            self._y_min = -1.0
+            self._y_max = 1.0
+            self._slew = None
+            return
+        self._compute_y_range()
+        self._slew = self._make_slew_limiter(self._action)
+
+    def _build_paired_pipeline(self):
+        """Build a pipeline for the paired stick axis.
+
+        If a paired action exists, build its full shaping pipeline.
+        If no paired action but the input is a stick axis, use passthrough
+        so the 2D overlay still shows raw paired-axis values.
+        Recomputes Y range so both pipelines fit on the 1D plot.
+        """
+        if self._paired_action:
+            self._paired_pipeline, is_raw = self._make_pipeline_fn(
+                self._paired_action)
+            if self._paired_pipeline and not is_raw:
+                self._paired_slew = self._make_slew_limiter(
+                    self._paired_action)
+            else:
+                self._paired_slew = None
+        elif self._paired_input_name:
+            # Stick axis with no paired action — passthrough
+            self._paired_pipeline = lambda raw: raw
+            self._paired_slew = None
+        else:
+            self._paired_pipeline = None
+            self._paired_slew = None
+        # Recompute Y range to include both pipelines
+        if self._pipeline:
+            self._compute_y_range()
 
     _Y_RANGE_SAMPLES = 200
 
     def _compute_y_range(self):
-        """Auto-scale Y axis by sampling pipeline output across x range."""
+        """Auto-scale Y axis by sampling pipeline output across x range.
+
+        Also samples the paired pipeline so both curves fit on the plot.
+        """
         if not self._pipeline:
             self._y_min = -1.0
             self._y_max = 1.0
@@ -376,11 +573,15 @@ class PreviewWidget(ttk.Frame):
         y_max = 0.0
         n = self._Y_RANGE_SAMPLES
         x_span = 1.0 - self._x_min
-        for i in range(n + 1):
-            x = self._x_min + x_span * i / n
-            y = self._pipeline(x)
-            y_min = min(y_min, y)
-            y_max = max(y_max, y)
+        pipelines = [self._pipeline]
+        if self._paired_pipeline:
+            pipelines.append(self._paired_pipeline)
+        for pipe in pipelines:
+            for i in range(n + 1):
+                x = self._x_min + x_span * i / n
+                y = pipe(x)
+                y_min = min(y_min, y)
+                y_max = max(y_max, y)
         # Ensure range always includes at least -1..1
         y_min = min(y_min, -1.0)
         y_max = max(y_max, 1.0)
@@ -466,7 +667,10 @@ class PreviewWidget(ttk.Frame):
         self._draw_grid()
         self._draw_trail()
         self._draw_current()
-        self._draw_motor()
+        self._draw_motors()
+        if self._paired_pipeline:
+            self._draw_2d_overlay()
+            self._draw_legend()
 
     def _draw_inactive_message(self):
         """Show an inactive placeholder message."""
@@ -547,84 +751,329 @@ class PreviewWidget(ttk.Frame):
         # Border
         c.create_rectangle(mx, my, mx + pw, my + ph, outline="#808080")
 
-    def _draw_trail(self):
-        """Draw fading history dots from oldest (dim) to newest (bright)."""
+    def _draw_trail_data(self, trail, newest_color, oldest_color):
+        """Draw a fading trail from oldest (dim) to newest (bright)."""
         c = self._canvas
-        n = len(self._trail)
+        n = len(trail)
         if n == 0:
             return
-
-        for i, (tx, ty) in enumerate(self._trail):
-            # Fraction: 0 = oldest, 1 = newest
+        for i, (tx, ty) in enumerate(trail):
             frac = i / max(n - 1, 1)
-            r = int(_TRAIL_OLDEST[0] + frac * (
-                _TRAIL_NEWEST[0] - _TRAIL_OLDEST[0]))
-            g = int(_TRAIL_OLDEST[1] + frac * (
-                _TRAIL_NEWEST[1] - _TRAIL_OLDEST[1]))
-            b = int(_TRAIL_OLDEST[2] + frac * (
-                _TRAIL_NEWEST[2] - _TRAIL_OLDEST[2]))
+            r = int(oldest_color[0] + frac * (
+                newest_color[0] - oldest_color[0]))
+            g = int(oldest_color[1] + frac * (
+                newest_color[1] - oldest_color[1]))
+            b = int(oldest_color[2] + frac * (
+                newest_color[2] - oldest_color[2]))
             color = f"#{r:02x}{g:02x}{b:02x}"
-
             cx, cy = self._d2c(tx, ty)
-            radius = 2 + frac * 2  # 2px oldest, 4px newest
+            radius = 2 + frac * 2
             c.create_oval(cx - radius, cy - radius,
                           cx + radius, cy + radius,
                           fill=color, outline="")
 
+    def _draw_trail(self):
+        """Draw fading history dots for primary and paired pipelines."""
+        if self._paired_pipeline:
+            if self._primary_is_y:
+                prim_new, prim_old = _Y_TRAIL_NEWEST, _Y_TRAIL_OLDEST
+                pair_new, pair_old = _X_TRAIL_NEWEST, _X_TRAIL_OLDEST
+            else:
+                prim_new, prim_old = _X_TRAIL_NEWEST, _X_TRAIL_OLDEST
+                pair_new, pair_old = _Y_TRAIL_NEWEST, _Y_TRAIL_OLDEST
+            self._draw_trail_data(
+                self._paired_1d_trail, pair_new, pair_old)
+            self._draw_trail_data(self._trail, prim_new, prim_old)
+        else:
+            self._draw_trail_data(
+                self._trail, _TRAIL_NEWEST, _TRAIL_OLDEST)
+
     def _draw_current(self):
         """Draw the large dot at current (input, output)."""
         c = self._canvas
-        cx, cy = self._d2c(self._last_input, self._last_output)
-        c.create_oval(cx - _DOT_RADIUS, cy - _DOT_RADIUS,
-                      cx + _DOT_RADIUS, cy + _DOT_RADIUS,
-                      fill=_DOT_COLOR, outline=_DOT_OUTLINE, width=1.5)
+        if self._paired_pipeline:
+            if self._primary_is_y:
+                prim_fill, prim_out = _Y_AXIS_COLOR, _Y_AXIS_OUTLINE
+                pair_fill, pair_out = _X_AXIS_COLOR, _X_AXIS_OUTLINE
+            else:
+                prim_fill, prim_out = _X_AXIS_COLOR, _X_AXIS_OUTLINE
+                pair_fill, pair_out = _Y_AXIS_COLOR, _Y_AXIS_OUTLINE
+            # Paired dot (draw first so primary is on top)
+            px, py = self._d2c(
+                self._last_paired_input, self._last_paired_output)
+            c.create_oval(px - _DOT_RADIUS, py - _DOT_RADIUS,
+                          px + _DOT_RADIUS, py + _DOT_RADIUS,
+                          fill=pair_fill, outline=pair_out, width=1.5)
+            # Primary dot
+            cx, cy = self._d2c(self._last_input, self._last_output)
+            c.create_oval(cx - _DOT_RADIUS, cy - _DOT_RADIUS,
+                          cx + _DOT_RADIUS, cy + _DOT_RADIUS,
+                          fill=prim_fill, outline=prim_out, width=1.5)
+        else:
+            cx, cy = self._d2c(self._last_input, self._last_output)
+            c.create_oval(cx - _DOT_RADIUS, cy - _DOT_RADIUS,
+                          cx + _DOT_RADIUS, cy + _DOT_RADIUS,
+                          fill=_DOT_COLOR, outline=_DOT_OUTLINE, width=1.5)
 
-    def _draw_motor(self):
-        """Draw a spinning motor indicator in the bottom-right of the plot."""
+    def _draw_motor_at(self, cx, cy, angle, label, color):
+        """Draw a spinning motor indicator at the given center position."""
         c = self._canvas
+
+        # Outer circle
+        c.create_oval(
+            cx - _MOTOR_RADIUS, cy - _MOTOR_RADIUS,
+            cx + _MOTOR_RADIUS, cy + _MOTOR_RADIUS,
+            outline=_MOTOR_OUTLINE, fill=_MOTOR_BG, width=1.5)
+
+        # Rotating dot on the rim
+        orbit_r = _MOTOR_RADIUS - _MOTOR_DOT_RADIUS - 2
+        dot_x = cx + orbit_r * math.cos(angle)
+        dot_y = cy + orbit_r * math.sin(angle)
+        c.create_oval(
+            dot_x - _MOTOR_DOT_RADIUS, dot_y - _MOTOR_DOT_RADIUS,
+            dot_x + _MOTOR_DOT_RADIUS, dot_y + _MOTOR_DOT_RADIUS,
+            fill=color, outline="")
+
+        # Label above motor
+        c.create_text(cx, cy - _MOTOR_RADIUS - 6, text=label,
+                      fill=color, font=("TkDefaultFont", 7))
+
+    def _draw_motors(self):
+        """Draw X and Y motor indicators when their axes are active."""
         mx = self._margin_x
         my = self._margin_y
         pw = self._plot_w
         ph = self._plot_h
 
-        # Center of motor circle: bottom-right corner, inset by margin
-        motor_cx = mx + pw - _MOTOR_RADIUS - _MOTOR_MARGIN
-        motor_cy = my + ph - _MOTOR_RADIUS - _MOTOR_MARGIN
+        # Determine which axes have active outputs
+        both = self._paired_pipeline is not None
+        if self._primary_is_y:
+            y_active = self._pipeline is not None
+            x_active = both
+        else:
+            x_active = self._pipeline is not None
+            y_active = both
 
-        # Outer circle
-        c.create_oval(
-            motor_cx - _MOTOR_RADIUS, motor_cy - _MOTOR_RADIUS,
-            motor_cx + _MOTOR_RADIUS, motor_cy + _MOTOR_RADIUS,
-            outline=_MOTOR_OUTLINE, fill=_MOTOR_BG, width=1.5)
+        # Right motor (X axis) — bottom-right corner
+        if x_active:
+            rcx = mx + pw - _MOTOR_RADIUS - _MOTOR_MARGIN
+            rcy = my + ph - _MOTOR_RADIUS - _MOTOR_MARGIN
+            x_color = _X_AXIS_COLOR if both else _DOT_COLOR
+            self._draw_motor_at(
+                rcx, rcy, self._x_motor_angle, "X", x_color)
 
-        # Rotating dot on the rim
-        orbit_r = _MOTOR_RADIUS - _MOTOR_DOT_RADIUS - 2
-        dot_x = motor_cx + orbit_r * math.cos(self._motor_angle)
-        dot_y = motor_cy + orbit_r * math.sin(self._motor_angle)
+        # Left motor (Y axis) — bottom-left corner
+        if y_active:
+            lcx = mx + _MOTOR_RADIUS + _MOTOR_MARGIN
+            lcy = my + ph - _MOTOR_RADIUS - _MOTOR_MARGIN
+            y_color = _Y_AXIS_COLOR if both else _DOT_COLOR
+            self._draw_motor_at(
+                lcx, lcy, self._y_motor_angle, "Y", y_color)
+
+    def _draw_legend(self):
+        """Draw axis color legend in top-right corner of plot."""
+        c = self._canvas
+        mx = self._margin_x
+        my = self._margin_y
+        pw = self._plot_w
+        font = ("TkDefaultFont", 7)
+        dot_r = 3
+        line_h = 12
+        pad = 6
+
+        # Position: top-right corner, inset
+        rx = mx + pw - pad
+        ry = my + pad
+
+        # X axis entry (blue)
+        c.create_oval(rx - 40 - dot_r, ry - dot_r,
+                      rx - 40 + dot_r, ry + dot_r,
+                      fill=_X_AXIS_COLOR, outline="")
+        c.create_text(rx - 40 + dot_r + 4, ry, text="X axis",
+                      anchor=tk.W, fill=_X_AXIS_COLOR, font=font)
+
+        # Y axis entry (red)
+        ry2 = ry + line_h
+        c.create_oval(rx - 40 - dot_r, ry2 - dot_r,
+                      rx - 40 + dot_r, ry2 + dot_r,
+                      fill=_Y_AXIS_COLOR, outline="")
+        c.create_text(rx - 40 + dot_r + 4, ry2, text="Y axis",
+                      anchor=tk.W, fill=_Y_AXIS_COLOR, font=font)
+
+    def _draw_2d_overlay(self):
+        """Draw 2D position inset in top-left of plot area."""
+        c = self._canvas
+        mx = self._margin_x
+        my = self._margin_y
+        size = _OVERLAY_SIZE
+
+        # Inset position: top-left corner
+        ox = mx + _OVERLAY_MARGIN
+        oy = my + _OVERLAY_MARGIN
+
+        # Background
+        c.create_rectangle(ox, oy, ox + size, oy + size,
+                           fill=_OVERLAY_BG, outline=_OVERLAY_BORDER,
+                           width=1)
+
+        # Crosshair at center
+        cx_center = ox + size / 2
+        cy_center = oy + size / 2
+        c.create_line(ox + 2, cy_center, ox + size - 2, cy_center,
+                      fill=_OVERLAY_CROSSHAIR, width=1)
+        c.create_line(cx_center, oy + 2, cx_center, oy + size - 2,
+                      fill=_OVERLAY_CROSSHAIR, width=1)
+
+        # Map -1..1 to overlay pixel coords
+        def ov_xy(xv, yv):
+            px = ox + (xv + 1.0) / 2.0 * size
+            py = oy + (1.0 - (yv + 1.0) / 2.0) * size
+            return px, py
+
+        # Determine which pipeline maps to X vs Y in the overlay
+        if self._primary_is_y:
+            x_pipe = self._paired_pipeline
+            y_pipe = self._pipeline
+        else:
+            x_pipe = self._pipeline
+            y_pipe = self._paired_pipeline
+
+        # Draw warped grid showing both pipeline responses (static,
+        # no slew).  Vertical grid lines: fixed x input, sweep y.
+        # Horizontal grid lines: fixed y input, sweep x.
+        n = _OVERLAY_GRID_SAMPLES
+        grid_vals = [-1.0, -0.5, 0.0, 0.5, 1.0]
+
+        for gx in grid_vals:
+            x_out = x_pipe(gx)
+            pts = []
+            for i in range(n + 1):
+                y_in = -1.0 + 2.0 * i / n
+                y_out = y_pipe(y_in)
+                pts.extend(ov_xy(x_out, y_out))
+            if len(pts) >= 4:
+                c.create_line(*pts, fill=_OVERLAY_GRID_COLOR, width=1)
+
+        for gy in grid_vals:
+            y_out = y_pipe(gy)
+            pts = []
+            for i in range(n + 1):
+                x_in = -1.0 + 2.0 * i / n
+                x_out = x_pipe(x_in)
+                pts.extend(ov_xy(x_out, y_out))
+            if len(pts) >= 4:
+                c.create_line(*pts, fill=_OVERLAY_GRID_COLOR, width=1)
+
+        # Trail
+        n_trail = len(self._paired_trail)
+        for i, (tx, ty) in enumerate(self._paired_trail):
+            frac = i / max(n_trail - 1, 1)
+            r = int(_OVERLAY_TRAIL_OLDEST[0] + frac * (
+                _OVERLAY_TRAIL_NEWEST[0] - _OVERLAY_TRAIL_OLDEST[0]))
+            g = int(_OVERLAY_TRAIL_OLDEST[1] + frac * (
+                _OVERLAY_TRAIL_NEWEST[1] - _OVERLAY_TRAIL_OLDEST[1]))
+            b = int(_OVERLAY_TRAIL_OLDEST[2] + frac * (
+                _OVERLAY_TRAIL_NEWEST[2] - _OVERLAY_TRAIL_OLDEST[2]))
+            color = f"#{r:02x}{g:02x}{b:02x}"
+            px, py = ov_xy(tx, ty)
+            radius = 1 + frac
+            c.create_oval(px - radius, py - radius,
+                          px + radius, py + radius,
+                          fill=color, outline="")
+
+        # Current dot — use correct physical mapping
+        if self._primary_is_y:
+            px, py = ov_xy(self._last_paired_output, self._last_output)
+        else:
+            px, py = ov_xy(self._last_output, self._last_paired_output)
         c.create_oval(
-            dot_x - _MOTOR_DOT_RADIUS, dot_y - _MOTOR_DOT_RADIUS,
-            dot_x + _MOTOR_DOT_RADIUS, dot_y + _MOTOR_DOT_RADIUS,
-            fill=_MOTOR_DOT_COLOR, outline="")
+            px - _OVERLAY_DOT_RADIUS, py - _OVERLAY_DOT_RADIUS,
+            px + _OVERLAY_DOT_RADIUS, py + _OVERLAY_DOT_RADIUS,
+            fill=_OVERLAY_DOT_COLOR, outline="")
+
+        # Label — show stick name if known
+        if self._primary_input_name and "left" in self._primary_input_name:
+            label = "L Stick"
+        elif self._primary_input_name and "right" in self._primary_input_name:
+            label = "R Stick"
+        else:
+            label = "2D"
+        c.create_text(ox + 3, oy + 3, text=label, anchor=tk.NW,
+                      fill=_OVERLAY_BORDER, font=("TkDefaultFont", 6))
 
     # ------------------------------------------------------------------
     # Slider Callbacks
     # ------------------------------------------------------------------
 
     def _on_x_slider(self, val):
-        """X slider changed — sync Y slider to match."""
+        """X slider changed — sync Y slider when synced."""
         if self._syncing_slider:
             return
-        self._syncing_slider = True
-        self._y_slider.set(float(val))
-        self._syncing_slider = False
+        if self._sync_var.get():
+            self._syncing_slider = True
+            self._y_slider.set(float(val))
+            self._syncing_slider = False
 
     def _on_y_slider(self, val):
-        """Y slider changed — sync X slider to match."""
+        """Y slider changed — sync X slider when synced."""
         if self._syncing_slider:
             return
-        self._syncing_slider = True
-        self._x_slider.set(float(val))
-        self._syncing_slider = False
+        if self._sync_var.get():
+            self._syncing_slider = True
+            self._x_slider.set(float(val))
+            self._syncing_slider = False
+
+    # ------------------------------------------------------------------
+    # Input Source Management
+    # ------------------------------------------------------------------
+
+    def _on_input_source_changed(self, event=None):
+        """Handle input source dropdown selection."""
+        selection = self._input_source_var.get()
+        if selection.startswith("Controller"):
+            try:
+                idx = int(selection.split()[1].rstrip(":"))
+                self._input_mode = idx
+            except (ValueError, IndexError):
+                self._input_mode = "manual"
+        else:
+            self._input_mode = "manual"
+        # Grey out sync checkbox on controller, enable on manual
+        if self._input_mode == "manual":
+            self._sync_check.state(["!disabled"])
+        else:
+            self._sync_check.state(["disabled"])
+        # Clear trails when switching input source
+        self._trail.clear()
+        self._paired_trail.clear()
+        self._paired_1d_trail.clear()
+        if self._slew:
+            self._slew.reset()
+        if self._paired_slew:
+            self._paired_slew.reset()
+
+    def _schedule_controller_refresh(self):
+        """Schedule periodic controller enumeration."""
+        self._refresh_controller_list()
+        self._controller_refresh_id = self.after(
+            _CONTROLLER_REFRESH_MS, self._schedule_controller_refresh)
+
+    def _refresh_controller_list(self):
+        """Update the input source dropdown with connected controllers."""
+        values = ["Manual (Sliders)"]
+        if self._gamepad.available:
+            for idx in self._gamepad.get_connected():
+                values.append(f"Controller {idx}")
+        else:
+            values.append("(Install XInput-Python for gamepad)")
+
+        current = self._input_source_var.get()
+        self._input_combo["values"] = values
+
+        # If currently selected controller disconnected, fall back
+        if current not in values:
+            self._input_source_var.set("Manual (Sliders)")
+            self._input_mode = "manual"
 
     # ------------------------------------------------------------------
     # Animation Loop
@@ -647,8 +1096,28 @@ class PreviewWidget(ttk.Frame):
             self._tick_id = None
             return
 
-        # Read current slider value
-        raw_input = self._x_slider.get()
+        # --- Read primary input ---
+        controller_active = (
+            self._input_mode != "manual"
+            and self._primary_input_name
+            and self._gamepad.available)
+
+        if controller_active:
+            # Controller mode: read axis from gamepad
+            raw_input = self._gamepad.get_axis(
+                self._input_mode, self._primary_input_name)
+            # Sync slider to show controller value.
+            # If primary is a Y-type axis (e.g. left_stick_y), show it on
+            # the vertical slider; otherwise on the horizontal slider.
+            self._syncing_slider = True
+            if self._primary_is_y:
+                self._y_slider.set(raw_input)
+            else:
+                self._x_slider.set(raw_input)
+            self._syncing_slider = False
+        else:
+            # Manual mode: read from X slider (primary input)
+            raw_input = self._x_slider.get()
 
         # Run through shaping pipeline
         shaped = self._pipeline(raw_input)
@@ -662,18 +1131,76 @@ class PreviewWidget(ttk.Frame):
         self._last_input = raw_input
         self._last_output = output
 
-        # Advance motor angle: output=1 → 2π rad/s
+        # Advance motor angles: output=1 → full speed
         dt = _TICK_MS / 1000.0
-        self._motor_angle += output * _MOTOR_SPEED * dt
+        if self._primary_is_y:
+            self._y_motor_angle += output * _MOTOR_SPEED * dt
+        else:
+            self._x_motor_angle += output * _MOTOR_SPEED * dt
 
         # Append to trail
         self._trail.append((raw_input, output))
         if len(self._trail) > _TRAIL_MAX:
             self._trail.pop(0)
 
+        # --- Paired axis (2D overlay) ---
+        if self._paired_pipeline:
+            if controller_active and self._paired_input_name:
+                y_raw = self._gamepad.get_axis(
+                    self._input_mode, self._paired_input_name)
+                # Put paired axis on the opposite slider
+                self._syncing_slider = True
+                if self._primary_is_y:
+                    self._x_slider.set(y_raw)
+                else:
+                    self._y_slider.set(y_raw)
+                self._syncing_slider = False
+            else:
+                y_raw = self._y_slider.get()
+
+            y_shaped = self._paired_pipeline(y_raw)
+            if self._paired_slew:
+                y_out = self._paired_slew.calculate(y_shaped)
+            else:
+                y_out = y_shaped
+            self._last_paired_input = y_raw
+            self._last_paired_output = y_out
+
+            # Append to 1D trail for paired pipeline
+            self._paired_1d_trail.append((y_raw, y_out))
+            if len(self._paired_1d_trail) > _TRAIL_MAX:
+                self._paired_1d_trail.pop(0)
+
+            # Advance the paired axis motor angle
+            if self._primary_is_y:
+                self._x_motor_angle += y_out * _MOTOR_SPEED * dt
+            else:
+                self._y_motor_angle += y_out * _MOTOR_SPEED * dt
+
+            # Store trail with correct physical mapping:
+            # (x_value, y_value) where x=horizontal, y=vertical
+            if self._primary_is_y:
+                self._paired_trail.append((y_out, output))
+            else:
+                self._paired_trail.append((output, y_out))
+            if len(self._paired_trail) > _OVERLAY_TRAIL_MAX:
+                self._paired_trail.pop(0)
+
         # Update readout
-        self._readout_var.set(
-            f"In: {raw_input:+.3f}  \u2192  Out: {output:+.3f}")
+        if self._paired_pipeline:
+            pi = self._last_paired_input
+            po = self._last_paired_output
+            if self._primary_is_y:
+                self._readout_var.set(
+                    f"X: {pi:+.3f}\u2192{po:+.3f}  "
+                    f"Y: {raw_input:+.3f}\u2192{output:+.3f}")
+            else:
+                self._readout_var.set(
+                    f"X: {raw_input:+.3f}\u2192{output:+.3f}  "
+                    f"Y: {pi:+.3f}\u2192{po:+.3f}")
+        else:
+            self._readout_var.set(
+                f"In: {raw_input:+.3f}  \u2192  Out: {output:+.3f}")
 
         # Redraw
         self._draw()

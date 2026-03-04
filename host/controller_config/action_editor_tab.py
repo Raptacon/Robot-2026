@@ -25,6 +25,14 @@ from utils.controller.model import (
     EventTriggerMode,
 )
 
+# Stick axis pairs for 2D preview overlay
+_STICK_PAIRS = {
+    "left_stick_x": "left_stick_y",
+    "left_stick_y": "left_stick_x",
+    "right_stick_x": "right_stick_y",
+    "right_stick_y": "right_stick_x",
+}
+
 
 # ---------------------------------------------------------------------------
 # Active/inactive pane styling
@@ -547,7 +555,9 @@ class ActionEditorTab(ttk.Frame):
         self._curve_editor.load_action(
             action, qname, self._get_bound_input_names())
         self._preview.load_action(
-            action, qname, self._get_bound_input_names())
+            action, qname, self._get_bound_input_names(),
+            binding_details=self._get_binding_details(),
+            paired_action_info=self._find_paired_analog_action())
 
     def clear(self):
         """Clear all panes (no action selected)."""
@@ -747,6 +757,41 @@ class ActionEditorTab(ttk.Frame):
         """Return list of input names currently bound to this action."""
         return [inp for _, inp in self._bound_map.values()]
 
+    def _get_binding_details(self) -> list[tuple[int, str]]:
+        """Return list of (port, input_name) for current action bindings."""
+        return list(self._bound_map.values())
+
+    def _find_paired_analog_action(self) -> tuple | None:
+        """Find the paired stick-axis action for 2D preview overlay.
+
+        Returns (ActionDefinition, qname) if a paired analog action
+        exists, else None.
+        """
+        if not self._bound_map or not self._get_all_actions:
+            return None
+        # Find first stick binding
+        primary_port = None
+        paired_input = None
+        for _label, (port, input_name) in self._bound_map.items():
+            paired = _STICK_PAIRS.get(input_name)
+            if paired:
+                primary_port = port
+                paired_input = paired
+                break
+        if not paired_input:
+            return None
+        # Search all actions for one bound to paired_input on same port
+        all_actions = self._get_all_actions()
+        for qname, action in all_actions.items():
+            if qname == self._qname:
+                continue
+            if (action.input_type == InputType.ANALOG
+                    and self._is_action_bound
+                    and self._is_action_bound(
+                        qname, primary_port, paired_input)):
+                return (action, qname)
+        return None
+
     def _on_assign(self):
         """Assign the selected input to the current action."""
         if not self._qname:
@@ -763,7 +808,10 @@ class ActionEditorTab(ttk.Frame):
         self._refresh_bindings()
         bound = self._get_bound_input_names()
         self._curve_editor.update_bindings(bound)
-        self._preview.update_bindings(bound)
+        self._preview.update_bindings(
+            bound,
+            binding_details=self._get_binding_details(),
+            paired_action_info=self._find_paired_analog_action())
         if self._on_field_changed:
             self._on_field_changed()
 
@@ -786,7 +834,10 @@ class ActionEditorTab(ttk.Frame):
         self._refresh_bindings()
         bound = self._get_bound_input_names()
         self._curve_editor.update_bindings(bound)
-        self._preview.update_bindings(bound)
+        self._preview.update_bindings(
+            bound,
+            binding_details=self._get_binding_details(),
+            paired_action_info=self._find_paired_analog_action())
         if self._on_field_changed:
             self._on_field_changed()
 
