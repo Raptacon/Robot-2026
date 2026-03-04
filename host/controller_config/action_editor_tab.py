@@ -2,14 +2,14 @@
 
 Three-pane upper section: Common settings (left), Assigned Inputs (center),
 and a swappable Button/Analog options pane (right) that switches based on
-input type.  Lower section has placeholders for the future curve editor
-and preview widget.
+input type.  Lower section: curve editor (left) and preview widget (right).
 """
 
 import tkinter as tk
 from tkinter import ttk, messagebox
 
 from .action_panel import _WidgetTooltip
+from .preview_widget import PreviewWidget
 from .tooltips import (
     TIP_NAME, TIP_GROUP, TIP_DESC, TIP_INPUT_TYPE,
     TIP_TRIGGER_BUTTON, TIP_TRIGGER_ANALOG,
@@ -492,14 +492,13 @@ class ActionEditorTab(ttk.Frame):
         )
         self._curve_editor.pack(fill=tk.BOTH, expand=True)
 
-        # Right: Preview placeholder (Phase 3)
+        # Right: Preview widget
         preview_frame = ttk.LabelFrame(
-            lower_paned, text="Preview", padding=10)
+            lower_paned, text="Preview", padding=4)
         lower_paned.add(preview_frame, minsize=120)
-        ttk.Label(
-            preview_frame, text="Available in Phase 3",
-            foreground="#888888", font=("TkDefaultFont", 10),
-        ).pack(expand=True)
+
+        self._preview = PreviewWidget(preview_frame)
+        self._preview.pack(fill=tk.BOTH, expand=True)
 
     # ------------------------------------------------------------------
     # Public API
@@ -545,6 +544,7 @@ class ActionEditorTab(ttk.Frame):
         self._update_pane_states()
         self._refresh_bindings()
         self._curve_editor.load_action(action, qname)
+        self._preview.load_action(action, qname)
 
     def clear(self):
         """Clear all panes (no action selected)."""
@@ -575,6 +575,7 @@ class ActionEditorTab(ttk.Frame):
         self._assign_map.clear()
         self._set_all_enabled(False)
         self._curve_editor.clear()
+        self._preview.clear()
 
     def refresh_bindings(self):
         """Re-query binding info for the current action."""
@@ -594,6 +595,7 @@ class ActionEditorTab(ttk.Frame):
                 self._scale_var.set(str(self._action.scale))
             finally:
                 self._updating_form = False
+        self._preview.refresh()
         if self._on_field_changed:
             self._on_field_changed()
 
@@ -783,6 +785,7 @@ class ActionEditorTab(ttk.Frame):
             return
         self._save_to_action()
         self._update_curve_editor()
+        self._preview.refresh()
         if self._on_field_changed:
             self._on_field_changed()
 
