@@ -148,7 +148,8 @@ class ActionPanel(tk.Frame):
                  on_assign_action=None, on_unassign_action=None,
                  on_unassign_all=None, get_all_controllers=None,
                  get_compatible_inputs=None, is_action_bound=None,
-                 on_action_renamed=None):
+                 on_action_renamed=None,
+                 on_selection_changed=None):
         """
         Args:
             parent: tkinter parent widget
@@ -170,6 +171,8 @@ class ActionPanel(tk.Frame):
             on_action_renamed: callback(old_qname, new_qname) when an action's
                 qualified name changes (group or name change) so bindings can
                 be updated
+            on_selection_changed: callback(qname | None) when tree selection
+                changes, allowing external listeners to sync
         """
         super().__init__(parent, padx=5, pady=5)
         self._on_actions_changed = on_actions_changed
@@ -185,6 +188,7 @@ class ActionPanel(tk.Frame):
         self._get_compatible_inputs = get_compatible_inputs
         self._is_action_bound_cb = is_action_bound
         self._on_action_renamed = on_action_renamed
+        self._on_selection_changed = on_selection_changed
         self._actions: dict[str, ActionDefinition] = {}
         self._empty_groups: set[str] = set()
         self._selected_name: str | None = None
@@ -846,6 +850,7 @@ class ActionPanel(tk.Frame):
         if not sel:
             self._selected_name = None
             self._set_detail_enabled(False)
+            self._notify_selection_changed()
             return
 
         item_id = sel[0]
@@ -853,11 +858,18 @@ class ActionPanel(tk.Frame):
                 or item_id.startswith(self._EMPTY_PREFIX)):
             self._selected_name = None
             self._set_detail_enabled(False)
+            self._notify_selection_changed()
             return
 
         self._selected_name = item_id
         self._load_detail(item_id)
         self._set_detail_enabled(True)
+        self._notify_selection_changed()
+
+    def _notify_selection_changed(self):
+        """Notify external listeners of the current selection."""
+        if self._on_selection_changed:
+            self._on_selection_changed(self._selected_name)
 
     def _load_detail(self, qname: str):
         """Populate the detail form from an action."""
