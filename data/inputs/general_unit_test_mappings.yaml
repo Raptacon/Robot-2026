@@ -1,0 +1,227 @@
+actions:
+  general:
+    general_button_onpress:
+      description: non grouped button on press
+      deadband: 0.05
+    general_button_onrelease:
+      description: general on release test
+      trigger_mode: on_false
+      deadband: 0.05
+    general_button_while_pressed:
+      description: general while pressed
+      trigger_mode: while_true
+      deadband: 0.05
+    general_button_while_released:
+      description: general while released
+      trigger_mode: while_false
+      deadband: 0.05
+    general_button_toggle:
+      description: general toggle test
+      trigger_mode: toggle_on_true
+      deadband: 0.05
+    general_button_onpress_other_cont:
+      description: non grouped button other controller
+      deadband: 0.05
+    general_pov_onpress_other_cont:
+      description: non grouped pov other controller
+      deadband: 0.05
+    general_pov_onrelease:
+      description: general pov on release test
+      trigger_mode: on_false
+      deadband: 0.05
+    general_pov_toggle:
+      description: general pov toggle test
+      trigger_mode: toggle_on_true
+      deadband: 0.05
+    general_pov_while_pressed:
+      description: general pov while pressed
+      trigger_mode: while_true
+      deadband: 0.05
+    general_pov_while_released:
+      description: general pov while released
+      trigger_mode: while_false
+      deadband: 0.05
+    general_pov_onpress:
+      description: non grouped pov on press
+      deadband: 0.05
+    general_pov_assinged_button_onpress:
+      description: non grouped button on press
+      deadband: 0.05
+    general_rumble_left:
+      input_type: output
+      trigger_mode: raw
+    general_rumble_right:
+      input_type: output
+      trigger_mode: raw
+    general_rumble_both:
+      input_type: output
+      trigger_mode: raw
+    general_analog_scaled_deadzone:
+      description: scaled 12x with 10% dead zone
+      input_type: analog
+      trigger_mode: scaled
+      deadband: 0.1
+      scale: 12.0
+    general_analog_scaled_no_deadzone:
+      input_type: analog
+      trigger_mode: scaled
+      scale: 5.5
+    general_analog_squared_deadzone:
+      input_type: analog
+      trigger_mode: squared
+      deadband: 0.05
+    general_analog_raw_deadzone:
+      input_type: analog
+      trigger_mode: scaled
+      deadband: 0.05
+      scale: 5.5
+    general_analog_raw_inverted:
+      input_type: analog
+      trigger_mode: scaled
+      inversion: true
+    general_analog_spline:
+      input_type: analog
+      trigger_mode: spline
+      extra:
+        spline_points:
+        - x: -1.0
+          y: -1.0
+          tangent: 10.0
+        - x: 0.0
+          y: 0.0
+          tangent: 1.0
+        - x: 0.596
+          y: 0.576
+          tangent: -5.125
+        - x: 1.0
+          y: 1.0
+          tangent: 1.0
+    general_analog_point:
+      input_type: analog
+      trigger_mode: segmented
+      extra:
+        spline_points:
+        - x: -1.0
+          y: -1.0
+          tangent: 10.0
+        - x: 0.0
+          y: 0.0
+          tangent: 1.0
+        - x: 0.596
+          y: 0.576
+          tangent: -5.125
+        - x: 1.0
+          y: 1.0
+          tangent: 1.0
+        segment_points:
+        - x: -1.0
+          y: -1.0
+        - x: -0.672
+          y: -0.396
+        - x: 0.0
+          y: 0.0
+        - x: 0.704
+          y: 0.368
+        - x: 1.0
+          y: 1.0
+    general_analog_raw_inverted_trigger:
+      input_type: analog
+      trigger_mode: scaled
+      inversion: true
+    general_analog_scaled_trigger:
+      input_type: analog
+      trigger_mode: scaled
+      scale: -2.0
+    general_duplidcate_press: {}
+  test_group:
+    button_onpress:
+      deadband: 0.05
+    button_onrelease:
+      trigger_mode: on_false
+      deadband: 0.05
+    button_toggle:
+      trigger_mode: toggle_on_true
+      deadband: 0.05
+    button_while_pressed:
+      trigger_mode: while_true
+      deadband: 0.05
+    button_while_released:
+      trigger_mode: while_false
+      deadband: 0.05
+    analog:
+      input_type: analog
+      trigger_mode: scaled
+      deadband: 0.05
+    duplidcate_press: {}
+controllers:
+  0:
+    name: Driver
+    bindings:
+      y_button:
+      - general.general_button_onpress
+      pov_up:
+      - general.general_pov_assinged_button_onpress
+      pov_up_right:
+      - general.general_pov_onpress
+      pov_right:
+      - general.general_pov_onpress_other_cont
+      pov_down_right:
+      - general.general_pov_onrelease
+      pov_down:
+      - general.general_pov_toggle
+      pov_down_left:
+      - general.general_pov_while_pressed
+      pov_left:
+      - general.general_pov_while_released
+      b_button:
+      - general.general_button_toggle
+      x_button:
+      - general.general_button_onrelease
+      a_button:
+      - general.general_button_while_pressed
+      start_button:
+      - general.general_button_while_released
+      rumble_both:
+      - general.general_rumble_both
+      rumble_left:
+      - general.general_rumble_left
+      rumble_right:
+      - general.general_rumble_right
+      left_stick_y:
+      - general.general_analog_point
+      left_stick_x:
+      - general.general_analog_spline
+      right_stick_y:
+      - general.general_analog_raw_deadzone
+      right_stick_x:
+      - general.general_analog_raw_inverted
+      left_trigger:
+      - general.general_analog_raw_inverted_trigger
+      right_trigger:
+      - general.general_analog_scaled_trigger
+  1:
+    name: Operator
+    bindings:
+      y_button:
+      - test_group.button_onpress
+      b_button:
+      - test_group.button_onrelease
+      a_button:
+      - test_group.button_toggle
+      x_button:
+      - test_group.button_while_pressed
+      start_button:
+      - test_group.button_while_released
+      back_button:
+      - general.general_button_onpress_other_cont
+      left_stick_y:
+      - general.general_analog_scaled_deadzone
+      left_stick_x:
+      - general.general_analog_scaled_no_deadzone
+      right_stick_y:
+      - general.general_analog_squared_deadzone
+      right_stick_x:
+      - test_group.analog
+      left_bumper:
+      - test_group.duplidcate_press
+      - general.general_duplidcate_press

@@ -4,7 +4,7 @@ actions:
     speed:
       description: speedy driver drive
       input_type: analog
-      trigger_mode: raw
+      trigger_mode: scaled
       deadband: 0.05
     rotation:
       description: rotate the robot
