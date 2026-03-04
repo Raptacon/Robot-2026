@@ -311,7 +311,7 @@ class ActionPanel(tk.Frame):
         row = 0
 
         # Name
-        self._name_label = ttk.Label(self._detail_frame, text="Name:")
+        self._name_label = ttk.Label(self._detail_frame, text="Name:", width=8)
         self._name_label.grid(row=row, column=0, sticky=tk.W, pady=2)
         self._name_var = tk.StringVar()
         self._name_entry = ttk.Entry(self._detail_frame,
@@ -321,7 +321,7 @@ class ActionPanel(tk.Frame):
 
         # Group
         row += 1
-        self._group_label = ttk.Label(self._detail_frame, text="Group:")
+        self._group_label = ttk.Label(self._detail_frame, text="Group:", width=8)
         self._group_label.grid(row=row, column=0, sticky=tk.W, pady=2)
         self._group_var = tk.StringVar()
         self._group_combo = ttk.Combobox(self._detail_frame,
@@ -329,19 +329,21 @@ class ActionPanel(tk.Frame):
         self._group_combo.grid(row=row, column=1, sticky=tk.EW, pady=2)
         self._group_var.trace_add("write", self._on_group_changed)
 
-        # Description
+        # Description (multi-line wrapped text)
         row += 1
-        self._desc_label = ttk.Label(self._detail_frame, text="Description:")
-        self._desc_label.grid(row=row, column=0, sticky=tk.W, pady=2)
-        self._desc_var = tk.StringVar()
-        self._desc_entry = ttk.Entry(self._detail_frame,
-                                     textvariable=self._desc_var, width=20)
-        self._desc_entry.grid(row=row, column=1, sticky=tk.EW, pady=2)
-        self._desc_var.trace_add("write", self._on_field_changed)
+        self._desc_label = ttk.Label(self._detail_frame, text="Description:",
+                                         width=8, wraplength=55)
+        self._desc_label.grid(row=row, column=0, sticky=tk.NW, pady=2)
+        self._desc_text = tk.Text(self._detail_frame, width=23, height=3,
+                                  wrap=tk.WORD, font=("TkDefaultFont", 9),
+                                  relief=tk.SUNKEN, borderwidth=1)
+        self._desc_text.grid(row=row, column=1, sticky=tk.EW, pady=2)
+        self._desc_text.bind("<<Modified>>", self._on_desc_modified)
 
         # Input Type
         row += 1
-        self._input_type_label = ttk.Label(self._detail_frame, text="Input Type:")
+        self._input_type_label = ttk.Label(self._detail_frame, text="Input Type:",
+                                                 width=8, wraplength=55)
         self._input_type_label.grid(row=row, column=0, sticky=tk.W, pady=2)
         self._input_type_var = tk.StringVar()
         self._input_type_combo = ttk.Combobox(
@@ -499,7 +501,7 @@ class ActionPanel(tk.Frame):
         _WidgetTooltip(self._group_label, _group_tip)
         _WidgetTooltip(self._group_combo, _group_tip)
         _WidgetTooltip(self._desc_label, _desc_tip)
-        _WidgetTooltip(self._desc_entry, _desc_tip)
+        _WidgetTooltip(self._desc_text, _desc_tip)
         _WidgetTooltip(self._input_type_label, _input_tip)
         _WidgetTooltip(self._input_type_combo, _input_tip)
         self._trigger_tooltip = _WidgetTooltip(self._trigger_label, _trigger_tip)
@@ -881,7 +883,9 @@ class ActionPanel(tk.Frame):
         try:
             self._name_var.set(action.name)
             self._group_var.set(action.group)
-            self._desc_var.set(action.description)
+            self._desc_text.delete("1.0", tk.END)
+            self._desc_text.insert("1.0", action.description)
+            self._desc_text.edit_modified(False)
             self._input_type_var.set(action.input_type.value)
             self._update_trigger_mode_options(action.input_type)
             self._trigger_var.set(action.trigger_mode.value)
@@ -1026,7 +1030,8 @@ class ActionPanel(tk.Frame):
             return False
 
         try:
-            action.description = self._desc_var.get()
+            action.description = self._desc_text.get(
+                "1.0", "end-1c").strip()
             action.input_type = InputType(self._input_type_var.get())
             if action.input_type == InputType.OUTPUT:
                 action.trigger_mode = EventTriggerMode.RAW
@@ -1045,6 +1050,15 @@ class ActionPanel(tk.Frame):
             return False
 
         return True
+
+    def _on_desc_modified(self, event=None):
+        """Handle description Text widget changes."""
+        if not self._desc_text.edit_modified():
+            return
+        self._desc_text.edit_modified(False)
+        if self._updating_form:
+            return
+        self._on_field_changed()
 
     def _on_field_changed(self, *args):
         """Handle changes to detail fields (not name or group)."""

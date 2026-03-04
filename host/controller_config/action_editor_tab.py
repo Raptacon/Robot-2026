@@ -9,6 +9,8 @@ and preview widget.
 import tkinter as tk
 from tkinter import ttk, messagebox
 
+from .action_panel import _WidgetTooltip
+
 from utils.controller.model import (
     ANALOG_EVENT_TRIGGER_MODES,
     ActionDefinition,
@@ -66,12 +68,14 @@ class ActionEditorTab(ttk.Frame):
                  on_unassign_action=None,
                  get_all_controllers=None,
                  get_compatible_inputs=None,
-                 is_action_bound=None):
+                 is_action_bound=None,
+                 get_all_actions=None):
         super().__init__(parent)
         _configure_styles()
 
         self._on_before_change = on_before_change
         self._on_field_changed = on_field_changed
+        self._get_all_actions = get_all_actions
         self._get_binding_info = get_binding_info
         self._on_assign_action = on_assign_action
         self._on_unassign_action = on_unassign_action
@@ -118,7 +122,91 @@ class ActionEditorTab(ttk.Frame):
         # --- Lower section: placeholders ---
         lower = ttk.Frame(self._vpaned)
         self._vpaned.add(lower, weight=1)
-        self._build_lower_placeholders(lower)
+        self._build_lower_section(lower)
+        self._setup_tooltips()
+
+    def _setup_tooltips(self):
+        """Attach tooltip help text to all labels and fields."""
+        # --- Common pane ---
+        _tip = _WidgetTooltip
+        name_tip = ("Action name (combined with group\n"
+                    "to form qualified name: group.name)")
+        _tip(self._name_label, name_tip)
+        _tip(self._name_entry, name_tip)
+
+        group_tip = ("Group this action belongs to.\n"
+                     "Type a new name to create a group.")
+        _tip(self._group_label, group_tip)
+        _tip(self._group_combo, group_tip)
+
+        desc_tip = ("Human-readable description of\n"
+                    "what this action does on the robot.")
+        _tip(self._desc_label, desc_tip)
+        _tip(self._desc_text, desc_tip)
+
+        type_tip = ("Input type determines available options:\n"
+                    "  button — digital on/off (incl. D-pad)\n"
+                    "  analog — continuous value (stick, trigger)\n"
+                    "  output — robot-to-driver (e.g. rumble)")
+        _tip(self._type_label, type_tip)
+
+        # --- Bindings pane ---
+        assign_tip = ("Select a controller input and click +\n"
+                      "to bind it to this action.")
+        _tip(self._assign_label, assign_tip)
+        _tip(self._assign_combo, assign_tip)
+        _tip(self._assign_btn, "Assign selected input to this action")
+        _tip(self._bound_listbox,
+             "Currently assigned inputs.\n"
+             "Double-click to remove a binding.")
+        _tip(self._unassign_btn,
+             "Remove the selected binding")
+
+        # --- Button options pane ---
+        btn_trigger_tip = ("When the button command fires:\n"
+                           "  on_true — while held\n"
+                           "  on_false — while released\n"
+                           "  toggle_on_true — toggle on press\n"
+                           "  toggle_on_false — toggle on release\n"
+                           "  when_pressed — once on press\n"
+                           "  when_released — once on release")
+        _tip(self._btn_trigger_label, btn_trigger_tip)
+        _tip(self._btn_trigger_combo, btn_trigger_tip)
+
+        # --- Analog options pane ---
+        analog_trigger_tip = ("How analog input is shaped:\n"
+                              "  raw — no processing\n"
+                              "  scaled — linear with scale\n"
+                              "  squared — quadratic response\n"
+                              "  spline — custom cubic hermite curve\n"
+                              "  segmented — custom piecewise-linear")
+        _tip(self._analog_trigger_label, analog_trigger_tip)
+        _tip(self._analog_trigger_combo, analog_trigger_tip)
+
+        deadband_tip = ("Dead zone around center (0-1).\n"
+                        "Input below this value reads as 0.")
+        _tip(self._deadband_label, deadband_tip)
+        _tip(self._deadband_spin, deadband_tip)
+
+        inv_tip = ("Negate the input value.\n"
+                   "Flips the axis direction.")
+        _tip(self._inversion_label, inv_tip)
+        _tip(self._inversion_check, inv_tip)
+
+        scale_tip = ("Multiply output by this value.\n"
+                     "Use to limit max speed or amplify input.")
+        _tip(self._scale_label, scale_tip)
+        _tip(self._scale_spin, scale_tip)
+
+        slew_tip = ("Max rate of change per second (0 = off).\n"
+                    "Smooths sudden input changes.")
+        _tip(self._slew_label, slew_tip)
+        _tip(self._slew_spin, slew_tip)
+
+        neg_slew_tip = ("Separate slew rate for decreasing values.\n"
+                        "Enable for asymmetric acceleration/braking.")
+        _tip(self._neg_slew_check, neg_slew_tip)
+        _tip(self._neg_slew_spin, neg_slew_tip)
 
     def _on_first_configure(self, event):
         """Set sash positions once the paned window has a real size."""
@@ -149,40 +237,47 @@ class ActionEditorTab(ttk.Frame):
             parent, text="Action", padding=6)
         parent.add(self._common_frame, weight=1)
 
+        self._common_frame.columnconfigure(1, weight=1)
+
         row = 0
         # Name
-        ttk.Label(self._common_frame, text="Name:").grid(
-            row=row, column=0, sticky=tk.W, pady=1)
+        self._name_label = ttk.Label(
+            self._common_frame, text="Name:", width=8)
+        self._name_label.grid(row=row, column=0, sticky=tk.W, pady=1)
         self._name_var = tk.StringVar()
         self._name_entry = ttk.Entry(
-            self._common_frame, textvariable=self._name_var, width=16)
+            self._common_frame, textvariable=self._name_var, width=17)
         self._name_entry.grid(row=row, column=1, sticky=tk.EW, pady=1)
         self._name_var.trace_add("write", self._on_field_changed_trace)
 
         # Group
         row += 1
-        ttk.Label(self._common_frame, text="Group:").grid(
-            row=row, column=0, sticky=tk.W, pady=1)
+        self._group_label = ttk.Label(
+            self._common_frame, text="Group:", width=8)
+        self._group_label.grid(row=row, column=0, sticky=tk.W, pady=1)
         self._group_var = tk.StringVar()
         self._group_combo = ttk.Combobox(
-            self._common_frame, textvariable=self._group_var, width=14)
+            self._common_frame, textvariable=self._group_var, width=15)
         self._group_combo.grid(row=row, column=1, sticky=tk.EW, pady=1)
         self._group_var.trace_add("write", self._on_field_changed_trace)
 
-        # Description
+        # Description (multi-line wrapped text)
         row += 1
-        ttk.Label(self._common_frame, text="Desc:").grid(
-            row=row, column=0, sticky=tk.W, pady=1)
-        self._desc_var = tk.StringVar()
-        self._desc_entry = ttk.Entry(
-            self._common_frame, textvariable=self._desc_var, width=16)
-        self._desc_entry.grid(row=row, column=1, sticky=tk.EW, pady=1)
-        self._desc_var.trace_add("write", self._on_field_changed_trace)
+        self._desc_label = ttk.Label(
+            self._common_frame, text="Desc:", width=8)
+        self._desc_label.grid(row=row, column=0, sticky=tk.NW, pady=1)
+        self._desc_text = tk.Text(
+            self._common_frame, width=1, height=3, wrap=tk.WORD,
+            font=("TkDefaultFont", 9), relief=tk.SUNKEN, borderwidth=1)
+        self._desc_text.grid(row=row, column=1, sticky=tk.NSEW, pady=1)
+        self._desc_text.bind(
+            "<<Modified>>", self._on_desc_modified)
 
         # Input Type (radio buttons, compact)
         row += 1
-        ttk.Label(self._common_frame, text="Type:").grid(
-            row=row, column=0, sticky=tk.NW, pady=1)
+        self._type_label = ttk.Label(
+            self._common_frame, text="Type:", width=8)
+        self._type_label.grid(row=row, column=0, sticky=tk.NW, pady=1)
         self._input_type_var = tk.StringVar()
         type_frame = ttk.Frame(self._common_frame)
         type_frame.grid(row=row, column=1, sticky=tk.W, pady=1)
@@ -207,8 +302,9 @@ class ActionEditorTab(ttk.Frame):
 
         # Assign input
         row = 0
-        ttk.Label(self._bindings_frame, text="Assign:").grid(
-            row=row, column=0, sticky=tk.W, pady=1)
+        self._assign_label = ttk.Label(
+            self._bindings_frame, text="Assign:")
+        self._assign_label.grid(row=row, column=0, sticky=tk.W, pady=1)
         assign_frame = ttk.Frame(self._bindings_frame)
         assign_frame.grid(row=row, column=1, sticky=tk.EW, pady=1)
         self._assign_var = tk.StringVar()
@@ -263,8 +359,9 @@ class ActionEditorTab(ttk.Frame):
             style="Inactive.TLabelframe")
 
         row = 0
-        ttk.Label(self._button_frame, text="Trigger Mode:").grid(
-            row=row, column=0, sticky=tk.W, pady=2)
+        self._btn_trigger_label = ttk.Label(
+            self._button_frame, text="Trigger Mode:")
+        self._btn_trigger_label.grid(row=row, column=0, sticky=tk.W, pady=2)
         self._btn_trigger_var = tk.StringVar()
         self._btn_trigger_combo = ttk.Combobox(
             self._button_frame, textvariable=self._btn_trigger_var,
@@ -290,7 +387,9 @@ class ActionEditorTab(ttk.Frame):
             style="Inactive.TLabelframe")
 
         row = 0
-        ttk.Label(self._analog_frame, text="Trigger Mode:").grid(
+        self._analog_trigger_label = ttk.Label(
+            self._analog_frame, text="Trigger Mode:")
+        self._analog_trigger_label.grid(
             row=row, column=0, sticky=tk.W, pady=2)
         self._analog_trigger_var = tk.StringVar()
         self._analog_trigger_combo = ttk.Combobox(
@@ -303,8 +402,9 @@ class ActionEditorTab(ttk.Frame):
             "write", self._on_field_changed_trace)
 
         row += 1
-        ttk.Label(self._analog_frame, text="Deadband:").grid(
-            row=row, column=0, sticky=tk.W, pady=2)
+        self._deadband_label = ttk.Label(
+            self._analog_frame, text="Deadband:")
+        self._deadband_label.grid(row=row, column=0, sticky=tk.W, pady=2)
         self._deadband_var = tk.StringVar(value="0.0")
         self._deadband_spin = ttk.Spinbox(
             self._analog_frame, textvariable=self._deadband_var,
@@ -313,8 +413,9 @@ class ActionEditorTab(ttk.Frame):
         self._deadband_var.trace_add("write", self._on_field_changed_trace)
 
         row += 1
-        ttk.Label(self._analog_frame, text="Inversion:").grid(
-            row=row, column=0, sticky=tk.W, pady=2)
+        self._inversion_label = ttk.Label(
+            self._analog_frame, text="Inversion:")
+        self._inversion_label.grid(row=row, column=0, sticky=tk.W, pady=2)
         self._inversion_var = tk.BooleanVar(value=False)
         self._inversion_check = ttk.Checkbutton(
             self._analog_frame, variable=self._inversion_var)
@@ -322,8 +423,9 @@ class ActionEditorTab(ttk.Frame):
         self._inversion_var.trace_add("write", self._on_field_changed_trace)
 
         row += 1
-        ttk.Label(self._analog_frame, text="Scale:").grid(
-            row=row, column=0, sticky=tk.W, pady=2)
+        self._scale_label = ttk.Label(
+            self._analog_frame, text="Scale:")
+        self._scale_label.grid(row=row, column=0, sticky=tk.W, pady=2)
         self._scale_var = tk.StringVar(value="1.0")
         self._scale_spin = ttk.Spinbox(
             self._analog_frame, textvariable=self._scale_var,
@@ -332,8 +434,9 @@ class ActionEditorTab(ttk.Frame):
         self._scale_var.trace_add("write", self._on_field_changed_trace)
 
         row += 1
-        ttk.Label(self._analog_frame, text="Slew Rate:").grid(
-            row=row, column=0, sticky=tk.W, pady=2)
+        self._slew_label = ttk.Label(
+            self._analog_frame, text="Slew Rate:")
+        self._slew_label.grid(row=row, column=0, sticky=tk.W, pady=2)
         self._slew_var = tk.StringVar(value="0.0")
         self._slew_spin = ttk.Spinbox(
             self._analog_frame, textvariable=self._slew_var,
@@ -372,23 +475,31 @@ class ActionEditorTab(ttk.Frame):
 
     # --- Lower Section Placeholders ---
 
-    def _build_lower_placeholders(self, parent):
+    def _build_lower_section(self, parent):
+        from .curve_editor_widget import CurveEditorWidget
+
         lower_paned = ttk.PanedWindow(parent, orient=tk.HORIZONTAL)
         lower_paned.pack(fill=tk.BOTH, expand=True)
 
+        # Left: Curve Editor
         curve_frame = ttk.LabelFrame(
-            lower_paned, text="Curve Editor", padding=10)
+            lower_paned, text="Curve Editor", padding=4)
         lower_paned.add(curve_frame, weight=1)
-        ttk.Label(
-            curve_frame, text="Available in Phase 2",
-            foreground="#888888", font=("TkDefaultFont", 10),
-        ).pack(expand=True)
 
+        self._curve_editor = CurveEditorWidget(
+            curve_frame,
+            on_before_change=self._on_before_change,
+            on_curve_changed=self._on_curve_changed,
+            get_other_curves=self._get_other_curves,
+        )
+        self._curve_editor.pack(fill=tk.BOTH, expand=True)
+
+        # Right: Preview placeholder (Phase 3)
         preview_frame = ttk.LabelFrame(
             lower_paned, text="Preview", padding=10)
         lower_paned.add(preview_frame, weight=1)
         ttk.Label(
-            preview_frame, text="Available in Phase 2",
+            preview_frame, text="Available in Phase 3",
             foreground="#888888", font=("TkDefaultFont", 10),
         ).pack(expand=True)
 
@@ -406,7 +517,9 @@ class ActionEditorTab(ttk.Frame):
         try:
             self._name_var.set(action.name)
             self._group_var.set(action.group)
-            self._desc_var.set(action.description)
+            self._desc_text.delete("1.0", tk.END)
+            self._desc_text.insert("1.0", action.description)
+            self._desc_text.edit_modified(False)
             self._input_type_var.set(action.input_type.value)
 
             # Trigger mode into the correct pane
@@ -433,6 +546,7 @@ class ActionEditorTab(ttk.Frame):
 
         self._update_pane_states()
         self._refresh_bindings()
+        self._curve_editor.load_action(action, qname)
 
     def clear(self):
         """Clear all panes (no action selected)."""
@@ -443,7 +557,8 @@ class ActionEditorTab(ttk.Frame):
         try:
             self._name_var.set("")
             self._group_var.set("")
-            self._desc_var.set("")
+            self._desc_text.delete("1.0", tk.END)
+            self._desc_text.edit_modified(False)
             self._input_type_var.set("")
             self._btn_trigger_var.set("")
             self._analog_trigger_var.set("")
@@ -461,10 +576,47 @@ class ActionEditorTab(ttk.Frame):
         self._assign_combo.config(values=[])
         self._assign_map.clear()
         self._set_all_enabled(False)
+        self._curve_editor.clear()
 
     def refresh_bindings(self):
         """Re-query binding info for the current action."""
         self._refresh_bindings()
+
+    # ------------------------------------------------------------------
+    # Curve Editor Callbacks
+    # ------------------------------------------------------------------
+
+    def _on_curve_changed(self):
+        """Called by CurveEditorWidget when curve data is modified."""
+        # The curve editor may have changed action.scale (via scale handle
+        # drag). Sync the spinbox so _save_to_action won't overwrite it.
+        if self._action:
+            self._updating_form = True
+            try:
+                self._scale_var.set(str(self._action.scale))
+            finally:
+                self._updating_form = False
+        if self._on_field_changed:
+            self._on_field_changed()
+
+    def _get_other_curves(self, mode: str) -> dict[str, list[dict]]:
+        """Return curves from other actions for 'Copy from...'."""
+        if not self._get_all_actions:
+            return {}
+        key = "spline_points" if mode == "spline" else "segment_points"
+        all_actions = self._get_all_actions()
+        curves = {}
+        for qname, action in all_actions.items():
+            if qname != self._qname:
+                pts = action.extra.get(key)
+                if pts:
+                    curves[qname] = pts
+        return curves
+
+    def _update_curve_editor(self):
+        """Refresh the curve editor when action parameters change."""
+        if self._action:
+            self._curve_editor.load_action(self._action, self._qname)
 
     # ------------------------------------------------------------------
     # Pane State Management
@@ -632,6 +784,18 @@ class ActionEditorTab(ttk.Frame):
         if self._updating_form or not self._action:
             return
         self._save_to_action()
+        self._update_curve_editor()
+        if self._on_field_changed:
+            self._on_field_changed()
+
+    def _on_desc_modified(self, event=None):
+        """Handle description Text widget changes."""
+        if not self._desc_text.edit_modified():
+            return
+        self._desc_text.edit_modified(False)
+        if self._updating_form or not self._action:
+            return
+        self._save_to_action()
         if self._on_field_changed:
             self._on_field_changed()
 
@@ -713,7 +877,7 @@ class ActionEditorTab(ttk.Frame):
 
         new_name = self._name_var.get().strip()
         new_group = self._group_var.get().strip()
-        action.description = self._desc_var.get().strip()
+        action.description = self._desc_text.get("1.0", "end-1c").strip()
         action.name = new_name if new_name else action.name
         action.group = new_group if new_group else action.group
 

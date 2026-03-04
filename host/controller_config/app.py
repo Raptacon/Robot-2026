@@ -317,6 +317,7 @@ class ControllerConfigApp(tk.Tk):
             get_all_controllers=self._get_all_controllers,
             get_compatible_inputs=self._get_compatible_inputs_with_display,
             is_action_bound=self._is_action_bound_to,
+            get_all_actions=lambda: self._config.actions,
         )
         self._notebook.add(self._action_editor, text="Action Editor")
 
