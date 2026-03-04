@@ -26,6 +26,10 @@ jobs:
 
     runs-on: ${{ matrix.os }}
 
+    env:
+      CERT_BASE64: ${{ secrets.CODE_SIGN_CERT }}
+      CERT_PASSWORD: ${{ secrets.CODE_SIGN_PASSWORD }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -48,11 +52,8 @@ jobs:
           pyinstaller ${{ matrix.spec }} --distpath ../dist --workpath ../build/gui --clean -y
 
       - name: Sign EXE (Windows, if cert configured)
-        if: matrix.sign && runner.os == 'Windows' && secrets.CODE_SIGN_CERT != ''
+        if: matrix.sign && runner.os == 'Windows' && env.CERT_BASE64 != ''
         shell: pwsh
-        env:
-          CERT_BASE64: ${{ secrets.CODE_SIGN_CERT }}
-          CERT_PASSWORD: ${{ secrets.CODE_SIGN_PASSWORD }}
         run: |
           $certBytes = [Convert]::FromBase64String($env:CERT_BASE64)
           [IO.File]::WriteAllBytes("$env:RUNNER_TEMP\cert.pfx", $certBytes)
