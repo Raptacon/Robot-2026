@@ -61,7 +61,6 @@ class RobotShooter:
         commands2.CommandScheduler.getInstance().cancelAll()
 
         # For tuning robot
-        # Create methods to set each motor reference and remove parallel command
         self.xbox.x().onTrue(        
             commands2.cmd.runOnce(lambda: self.shooter.setAllMotorReferences(0), self.shooter)
         )
