@@ -3,6 +3,18 @@ import rev
 from typing import Dict
 from math import sqrt
 from math import floor
+from enum import StrEnum
+
+
+class ShooterMotorNames(StrEnum):
+    """
+    Create consistent names for shooter motor references
+    """
+
+    FEED = "feed"
+    LEAD_FLYWHEEL = "lead"
+    FOLLOWER_FLYWHEEL = "follower"
+
 
 class zShooter():
     def __init__(self):
@@ -16,14 +28,14 @@ class zShooter():
         self.lookupTable = ([1000]*25) + ([2000]*25) + ([3000]*25) + ([4000]*25)
 
         # Instantiate motors
-        # TODO: set a f
+        # TODO: set a follower motor
         self.feedMotor = rev.SparkFlex(30, rev.SparkLowLevel.MotorType.kBrushless)
         self.leadFlywheelMotor = rev.SparkFlex(10, rev.SparkLowLevel.MotorType.kBrushless)
         self.followerFlywheelMotor = rev.SparkMax(6, rev.SparkLowLevel.MotorType.kBrushless)
         self.motors: Dict[str, rev.SparkFlex | rev.SparkMax] = {
-            'feed': self.feedMotor,
-            'lead': self.leadFlywheelMotor,
-            'follower': self.followerFlywheelMotor
+            ShooterMotorNames.FEED: self.feedMotor,
+            ShooterMotorNames.LEAD_FLYWHEEL: self.leadFlywheelMotor,
+            ShooterMotorNames.FOLLOWER_FLYWHEEL: self.followerFlywheelMotor
         }
 
         # Get encoders from each motor to read data
@@ -31,9 +43,9 @@ class zShooter():
         self.leadFlywheelEncoder = self.leadFlywheelMotor.getEncoder()
         self.followerFlywheelEncoder = self.followerFlywheelMotor.getEncoder()
         self.encoders = {
-            'feed': self.feedEncoder,
-            'lead': self.leadFlywheelEncoder,
-            'follower': self.followerFlywheelEncoder
+            ShooterMotorNames.FEED: self.feedEncoder,
+            ShooterMotorNames.LEAD_FLYWHEEL: self.leadFlywheelEncoder,
+            ShooterMotorNames.FOLLOWER_FLYWHEEL: self.followerFlywheelEncoder
         }
 
         # Create closed loop controllers to be able to set a reference/goal for pid
@@ -41,9 +53,9 @@ class zShooter():
         self.leadFlywheelPID = self.leadFlywheelMotor.getClosedLoopController()
         self.followerFlywheelPID = self.followerFlywheelMotor.getClosedLoopController()
         self.PIDs = {
-            'feed': self.feedPID,
-            'lead': self.leadFlywheelPID,
-            'follower': self.followerFlywheelPID
+            ShooterMotorNames.FEED: self.feedPID,
+            ShooterMotorNames.LEAD_FLYWHEEL: self.leadFlywheelPID,
+            ShooterMotorNames.FOLLOWER_FLYWHEEL: self.followerFlywheelPID
         }
 
         # Set up configs for each motor
@@ -148,10 +160,6 @@ class zShooter():
             newRPM = max([-(a) + sqrt(discriminant) / (2*b), -(a) - sqrt(discriminant) / (2*b)] )
             self.RPM = newRPM + self.offsetAmount
 
-    # def calculate_RPM(self, a, b, c, d, distance, angle):
-    #     self.angle = -(a) + sqrt(a**2 - ((4*b)*(c*angle + d*angle**2)) + 4*b*distance ) / 2*b
-    #     return self.angle
-
     def getLookupTable(self, distance: float):
         """
         Get the RPM needed to shoot the ball at a specified distance
@@ -222,6 +230,6 @@ class zShooter():
         return self.offsetAmount
 
     def periodic(self):
-        self.setMotorReference('feed', self.RPM)
-        self.setMotorReference('lead', self.RPM)
-        self.setMotorReference('follower', self.RPM)
+        self.setMotorReference(ShooterMotorNames.FEED, self.RPM)
+        self.setMotorReference(ShooterMotorNames.LEAD_FLYWHEEL, self.RPM)
+        self.setMotorReference(ShooterMotorNames.FOLLOWER_FLYWHEEL, self.RPM)
