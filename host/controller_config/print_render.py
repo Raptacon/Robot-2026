@@ -19,13 +19,10 @@ from .controller_canvas import (
     LINE_COLOR, BOX_OUTLINE, BOX_FILL, BOX_FILL_ASSIGNED,
     UNASSIGNED_TEXT, UNASSIGNED_COLOR, ASSIGNED_COLOR,
     AXIS_INDICATOR_COLORS,
+    _REF_BOX_WIDTH, _REF_BOX_HEIGHT, _REF_BOX_PAD,
+    _REF_LABEL_FONT, _REF_ACTION_FONT, _REF_PLUS_FONT,
+    _REF_LABEL_Y, _REF_ACTION_STEP,
 )
-
-# Print-specific box dimensions (larger than screen for readability)
-BOX_WIDTH = 340
-BOX_HEIGHT = 72
-BOX_PAD = 10
-ACTION_LINE_H = 46  # vertical spacing per action line
 
 try:
     import cairosvg
@@ -147,13 +144,8 @@ def render_controller(
     page = Image.new("RGB", (width, height), "white")
     draw = ImageDraw.Draw(page)
 
-    # Fonts
-    title_font = _get_font(28, bold=True)
-    label_font = _get_font(22, bold=True)
-    action_font = _get_font(28, bold=True)
-    unassigned_font = _get_font(24)
-
     # Title
+    title_font = _get_font(28, bold=True)
     title = ctrl.name or f"Controller {ctrl.port}"
     title_text = f"{title} (Port {ctrl.port})"
     draw.text((MARGIN, 4), title_text, fill="#333333", font=title_font)
@@ -168,7 +160,31 @@ def render_controller(
     ctrl_img = _load_controller_image()
     img_w, img_h = ctrl_img.size
 
-    pad_x = BOX_WIDTH + 30
+    # First pass: estimate image scale to compute label sizes
+    est_pad_x = _REF_BOX_WIDTH + 30
+    est_avail_w = area_w - 2 * est_pad_x
+    est_avail_h = area_h - 40
+    img_scale = min(est_avail_w / img_w, est_avail_h / img_h, 1.5)
+
+    # Compute scaled label dimensions (same formula as controller_canvas.py)
+    _PRINT_SCALE_BOOST = 1.75
+    s = max(img_scale * _PRINT_SCALE_BOOST, 0.15)
+    box_w = int(_REF_BOX_WIDTH * s)
+    box_h = int(_REF_BOX_HEIGHT * s)
+    box_pad = max(2, int(_REF_BOX_PAD * s))
+    label_font_size = max(6, int(_REF_LABEL_FONT * s))
+    action_font_size = max(7, int(_REF_ACTION_FONT * s))
+    plus_font_size = max(10, int(_REF_PLUS_FONT * s))
+    label_y_offset = max(10, int(_REF_LABEL_Y * s))
+    action_step = max(12, int(_REF_ACTION_STEP * s))
+
+    # Fonts scaled to match label dimensions
+    label_font = _get_font(label_font_size, bold=True)
+    action_font = _get_font(action_font_size, bold=True)
+    unassigned_font = _get_font(label_font_size)
+
+    # Second pass: use computed box_w for image padding
+    pad_x = box_w + 30
     avail_w = area_w - 2 * pad_x
     avail_h = area_h - 40
 
@@ -196,15 +212,15 @@ def render_controller(
         else:
             lx = img_left + inp.label_x * new_w
             ly = img_top + inp.label_y * new_h
-        lx = max(2, min(lx, width - BOX_WIDTH - 2))
-        ly = max(2, min(ly, height - BOX_HEIGHT - 2))
+        lx = max(2, min(lx, width - box_w - 2))
+        ly = max(2, min(ly, height - box_h - 2))
         return lx, ly
 
     # Draw rumble icons on the controller
     rumble_icon = _load_rumble_icon()
     if rumble_icon is None:
         rumble_icon = _make_rumble_fallback(64)
-    icon_size = BOX_WIDTH // 4
+    icon_size = box_w // 4
     rumble_resized = rumble_icon.resize((icon_size, icon_size), Image.LANCZOS)
     for name in ["rumble_left", "rumble_both", "rumble_right"]:
         inp = XBOX_INPUT_MAP.get(name)
@@ -261,11 +277,11 @@ def render_controller(
                 dpad_stack_origin = (lx, ly)
             else:
                 lx, ly = (dpad_stack_origin[0],
-                           dpad_stack_origin[1] + dpad_stack_idx * BOX_HEIGHT)
+                           dpad_stack_origin[1] + dpad_stack_idx * box_h)
             dpad_stack_idx += 1
 
-        box_cx = lx + BOX_WIDTH / 2
-        box_cy = ly + BOX_HEIGHT / 2
+        box_cx = lx + box_w / 2
+        box_cy = ly + box_h / 2
 
         # Leader line — skip for grouped inputs (connector bar drawn below)
         is_grouped = (inp.name.startswith("pov_")
@@ -277,17 +293,16 @@ def render_controller(
                       fill=LINE_COLOR, width=line_w)
 
         fill = BOX_FILL_ASSIGNED if has_actions else BOX_FILL
-        label_h = 36  # space for input label row
         if is_dpad:
-            total_height = BOX_HEIGHT
+            total_height = box_h
         elif has_actions:
-            total_height = label_h + len(actions) * ACTION_LINE_H
+            total_height = label_y_offset + len(actions) * action_step
         else:
-            total_height = BOX_HEIGHT
+            total_height = box_h
 
         # Box background
         draw.rectangle(
-            [lx, ly, lx + BOX_WIDTH, ly + total_height],
+            [lx, ly, lx + box_w, ly + total_height],
             fill=fill, outline=BOX_OUTLINE, width=1,
         )
 
@@ -295,7 +310,7 @@ def render_controller(
         for prefix, _ in connector_groups:
             if inp.name.startswith(prefix):
                 group_boxes[prefix].append(
-                    (lx, ly, lx + BOX_WIDTH, ly + total_height))
+                    (lx, ly, lx + box_w, ly + total_height))
 
         # Axis color indicator
         axis_tag = None
@@ -307,13 +322,13 @@ def render_controller(
                        if axis_tag else "#555555")
 
         # Input icon (scaled to box height)
-        icon_size = BOX_HEIGHT - 12
-        text_x = lx + BOX_PAD
+        ico_size = max(8, box_h - int(8 * s))
+        text_x = lx + box_pad
         if icon_loader:
-            icon = icon_loader.get_pil_icon(inp.name, icon_size)
+            icon = icon_loader.get_pil_icon(inp.name, ico_size)
             if icon:
-                page.paste(icon, (int(lx + BOX_PAD), int(ly + 1)), icon)
-                text_x = lx + BOX_PAD + icon_size + 4
+                page.paste(icon, (int(lx + box_pad), int(ly + 1)), icon)
+                text_x = lx + box_pad + ico_size + 4
 
         if is_dpad:
             # D-pad compact: icon + label + action on one line
@@ -325,8 +340,8 @@ def render_controller(
                       font=action_font if has_actions else label_font)
             # Large "+" when extra bindings are hidden
             if has_actions and len(all_actions) > 1:
-                plus_font = _get_font(48)
-                draw.text((lx + BOX_WIDTH + 6, ly - 10), "+",
+                plus_font = _get_font(plus_font_size)
+                draw.text((lx + box_w + 6, ly - 10), "+",
                           fill=ASSIGNED_COLOR, font=plus_font)
         else:
             draw.text((text_x, ly + 1), inp.display_name,
@@ -336,15 +351,16 @@ def render_controller(
             if has_actions:
                 for i, action in enumerate(actions):
                     draw.text(
-                        (lx + BOX_PAD, ly + label_h + i * ACTION_LINE_H),
+                        (lx + box_pad,
+                         ly + label_y_offset + i * action_step),
                         action, fill=ASSIGNED_COLOR, font=action_font)
                 # "+" when actions are truncated
                 if len(all_actions) > len(actions):
-                    plus_font = _get_font(48)
-                    draw.text((lx + BOX_WIDTH + 6, ly - 10), "+",
+                    plus_font = _get_font(plus_font_size)
+                    draw.text((lx + box_w + 6, ly - 10), "+",
                               fill=ASSIGNED_COLOR, font=plus_font)
             else:
-                draw.text((lx + BOX_PAD, ly + label_h),
+                draw.text((lx + box_pad, ly + label_y_offset),
                           UNASSIGNED_TEXT, fill=UNASSIGNED_COLOR,
                           font=unassigned_font)
 
