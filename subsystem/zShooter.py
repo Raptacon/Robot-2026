@@ -28,7 +28,6 @@ class zShooter(Subsystem):
         self.lookupTable = ([1000]*25) + ([2000]*25) + ([3000]*25) + ([4000]*25)
 
         # Instantiate motors
-        # TODO: set a follower motor
         self.feedMotor = rev.SparkFlex(30, rev.SparkLowLevel.MotorType.kBrushless)
         self.leadFlywheelMotor = rev.SparkFlex(32, rev.SparkLowLevel.MotorType.kBrushless)
         self.followerFlywheelMotor = rev.SparkMax(33, rev.SparkLowLevel.MotorType.kBrushless)
@@ -61,9 +60,9 @@ class zShooter(Subsystem):
         # Set up configs for each motor
         self.configureMotor(self.feedMotor, self.robotConfigs.shooterFeedMotorPIDF, self.robotConfigs.shooterInverted[0])
         self.configureMotor(self.leadFlywheelMotor, self.robotConfigs.shooterLeadMotorPIDF, self.robotConfigs.shooterInverted[1])
-        self.configureMotor(self.followerFlywheelMotor, self.robotConfigs.shooterFollowerMotorPIDF, self.robotConfigs.shooterInverted[2])
+        self.configureMotor(self.followerFlywheelMotor, self.robotConfigs.shooterFollowerMotorPIDF, self.robotConfigs.shooterInverted[2], self.leadFlywheelMotor)
 
-    def configureMotor(self, motor: rev.SparkFlex | rev.SparkMax, pidf: tuple, invert: bool):
+    def configureMotor(self, motor: rev.SparkFlex | rev.SparkMax, pidf: tuple, invert: bool, leader: rev.SparkFlex | rev.SparkMax = None):
         """
         Configure the PIDF constants and inversion for the given motor.
         
@@ -78,6 +77,9 @@ class zShooter(Subsystem):
         configs = rev.SparkBaseConfig()
         configs.closedLoop.pidf(*pidf, rev.ClosedLoopSlot.kSlot0)
         configs.inverted(invert)
+        if leader is not None:
+            configs.follow(leader=leader)
+
         motor.configure(configs, rev.ResetMode.kNoResetSafeParameters, rev.PersistMode.kPersistParameters)
 
     def setMotorVoltage(self, motorName: str, voltage: float):
