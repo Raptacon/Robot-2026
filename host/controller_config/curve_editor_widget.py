@@ -16,10 +16,29 @@ from tkinter import ttk, filedialog, messagebox
 
 import yaml
 
+from host.controller_config.colors import (
+    BG_INACTIVE,
+    BG_WHITE,
+    CURVE_LINE,
+    ENDPOINT_FILL,
+    GRID_AXIS,
+    GRID_MAJOR,
+    GRID_MINOR,
+    HANDLE_FILL,
+    HANDLE_LINE,
+    LABEL_COLOR,
+    MIRROR_LINE,
+    POINT_FILL,
+    POINT_OUTLINE,
+)
+from host.controller_config.editor_utils import UndoStack, nice_grid_step
 from utils.controller.model import (
     ActionDefinition,
     EventTriggerMode,
+    EXTRA_SEGMENT_POINTS,
+    EXTRA_SPLINE_POINTS,
     InputType,
+    TRIGGER_INPUTS,
 )
 from utils.math.curves import (
     evaluate_segments,
@@ -40,23 +59,10 @@ _HANDLE_RADIUS = 5
 _CURVE_SAMPLES_PER_SEG = 80
 _VIS_SAMPLES = 200          # samples for visualization curves
 
-# Colors
-_BG = "#ffffff"
-_BG_INACTIVE = "#f0f0f0"
-_GRID = "#e8e8e8"
-_GRID_MAJOR = "#c8c8c8"
-_AXIS = "#909090"
-_CURVE = "#2060c0"
-_POINT_FILL = "#c02020"
-_POINT_OUTLINE = "#801010"
-_ENDPOINT_FILL = "#802020"
-_HANDLE_FILL = "#40a040"
-_HANDLE_LINE = "#80c080"
-_LABEL = "#505050"
+# File-specific colors (shared palette in colors.py)
 _DEADBAND_FILL = "#e0e0e0"
 _SCALE_HANDLE = "#d08020"
 _SCALE_HANDLE_OUTLINE = "#906010"
-_MIRROR_FILL = "#c0a0a0"
 _TRACKER_FILL = "#ff6600"
 _TRACKER_RADIUS = 4
 _TRACKER_TAG = "tracker"
@@ -100,7 +106,7 @@ class CurveEditorWidget(ttk.Frame):
         self._monotonic = True
 
         # Undo stack (max 30)
-        self._undo_stack: list[list[dict]] = []
+        self._undo_stack = UndoStack()
 
         # Canvas sizing (computed on configure)
         self._margin_x = 35
@@ -169,7 +175,7 @@ class CurveEditorWidget(ttk.Frame):
         self._wide_range_cb.pack(side=tk.LEFT, padx=3)
 
         # Canvas (fills remaining space)
-        self._canvas = tk.Canvas(self, bg=_BG_INACTIVE,
+        self._canvas = tk.Canvas(self, bg=BG_INACTIVE,
                                  highlightthickness=0)
         self._canvas.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
 
@@ -322,7 +328,7 @@ class CurveEditorWidget(ttk.Frame):
     # ------------------------------------------------------------------
 
     # Input names that only produce 0..1 (Xbox triggers)
-    _TRIGGER_INPUTS = {"left_trigger", "right_trigger"}
+    _TRIGGER_INPUTS = TRIGGER_INPUTS
 
     def load_action(self, action: ActionDefinition, qname: str,
                     bound_inputs: list[str] | None = None):
@@ -361,17 +367,17 @@ class CurveEditorWidget(ttk.Frame):
 
         # Load points for editable modes
         if self._mode == "spline":
-            pts = action.extra.get("spline_points")
+            pts = action.extra.get(EXTRA_SPLINE_POINTS)
             if not pts:
                 pts = default_spline_points()
-                action.extra["spline_points"] = pts
+                action.extra[EXTRA_SPLINE_POINTS] = pts
             self._points = [dict(p) for p in pts]
             self._points.sort(key=lambda p: p["x"])
         elif self._mode == "segment":
-            pts = action.extra.get("segment_points")
+            pts = action.extra.get(EXTRA_SEGMENT_POINTS)
             if not pts:
                 pts = default_segment_points()
-                action.extra["segment_points"] = pts
+                action.extra[EXTRA_SEGMENT_POINTS] = pts
             self._points = [{"x": p["x"], "y": p["y"]} for p in pts]
             self._points.sort(key=lambda p: p["x"])
         else:
@@ -461,7 +467,7 @@ class CurveEditorWidget(ttk.Frame):
             self._vis_toolbar.pack_forget()
 
     def _update_canvas_bg(self):
-        bg = _BG_INACTIVE if self._mode is None else _BG
+        bg = BG_INACTIVE if self._mode is None else BG_WHITE
         self._canvas.configure(bg=bg)
         cursor = "crosshair" if self._mode in ("spline", "segment") else ""
         self._canvas.configure(cursor=cursor)
@@ -567,19 +573,7 @@ class CurveEditorWidget(ttk.Frame):
 
     def _nice_grid_step(self, span: float) -> float:
         """Choose a nice gridline step for the given data span."""
-        if span <= 0:
-            return 0.5
-        raw = span / 4  # aim for ~4 gridlines
-        mag = 10 ** math.floor(math.log10(raw))
-        norm = raw / mag
-        if norm < 1.5:
-            return mag
-        elif norm < 3.5:
-            return 2 * mag
-        elif norm < 7.5:
-            return 5 * mag
-        else:
-            return 10 * mag
+        return nice_grid_step(span)
 
     def _draw_grid(self):
         c = self._canvas
@@ -596,7 +590,7 @@ class CurveEditorWidget(ttk.Frame):
             is_major = abs(v * 2) % 1 < 0.01
             if small and not is_axis and not is_major:
                 continue
-            color = _AXIS if is_axis else (_GRID_MAJOR if is_major else _GRID)
+            color = GRID_AXIS if is_axis else (GRID_MAJOR if is_major else GRID_MINOR)
             w = 2 if is_axis else 1
             c.create_line(cx, self._margin_y,
                           cx, self._margin_y + self._plot_h,
@@ -610,7 +604,7 @@ class CurveEditorWidget(ttk.Frame):
         while v <= self._y_max + y_step * 0.01:
             _, cy = self._d2c(0, v)
             is_axis = abs(v) < y_step * 0.01
-            color = _AXIS if is_axis else _GRID_MAJOR
+            color = GRID_AXIS if is_axis else GRID_MAJOR
             w = 2 if is_axis else 1
             c.create_line(self._margin_x, cy,
                           self._margin_x + self._plot_w, cy,
@@ -628,14 +622,14 @@ class CurveEditorWidget(ttk.Frame):
             for v in x_labels:
                 cx, _ = self._d2c(v, 0)
                 c.create_text(cx, self._margin_y + self._plot_h + 12,
-                              text=f"{v:g}", fill=_LABEL,
+                              text=f"{v:g}", fill=LABEL_COLOR,
                               font=("TkDefaultFont", font_size))
             # Y labels
             v = y_start
             while v <= self._y_max + y_step * 0.01:
                 _, cy = self._d2c(0, v)
                 c.create_text(self._margin_x - 18, cy,
-                              text=f"{v:g}", fill=_LABEL,
+                              text=f"{v:g}", fill=LABEL_COLOR,
                               font=("TkDefaultFont", font_size))
                 v += y_step
 
@@ -699,7 +693,7 @@ class CurveEditorWidget(ttk.Frame):
             cx, cy = self._d2c(x, y)
             coords.extend([cx, cy])
         if len(coords) >= 4:
-            c.create_line(*coords, fill=_CURVE, width=2, smooth=False)
+            c.create_line(*coords, fill=CURVE_LINE, width=2, smooth=False)
 
     def _draw_deadband_band(self):
         """Draw shaded deadband region."""
@@ -741,7 +735,7 @@ class CurveEditorWidget(ttk.Frame):
             coords.extend([cx, cy])
         if len(coords) >= 4:
             self._canvas.create_line(
-                *coords, fill=_CURVE, width=2, smooth=False)
+                *coords, fill=CURVE_LINE, width=2, smooth=False)
 
     def _draw_handles(self):
         c = self._canvas
@@ -750,17 +744,17 @@ class CurveEditorWidget(ttk.Frame):
             cx, cy = self._d2c(pt["x"], pt["y"] * s)
             hdx, hdy = self._tangent_offset(pt["tangent"])
             c.create_line(cx - hdx, cy - hdy, cx + hdx, cy + hdy,
-                          fill=_HANDLE_LINE, width=1, dash=(4, 4))
+                          fill=HANDLE_LINE, width=1, dash=(4, 4))
             if i > 0:
                 hx, hy = cx - hdx, cy - hdy
                 c.create_oval(hx - _HANDLE_RADIUS, hy - _HANDLE_RADIUS,
                               hx + _HANDLE_RADIUS, hy + _HANDLE_RADIUS,
-                              fill=_HANDLE_FILL, outline="#308030")
+                              fill=HANDLE_FILL, outline="#308030")
             if i < len(self._points) - 1:
                 hx, hy = cx + hdx, cy + hdy
                 c.create_oval(hx - _HANDLE_RADIUS, hy - _HANDLE_RADIUS,
                               hx + _HANDLE_RADIUS, hy + _HANDLE_RADIUS,
-                              fill=_HANDLE_FILL, outline="#308030")
+                              fill=HANDLE_FILL, outline="#308030")
 
     # --- Segment Mode ---
 
@@ -775,7 +769,7 @@ class CurveEditorWidget(ttk.Frame):
             coords.extend([cx, cy])
         if len(coords) >= 4:
             self._canvas.create_line(
-                *coords, fill=_CURVE, width=2, smooth=False)
+                *coords, fill=CURVE_LINE, width=2, smooth=False)
 
     # --- Points (shared by editable modes) ---
 
@@ -788,14 +782,14 @@ class CurveEditorWidget(ttk.Frame):
             is_mirror = (self._symmetric
                          and pt["x"] < -_MIN_X_GAP / 2)
             if is_mirror:
-                fill = _MIRROR_FILL
+                fill = MIRROR_LINE
             elif is_endpoint:
-                fill = _ENDPOINT_FILL
+                fill = ENDPOINT_FILL
             else:
-                fill = _POINT_FILL
+                fill = POINT_FILL
             c.create_oval(cx - _POINT_RADIUS, cy - _POINT_RADIUS,
                           cx + _POINT_RADIUS, cy + _POINT_RADIUS,
-                          fill=fill, outline=_POINT_OUTLINE, width=2)
+                          fill=fill, outline=POINT_OUTLINE, width=2)
 
     # ------------------------------------------------------------------
     # Curve Tracker (follow mouse along curve)
@@ -1186,9 +1180,7 @@ class CurveEditorWidget(ttk.Frame):
     # ------------------------------------------------------------------
 
     def _push_undo(self):
-        self._undo_stack.append(deepcopy(self._points))
-        if len(self._undo_stack) > 30:
-            self._undo_stack.pop(0)
+        self._undo_stack.push(self._points)
 
     def _on_ctrl_z(self, event):
         """Handle Ctrl+Z within the curve editor."""
@@ -1196,10 +1188,11 @@ class CurveEditorWidget(ttk.Frame):
         return "break"  # Prevent app-level bind_all undo from firing
 
     def _pop_undo(self):
-        if not self._undo_stack:
+        state = self._undo_stack.pop()
+        if state is None:
             self._status_var.set("Nothing to undo")
             return
-        self._points = self._undo_stack.pop()
+        self._points = state
         self._save_to_action(push_app_undo=False)
         self._draw()
         self._status_var.set(f"Undo ({len(self._undo_stack)} remaining)")
@@ -1222,9 +1215,9 @@ class CurveEditorWidget(ttk.Frame):
         if push_app_undo and self._on_before_change:
             self._on_before_change(200)
         if self._mode == "spline":
-            self._action.extra["spline_points"] = deepcopy(self._points)
+            self._action.extra[EXTRA_SPLINE_POINTS] = deepcopy(self._points)
         elif self._mode == "segment":
-            self._action.extra["segment_points"] = deepcopy(self._points)
+            self._action.extra[EXTRA_SEGMENT_POINTS] = deepcopy(self._points)
         if self._on_curve_changed:
             self._on_curve_changed()
 

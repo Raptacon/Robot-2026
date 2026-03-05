@@ -13,16 +13,22 @@ from pathlib import Path
 
 import sys
 
+from host.controller_config.main import _get_project_root
+
 # Ensure project root is on the path so utils.controller can be imported
-_project_root = Path(__file__).resolve().parent.parent.parent
+_project_root = _get_project_root()
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
-# Default directory for file dialogs (data/ relative to repo root)
-_default_data_dir = _project_root / "data"
-
-# Settings file to remember last opened config
-_settings_file = Path(__file__).resolve().parent / ".settings.json"
+# When frozen (PyInstaller), persist settings and look for data next to the EXE.
+# When running from source, use the normal locations.
+if getattr(sys, 'frozen', False):
+    _exe_dir = Path(sys.executable).parent
+    _default_data_dir = _exe_dir / "data"
+    _settings_file = _exe_dir / ".controller_config_settings.json"
+else:
+    _default_data_dir = _project_root / "data"
+    _settings_file = Path(__file__).resolve().parent / ".settings.json"
 
 from utils.controller.model import FullConfig, ControllerConfig, InputType
 from utils.controller.config_io import (

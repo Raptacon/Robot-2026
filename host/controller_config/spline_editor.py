@@ -37,12 +37,24 @@ from tkinter import ttk, filedialog, messagebox
 
 import yaml
 
-# Canvas layout (pixels)
-_CANVAS_W = 600
-_CANVAS_H = 600
-_MARGIN = 50
-_PLOT_W = _CANVAS_W - 2 * _MARGIN
-_PLOT_H = _CANVAS_H - 2 * _MARGIN
+from host.controller_config.colors import (
+    BG_WHITE,
+    CURVE_LINE,
+    ENDPOINT_FILL,
+    HANDLE_FILL,
+    HANDLE_LINE,
+    POINT_FILL,
+    POINT_OUTLINE,
+)
+from host.controller_config.editor_utils import (
+    DIALOG_H,
+    DIALOG_MARGIN,
+    DIALOG_PLOT_H,
+    DIALOG_PLOT_W,
+    DIALOG_W,
+    UndoStack,
+    draw_editor_grid,
+)
 
 # Visual sizes (pixels)
 _POINT_RADIUS = 7
@@ -53,26 +65,13 @@ _CURVE_SAMPLES_PER_SEG = 80
 # Minimum gap between adjacent control point X positions
 _MIN_X_GAP = 0.04
 
-# Colors
-_BG = "#ffffff"
-_GRID = "#e8e8e8"
-_GRID_MAJOR = "#c8c8c8"
-_AXIS = "#909090"
-_CURVE = "#2060c0"
-_POINT_FILL = "#c02020"
-_POINT_OUTLINE = "#801010"
-_ENDPOINT_FILL = "#802020"
-_HANDLE_FILL = "#40a040"
-_HANDLE_LINE = "#80c080"
-_LABEL = "#505050"
-
 _DEFAULT_STATUS = ("Click to add point | Right-click to remove | "
                    "Drag to adjust")
 
 
-# ------------------------------------------------------------------
-# Spline math (canonical implementations in utils/math/curves.py)
-# ------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+#   Spline math (canonical implementations in utils/math/curves.py)
+# ---------------------------------------------------------------------------
 
 from utils.math.curves import (
     evaluate_spline,
@@ -81,9 +80,9 @@ from utils.math.curves import (
 )
 
 
-# ------------------------------------------------------------------
-# SplineEditorDialog
-# ------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+#   SplineEditorDialog
+# ---------------------------------------------------------------------------
 
 class SplineEditorDialog(tk.Toplevel):
     """Modal dialog for visually editing a cubic hermite spline curve.
@@ -119,8 +118,8 @@ class SplineEditorDialog(tk.Toplevel):
         self._drag_idx = None
         self._drag_side = None   # "in" or "out"
 
-        # Undo stack (max 30 snapshots)
-        self._undo_stack: list[list[dict]] = []
+        # Undo stack
+        self._undo = UndoStack()
         self._drag_undo_pushed = False
 
         self._build_ui()
@@ -153,18 +152,17 @@ class SplineEditorDialog(tk.Toplevel):
 
     def _push_undo(self):
         """Save current points to undo stack."""
-        self._undo_stack.append(deepcopy(self._points))
-        if len(self._undo_stack) > 30:
-            self._undo_stack.pop(0)
+        self._undo.push(self._points)
 
     def _pop_undo(self):
         """Restore previous points from undo stack."""
-        if not self._undo_stack:
+        state = self._undo.pop()
+        if state is None:
             self._status_var.set("Nothing to undo")
             return
-        self._points = self._undo_stack.pop()
+        self._points = state
         self._draw()
-        self._status_var.set(f"Undo ({len(self._undo_stack)} remaining)")
+        self._status_var.set(f"Undo ({len(self._undo)} remaining)")
 
     # ------------------------------------------------------------------
     # Import / Export / Copy
@@ -294,8 +292,8 @@ class SplineEditorDialog(tk.Toplevel):
 
     def _build_ui(self):
         self._canvas = tk.Canvas(
-            self, width=_CANVAS_W, height=_CANVAS_H,
-            bg=_BG, cursor="crosshair")
+            self, width=DIALOG_W, height=DIALOG_H,
+            bg=BG_WHITE, cursor="crosshair")
         self._canvas.pack(padx=10, pady=(10, 5))
 
         self._canvas.bind("<ButtonPress-1>", self._on_press)
@@ -342,20 +340,20 @@ class SplineEditorDialog(tk.Toplevel):
 
     def _d2c(self, x: float, y: float) -> tuple[float, float]:
         """Data (-1..1) to canvas pixels."""
-        cx = _MARGIN + (x + 1) / 2 * _PLOT_W
-        cy = _MARGIN + (1 - y) / 2 * _PLOT_H
+        cx = DIALOG_MARGIN + (x + 1) / 2 * DIALOG_PLOT_W
+        cy = DIALOG_MARGIN + (1 - y) / 2 * DIALOG_PLOT_H
         return cx, cy
 
     def _c2d(self, cx: float, cy: float) -> tuple[float, float]:
         """Canvas pixels to data (-1..1)."""
-        x = (cx - _MARGIN) / _PLOT_W * 2 - 1
-        y = 1 - (cy - _MARGIN) / _PLOT_H * 2
+        x = (cx - DIALOG_MARGIN) / DIALOG_PLOT_W * 2 - 1
+        y = 1 - (cy - DIALOG_MARGIN) / DIALOG_PLOT_H * 2
         return x, y
 
     def _tangent_offset(self, tangent: float) -> tuple[float, float]:
         """Tangent slope to canvas-pixel offset for handle drawing."""
-        ppx = _PLOT_W / 2   # pixels per data unit, X
-        ppy = _PLOT_H / 2   # pixels per data unit, Y
+        ppx = DIALOG_PLOT_W / 2   # pixels per data unit, X
+        ppy = DIALOG_PLOT_H / 2   # pixels per data unit, Y
         dx = 1.0 * ppx
         dy = -tangent * ppy  # canvas Y inverted
         length = math.hypot(dx, dy)
@@ -366,8 +364,8 @@ class SplineEditorDialog(tk.Toplevel):
 
     def _offset_to_tangent(self, dx: float, dy: float) -> float:
         """Canvas-pixel offset back to tangent slope."""
-        ppx = _PLOT_W / 2
-        ppy = _PLOT_H / 2
+        ppx = DIALOG_PLOT_W / 2
+        ppy = DIALOG_PLOT_H / 2
         data_dx = dx / ppx
         data_dy = -dy / ppy
         if abs(data_dx) < 1e-6:
@@ -387,37 +385,9 @@ class SplineEditorDialog(tk.Toplevel):
         self._draw_points()
 
     def _draw_grid(self):
-        c = self._canvas
-        for v in [i / 4 for i in range(-4, 5)]:
-            cx, _ = self._d2c(v, 0)
-            _, cy = self._d2c(0, v)
-            is_axis = abs(v) < 0.01
-            is_major = abs(v * 2) % 1 < 0.01
-            color = _AXIS if is_axis else (_GRID_MAJOR if is_major else _GRID)
-            w = 2 if is_axis else 1
-            c.create_line(cx, _MARGIN, cx, _MARGIN + _PLOT_H,
-                          fill=color, width=w)
-            c.create_line(_MARGIN, cy, _MARGIN + _PLOT_W, cy,
-                          fill=color, width=w)
-
-        for v in [-1.0, -0.5, 0.0, 0.5, 1.0]:
-            cx, _ = self._d2c(v, 0)
-            c.create_text(cx, _MARGIN + _PLOT_H + 15,
-                          text=f"{v:g}", fill=_LABEL,
-                          font=("TkDefaultFont", 8))
-            _, cy = self._d2c(0, v)
-            c.create_text(_MARGIN - 22, cy,
-                          text=f"{v:g}", fill=_LABEL,
-                          font=("TkDefaultFont", 8))
-
-        c.create_text(_CANVAS_W / 2, _CANVAS_H - 5,
-                      text="Input", fill=_LABEL,
-                      font=("TkDefaultFont", 9))
-        c.create_text(12, _CANVAS_H / 2, text="Output",
-                      fill=_LABEL, font=("TkDefaultFont", 9), angle=90)
-        c.create_rectangle(_MARGIN, _MARGIN,
-                           _MARGIN + _PLOT_W, _MARGIN + _PLOT_H,
-                           outline="#808080")
+        draw_editor_grid(self._canvas, self._d2c,
+                         DIALOG_MARGIN, DIALOG_PLOT_W, DIALOG_PLOT_H,
+                         DIALOG_W, DIALOG_H)
 
     def _draw_curve(self):
         pts = self._points
@@ -433,7 +403,7 @@ class SplineEditorDialog(tk.Toplevel):
             coords.extend([cx, cy])
         if len(coords) >= 4:
             self._canvas.create_line(
-                *coords, fill=_CURVE, width=2, smooth=False)
+                *coords, fill=CURVE_LINE, width=2, smooth=False)
 
     def _draw_handles(self):
         c = self._canvas
@@ -441,17 +411,17 @@ class SplineEditorDialog(tk.Toplevel):
             cx, cy = self._d2c(pt["x"], pt["y"])
             hdx, hdy = self._tangent_offset(pt["tangent"])
             c.create_line(cx - hdx, cy - hdy, cx + hdx, cy + hdy,
-                          fill=_HANDLE_LINE, width=1, dash=(4, 4))
+                          fill=HANDLE_LINE, width=1, dash=(4, 4))
             if i > 0:
                 hx, hy = cx - hdx, cy - hdy
                 c.create_oval(hx - _HANDLE_RADIUS, hy - _HANDLE_RADIUS,
                               hx + _HANDLE_RADIUS, hy + _HANDLE_RADIUS,
-                              fill=_HANDLE_FILL, outline="#308030")
+                              fill=HANDLE_FILL, outline="#308030")
             if i < len(self._points) - 1:
                 hx, hy = cx + hdx, cy + hdy
                 c.create_oval(hx - _HANDLE_RADIUS, hy - _HANDLE_RADIUS,
                               hx + _HANDLE_RADIUS, hy + _HANDLE_RADIUS,
-                              fill=_HANDLE_FILL, outline="#308030")
+                              fill=HANDLE_FILL, outline="#308030")
 
     def _draw_points(self):
         c = self._canvas
@@ -463,12 +433,12 @@ class SplineEditorDialog(tk.Toplevel):
             if is_mirror:
                 fill = "#c0a0a0"   # muted — auto-mirrored, not draggable
             elif is_endpoint:
-                fill = _ENDPOINT_FILL
+                fill = ENDPOINT_FILL
             else:
-                fill = _POINT_FILL
+                fill = POINT_FILL
             c.create_oval(cx - _POINT_RADIUS, cy - _POINT_RADIUS,
                           cx + _POINT_RADIUS, cy + _POINT_RADIUS,
-                          fill=fill, outline=_POINT_OUTLINE, width=2)
+                          fill=fill, outline=POINT_OUTLINE, width=2)
 
     # ------------------------------------------------------------------
     # Hit testing & interaction
