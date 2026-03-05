@@ -25,10 +25,21 @@ try:
 except (ImportError, OSError):
     HAS_CAIROSVG = False
 
-# Visual constants
-BOX_WIDTH = 220
-BOX_HEIGHT = 40
-BOX_PAD = 6
+# Reference visual constants (at image scale 1.0, i.e. rendered_h == _IMG_H)
+# Actual sizes are computed per-redraw by _compute_scaled_sizes().
+_REF_BOX_WIDTH = 220
+_REF_BOX_HEIGHT = 40
+_REF_BOX_PAD = 6
+_REF_LABEL_FONT = 12
+_REF_ACTION_FONT = 14
+_REF_PLUS_FONT = 28
+_REF_LABEL_Y = 22       # y offset for action text below label
+_REF_ACTION_STEP = 28   # y step per action line
+
+# Defaults used before first redraw
+BOX_WIDTH = _REF_BOX_WIDTH
+BOX_HEIGHT = _REF_BOX_HEIGHT
+BOX_PAD = _REF_BOX_PAD
 LINE_COLOR = "#555555"
 LINE_SELECTED_COLOR = "#cc0000"
 BOX_OUTLINE = "#888888"
@@ -137,6 +148,9 @@ class ControllerCanvas(tk.Frame):
             for name, pos in label_positions.items():
                 if isinstance(pos, (list, tuple)) and len(pos) == 2:
                     self._custom_label_pos[name] = (int(pos[0]), int(pos[1]))
+
+        # Initialize scaled sizes at reference scale (updated each redraw)
+        self._compute_scaled_sizes(1.0)
 
         # Canvas item tracking
         self._box_items: dict[str, list[int]] = {}      # input_name -> item ids
@@ -443,7 +457,7 @@ class ControllerCanvas(tk.Frame):
             return
 
         # Scale image to fit canvas with padding for labels
-        pad_x = BOX_WIDTH + 30
+        pad_x = _REF_BOX_WIDTH + 30
         avail_w = canvas_w - 2 * pad_x
         avail_h = canvas_h - 40
 
@@ -467,6 +481,9 @@ class ControllerCanvas(tk.Frame):
         self._img_top = img_y - new_h // 2
         self._rendered_w = new_w
         self._rendered_h = new_h
+
+        # Compute scaled label sizes based on image scale
+        self._compute_scaled_sizes(scale)
 
         # Draw button outlines on the controller
         for shape in XBOX_SHAPES:
@@ -495,6 +512,28 @@ class ControllerCanvas(tk.Frame):
                 self._line_items[self._selected_input],
                 fill=LINE_SELECTED_COLOR, width=2)
 
+    # Label sizes are designed for scale ~0.4-0.5 (typical canvas).
+    # This multiplier bumps them up so they're readable at normal zoom.
+    _LABEL_SCALE_BOOST = 1.75
+
+    def _compute_scaled_sizes(self, img_scale: float):
+        """Recompute all label dimensions from the current image scale.
+
+        Reference sizes are defined for scale=1.0 (image at native res).
+        Everything scales linearly so labels shrink/grow with the canvas.
+        """
+        s = max(img_scale * self._LABEL_SCALE_BOOST, 0.15)
+        self._s = s
+        self._box_w = int(_REF_BOX_WIDTH * s)
+        self._box_h = int(_REF_BOX_HEIGHT * s)
+        self._box_pad = max(2, int(_REF_BOX_PAD * s))
+        self._label_font_size = max(6, int(_REF_LABEL_FONT * s))
+        self._action_font_size = max(7, int(_REF_ACTION_FONT * s))
+        self._plus_font_size = max(10, int(_REF_PLUS_FONT * s))
+        self._label_y_offset = max(10, int(_REF_LABEL_Y * s))
+        self._action_step = max(12, int(_REF_ACTION_STEP * s))
+        self._icon_size = max(8, self._box_h - int(8 * s))
+
     def _map_frac(self, frac_x: float, frac_y: float) -> tuple[float, float]:
         """Map fractional image coordinates (0-1) to canvas pixel position."""
         return (
@@ -512,18 +551,20 @@ class ControllerCanvas(tk.Frame):
                    canvas_h: int) -> tuple[float, float]:
         """Map label positions.  Uses custom dragged position if available,
         otherwise places at the left or right canvas edge."""
+        bw = self._box_w
+        bh = self._box_h
         if inp.name in self._custom_label_pos:
             img_x, img_y = self._custom_label_pos[inp.name]
             lx = self._img_left + (img_x / _IMG_W) * self._rendered_w
             ly = self._img_top + (img_y / _IMG_H) * self._rendered_h
-            lx = max(5, min(lx, canvas_w - BOX_WIDTH - 5))
-            ly = max(5, min(ly, canvas_h - BOX_HEIGHT - 5))
+            lx = max(5, min(lx, canvas_w - bw - 5))
+            ly = max(5, min(ly, canvas_h - bh - 5))
             return lx, ly
 
         lx = self._img_left + inp.label_x * self._rendered_w
         ly = self._img_top + inp.label_y * self._rendered_h
-        lx = max(5, min(lx, canvas_w - BOX_WIDTH - 5))
-        ly = max(5, min(ly, canvas_h - BOX_HEIGHT - 5))
+        lx = max(5, min(lx, canvas_w - bw - 5))
+        ly = max(5, min(ly, canvas_h - bh - 5))
         return lx, ly
 
     # --- Connector bars for grouped inputs ---
@@ -635,7 +676,7 @@ class ControllerCanvas(tk.Frame):
         from .layout_coords import XBOX_INPUT_MAP
         if not self._rumble_base_image:
             return
-        icon_size = BOX_WIDTH // 4
+        icon_size = self._box_w // 4
         resized = self._rumble_base_image.resize(
             (icon_size, icon_size), Image.LANCZOS)
 
@@ -710,6 +751,17 @@ class ControllerCanvas(tk.Frame):
         canvas_w = self._canvas.winfo_width()
         canvas_h = self._canvas.winfo_height()
 
+        # Scaled sizes
+        bw = self._box_w
+        bh = self._box_h
+        bp = self._box_pad
+        lf = self._label_font_size
+        af = self._action_font_size
+        pf = self._plus_font_size
+        ly_off = self._label_y_offset
+        a_step = self._action_step
+        ic_sz = self._icon_size
+
         ax, ay = self._map_frac(inp.anchor_x, inp.anchor_y)
         lx, ly = self._map_label(inp, canvas_w, canvas_h)
 
@@ -724,11 +776,11 @@ class ControllerCanvas(tk.Frame):
                     self._group_stack_index[prefix] = idx
                     origin_x, origin_y = self._group_stack_origin[prefix]
                     lx = origin_x
-                    ly = origin_y + idx * BOX_HEIGHT
+                    ly = origin_y + idx * bh
                 break
 
-        box_cx = lx + BOX_WIDTH / 2
-        box_cy = ly + BOX_HEIGHT / 2
+        box_cx = lx + bw / 2
+        box_cy = ly + bh / 2
 
         # Leader line — skip for grouped inputs (connector bar drawn separately)
         is_grouped = (inp.name.startswith("pov_")
@@ -755,15 +807,15 @@ class ControllerCanvas(tk.Frame):
         has_actions = len(actions) > 0
         fill = BOX_FILL_ASSIGNED if has_actions else BOX_FILL
         if is_dpad:
-            total_height = BOX_HEIGHT
+            total_height = bh
         elif has_actions:
-            total_height = 22 + len(display_actions) * 28
+            total_height = ly_off + len(display_actions) * a_step
         else:
-            total_height = BOX_HEIGHT
+            total_height = bh
 
         # Box background
         box_id = self._canvas.create_rectangle(
-            lx, ly, lx + BOX_WIDTH, ly + total_height,
+            lx, ly, lx + bw, ly + total_height,
             fill=fill, outline=BOX_OUTLINE, width=1,
         )
 
@@ -775,17 +827,16 @@ class ControllerCanvas(tk.Frame):
 
         items = [box_id]
 
-        # Input icon (scaled to box height)
-        icon_size = BOX_HEIGHT - 8
-        text_offset = BOX_PAD
+        # Input icon (scaled)
+        text_offset = bp
         if self._icon_loader:
-            icon = self._icon_loader.get_tk_icon(inp.name, icon_size)
+            icon = self._icon_loader.get_tk_icon(inp.name, ic_sz)
             if icon:
                 self._label_icon_refs.append(icon)
                 icon_id = self._canvas.create_image(
-                    lx + BOX_PAD, ly + 1, image=icon, anchor=tk.NW)
+                    lx + bp, ly + 1, image=icon, anchor=tk.NW)
                 items.append(icon_id)
-                text_offset = BOX_PAD + icon_size + 4
+                text_offset = bp + ic_sz + max(2, int(4 * self._s))
 
         # Input label
         label_color = (AXIS_INDICATOR_COLORS[axis_tag]
@@ -799,23 +850,23 @@ class ControllerCanvas(tk.Frame):
             label_id = self._canvas.create_text(
                 lx + text_offset, ly + 2,
                 text=line_text, anchor=tk.NW,
-                font=("Arial", 12, "bold" if has_actions else ""),
+                font=("Arial", lf, "bold" if has_actions else ""),
                 fill=ASSIGNED_COLOR if has_actions else label_color,
             )
             items.append(label_id)
-            # Large "+" indicator when extra bindings are hidden
+            # "+" indicator when extra bindings are hidden
             if has_actions and len(actions) > 1:
                 plus_id = self._canvas.create_text(
-                    lx + BOX_WIDTH + 4, ly - 4,
+                    lx + bw + max(2, int(4 * self._s)), ly - int(4 * self._s),
                     text="+", anchor=tk.NW,
-                    font=("Arial", 28, "bold"), fill=ASSIGNED_COLOR,
+                    font=("Arial", pf, "bold"), fill=ASSIGNED_COLOR,
                 )
                 items.append(plus_id)
         else:
             label_id = self._canvas.create_text(
                 lx + text_offset, ly + 2,
                 text=inp.display_name, anchor=tk.NW,
-                font=("Arial", 12), fill=label_color,
+                font=("Arial", lf), fill=label_color,
             )
             items.append(label_id)
 
@@ -823,24 +874,25 @@ class ControllerCanvas(tk.Frame):
             if has_actions:
                 for i, action in enumerate(display_actions):
                     txt_id = self._canvas.create_text(
-                        lx + BOX_PAD, ly + 22 + i * 28,
+                        lx + bp, ly + ly_off + i * a_step,
                         text=action, anchor=tk.NW,
-                        font=("Arial", 14, "bold"), fill=ASSIGNED_COLOR,
+                        font=("Arial", af, "bold"), fill=ASSIGNED_COLOR,
                     )
                     items.append(txt_id)
                 # "+" when actions are truncated (sticks capped at 2)
                 if len(actions) > len(display_actions):
                     plus_id = self._canvas.create_text(
-                        lx + BOX_WIDTH + 4, ly - 4,
+                        lx + bw + max(2, int(4 * self._s)),
+                        ly - int(4 * self._s),
                         text="+", anchor=tk.NW,
-                        font=("Arial", 28, "bold"), fill=ASSIGNED_COLOR,
+                        font=("Arial", pf, "bold"), fill=ASSIGNED_COLOR,
                     )
                     items.append(plus_id)
             else:
                 txt_id = self._canvas.create_text(
-                    lx + BOX_PAD, ly + 22,
+                    lx + bp, ly + ly_off,
                     text=UNASSIGNED_TEXT, anchor=tk.NW,
-                    font=("Arial", 14), fill=UNASSIGNED_COLOR,
+                    font=("Arial", af), fill=UNASSIGNED_COLOR,
                 )
                 items.append(txt_id)
 
