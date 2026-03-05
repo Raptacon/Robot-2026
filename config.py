@@ -50,9 +50,9 @@ class OperatorRobotConfig:
     teleop_pathplan_constraints: Tuple[float] = (2.5, 2.0, 360.0, 360.0)
 
     # Configs for shooter
-    shooterFeedMotorPIDF = (0, 0, 0, 0)
-    shooterLeadMotorPIDF = (0, 0, 0, 0)
-    shooterFollowerMotorPIDF = (0, 0, 0, 0)
+    shooterFeedMotorPIDF = (0, 0, 0, 1 / 473)
+    shooterLeadMotorPIDF = (0, 0, 0, 1 / 560)
+    shooterFollowerMotorPIDF = (0, 0, 0, 1 / 560)
     # Feed, Lead, Follower
     shooterInverted = (False, False, False)
     shooterRangeInterval = 0.2

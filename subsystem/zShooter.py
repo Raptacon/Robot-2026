@@ -1,8 +1,9 @@
 from config import OperatorRobotConfig
 import rev
+import wpilib
+from commands2 import Subsystem
 from typing import Dict
-from math import sqrt
-from math import floor
+from math import floor, sqrt
 from enum import StrEnum
 
 
@@ -16,7 +17,7 @@ class ShooterMotorNames(StrEnum):
     FOLLOWER_FLYWHEEL = "follower"
 
 
-class zShooter():
+class zShooter(Subsystem):
     def __init__(self):
         super().__init__()
         self.robotConfigs = OperatorRobotConfig()
@@ -58,7 +59,6 @@ class zShooter():
         }
 
         # Set up configs for each motor
-        # Create method to combine PIDF values and inverted
         self.configureMotor(self.feedMotor, self.robotConfigs.shooterFeedMotorPIDF, self.robotConfigs.shooterInverted[0])
         self.configureMotor(self.leadFlywheelMotor, self.robotConfigs.shooterLeadMotorPIDF, self.robotConfigs.shooterInverted[1])
         self.configureMotor(self.followerFlywheelMotor, self.robotConfigs.shooterFollowerMotorPIDF, self.robotConfigs.shooterInverted[2])
@@ -162,8 +162,7 @@ class zShooter():
         """
         discriminant = a**2 - (4*b*distance)
         if (not (discriminant < 0)) and (b != 0):
-            newRPM = max([-(a) + sqrt(discriminant) / (2*b), -(a) - sqrt(discriminant) / (2*b)] )
-            self.RPM = newRPM + self.offsetAmount
+            self.RPM = max([-(a) + sqrt(discriminant) / (2*b), -(a) - sqrt(discriminant) / (2*b)] )
 
     def getLookupTable(self, distance: float):
         """
@@ -179,10 +178,10 @@ class zShooter():
         lookupIndex = abs(int(floor(distance / self.robotConfigs.shooterRangeInterval)))
         # Check if index number has exceeded the length of the list, else set RPM as 0
         if lookupIndex < len(self.lookupTable):
-            self.RPM = self.lookupTable[lookupIndex] + self.offsetAmount
+            self.RPM = self.lookupTable[lookupIndex]
         else:
             if len(self.lookupTable) > 0:
-                self.RPM = self.lookupTable[-1] + self.offsetAmount
+                self.RPM = self.lookupTable[-1]
             else:
                 self.RPM = 0
 
@@ -235,6 +234,10 @@ class zShooter():
         return self.offsetAmount
 
     def periodic(self):
-        self.setMotorReference(ShooterMotorNames.FEED, self.RPM)
-        self.setMotorReference(ShooterMotorNames.LEAD_FLYWHEEL, self.RPM)
-        self.setMotorReference(ShooterMotorNames.FOLLOWER_FLYWHEEL, self.RPM)
+        newRPM = self.RPM + self.offsetAmount
+        self.setMotorReference(ShooterMotorNames.FEED, newRPM)
+        self.setMotorReference(ShooterMotorNames.LEAD_FLYWHEEL, newRPM)
+        self.setMotorReference(ShooterMotorNames.FOLLOWER_FLYWHEEL, newRPM)
+
+        wpilib.SmartDashboard.putNumber("Shooter_RPM", self.RPM)
+        wpilib.SmartDashboard.putNumber("Shooter_Offset", self.offsetAmount)

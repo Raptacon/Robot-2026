@@ -3,24 +3,22 @@ import json
 import os
 from pathlib import Path
 from typing import Callable
+import typing
 
 # Internal imports
-from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
 from config import OperatorRobotConfig
+from subsystem.zShooter import zShooter as Shooter
 
 # Third-party imports
 import commands2
 import rev
 import wpilib
-from subsystem.zShooter import zShooter as Shooter
-import typing
+
 
 class RobotShooter:
     """
     Container to hold the main robot code
     """
-    # forward declare critical types for editors
-    drivetrain: SwerveDrivetrain
     
     def __init__(self, is_disabled: Callable[[], bool]) -> None:
         self.shooter = Shooter()
@@ -33,6 +31,7 @@ class RobotShooter:
 
     def disabledInit(self):
         self.shooter.setRPM(0)
+        self.shooter.resetOffset()
         for motor in ["feed", "lead", "follower"]:
             self.shooter.setMotorVoltage(motor, 0)
 
@@ -47,15 +46,16 @@ class RobotShooter:
 
     def teleopInit(self):
         # Offset RPM by +100
-        self.xbox.povUp().onTrue(commands2.cmd.runOnce(lambda: self.shooter.increaseOffset, self.shooter))
+        self.xbox.povUp().onTrue(commands2.cmd.runOnce(self.shooter.increaseOffset, self.shooter))
         # Offset RPM by -100
-        self.xbox.povDown().onTrue(commands2.cmd.runOnce(lambda: self.shooter.decreaseOffset, self.shooter))
+        self.xbox.povDown().onTrue(commands2.cmd.runOnce(self.shooter.decreaseOffset, self.shooter))
 
     def teleopPeriodic(self):
         wpilib.SmartDashboard.putNumber("Feed_Velocity", self.shooter.getVelocity('feed'))
         wpilib.SmartDashboard.putNumber("Lead_Fly_Velocity", self.shooter.getVelocity('lead'))
         wpilib.SmartDashboard.putNumber("Follower_Fly_Velocity", self.shooter.getVelocity('follower'))
 
+        # TODO: calculate range based on odometry
         self.shooter.getLookupTable(1)
 
     def testInit(self):
@@ -76,6 +76,10 @@ class RobotShooter:
 
         self.xbox.b().onTrue(
             commands2.cmd.runOnce(lambda: self.shooter.setRPM(4500), self.shooter)
+        )
+
+        self.xbox.y().onTrue(
+            commands2.cmd.runOnce(lambda: self.shooter.resetOffset, self.shooter)
         )
 
     def testPeriodic(self):
