@@ -14,6 +14,8 @@ import os
 from pathlib import Path
 from typing import Callable
 
+import wpimath
+
 # Internal imports
 from data.telemetry import Telemetry
 from vision import Vision

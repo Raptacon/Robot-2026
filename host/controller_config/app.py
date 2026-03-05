@@ -510,7 +510,7 @@ class ControllerConfigApp(tk.Tk):
             self._settings["active_tab"] = self._notebook.index(
                 self._notebook.select())
         except Exception:
-            pass
+            pass  # Tab index unavailable during teardown
         # Save Action Editor pane positions (skip if user just reset layout)
         if not getattr(self, '_sash_reset', False):
             try:
@@ -518,7 +518,7 @@ class ControllerConfigApp(tk.Tk):
                     self._action_editor._hpaned.sash_coord(i)[0]
                     for i in range(2)]
             except Exception:
-                pass
+                pass  # Sash coords unavailable if panes not yet rendered
         self._save_settings()
         self.destroy()
 
@@ -529,7 +529,7 @@ class ControllerConfigApp(tk.Tk):
             try:
                 self._notebook.select(saved_tab)
             except Exception:
-                pass
+                pass  # Saved tab index may be out of range
 
     def _update_title(self):
         name = self._current_file.name if self._current_file else "Untitled"
@@ -943,7 +943,7 @@ class ControllerConfigApp(tk.Tk):
                 self._action_editor._hpaned.sash_place(1, third * 2, 0)
                 self._action_editor._sash_applied = True
         except Exception:
-            pass
+            pass  # Pane not yet mapped; sash will be set on next resize
 
         # Switch to first tab (Action Editor)
         self._notebook.select(0)
