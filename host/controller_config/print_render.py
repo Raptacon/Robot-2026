@@ -22,10 +22,10 @@ from .controller_canvas import (
 )
 
 # Print-specific box dimensions (larger than screen for readability)
-BOX_WIDTH = 185
-BOX_HEIGHT = 42
-BOX_PAD = 6
-ACTION_LINE_H = 26  # vertical spacing per action line
+BOX_WIDTH = 340
+BOX_HEIGHT = 72
+BOX_PAD = 10
+ACTION_LINE_H = 46  # vertical spacing per action line
 
 try:
     import cairosvg
@@ -149,9 +149,9 @@ def render_controller(
 
     # Fonts
     title_font = _get_font(28, bold=True)
-    label_font = _get_font(14, bold=True)
-    action_font = _get_font(19, bold=True)
-    unassigned_font = _get_font(16)
+    label_font = _get_font(22, bold=True)
+    action_font = _get_font(28, bold=True)
+    unassigned_font = _get_font(24)
 
     # Title
     title = ctrl.name or f"Controller {ctrl.port}"
@@ -222,9 +222,31 @@ def render_controller(
         page.paste(gear_resized,
                    (width - logo_size - 8, 4), gear_resized)
 
+    # Connector groups: (prefix, anchor input name)
+    connector_groups = [
+        ("pov_", "pov_right"),
+        ("left_stick", "left_stick_x"),
+        ("right_stick", "right_stick_x"),
+    ]
+    group_boxes: dict[str, list[tuple]] = {p: [] for p, _ in connector_groups}
+
     # Draw each input's leader line and binding box
+    # Track D-pad stack origin for tight packing
+    dpad_stack_origin = None
+    dpad_stack_idx = 0
+
     for inp in XBOX_INPUTS:
-        actions = ctrl.bindings.get(inp.name, [])
+        all_actions = ctrl.bindings.get(inp.name, [])
+        is_dpad = inp.name.startswith("pov_")
+        is_stick = (inp.name.startswith("left_stick")
+                    or inp.name.startswith("right_stick"))
+        # D-pad: 1 action, sticks: max 2, others: all
+        if is_dpad:
+            actions = all_actions[:1]
+        elif is_stick:
+            actions = all_actions[:2]
+        else:
+            actions = all_actions
         has_actions = len(actions) > 0
 
         if hide_unassigned and not has_actions:
@@ -232,24 +254,48 @@ def render_controller(
 
         ax, ay = map_frac(inp.anchor_x, inp.anchor_y)
         lx, ly = map_label(inp)
+
+        # Stack D-pad labels at fixed pixel intervals
+        if is_dpad:
+            if dpad_stack_origin is None:
+                dpad_stack_origin = (lx, ly)
+            else:
+                lx, ly = (dpad_stack_origin[0],
+                           dpad_stack_origin[1] + dpad_stack_idx * BOX_HEIGHT)
+            dpad_stack_idx += 1
+
         box_cx = lx + BOX_WIDTH / 2
         box_cy = ly + BOX_HEIGHT / 2
 
-        # Leader line
-        line_w = 4 if has_actions else 1
-        draw.line([(ax, ay), (box_cx, box_cy)],
-                  fill=LINE_COLOR, width=line_w)
+        # Leader line — skip for grouped inputs (connector bar drawn below)
+        is_grouped = (inp.name.startswith("pov_")
+                      or inp.name.startswith("left_stick")
+                      or inp.name.startswith("right_stick"))
+        if not is_grouped:
+            line_w = 4 if has_actions else 1
+            draw.line([(ax, ay), (box_cx, box_cy)],
+                      fill=LINE_COLOR, width=line_w)
 
         fill = BOX_FILL_ASSIGNED if has_actions else BOX_FILL
-        label_h = 21  # space for input label row
-        total_height = (label_h + len(actions) * ACTION_LINE_H
-                        if has_actions else BOX_HEIGHT)
+        label_h = 36  # space for input label row
+        if is_dpad:
+            total_height = BOX_HEIGHT
+        elif has_actions:
+            total_height = label_h + len(actions) * ACTION_LINE_H
+        else:
+            total_height = BOX_HEIGHT
 
         # Box background
         draw.rectangle(
             [lx, ly, lx + BOX_WIDTH, ly + total_height],
             fill=fill, outline=BOX_OUTLINE, width=1,
         )
+
+        # Track boxes for connector groups
+        for prefix, _ in connector_groups:
+            if inp.name.startswith(prefix):
+                group_boxes[prefix].append(
+                    (lx, ly, lx + BOX_WIDTH, ly + total_height))
 
         # Axis color indicator
         axis_tag = None
@@ -260,25 +306,65 @@ def render_controller(
         label_color = (AXIS_INDICATOR_COLORS[axis_tag]
                        if axis_tag else "#555555")
 
-        # Input icon + label
+        # Input icon (scaled to box height)
+        icon_size = BOX_HEIGHT - 12
         text_x = lx + BOX_PAD
         if icon_loader:
-            icon = icon_loader.get_pil_icon(inp.name, 18)
+            icon = icon_loader.get_pil_icon(inp.name, icon_size)
             if icon:
                 page.paste(icon, (int(lx + BOX_PAD), int(ly + 1)), icon)
-                text_x = lx + BOX_PAD + 20
-        draw.text((text_x, ly + 1), inp.display_name,
-                  fill=label_color, font=label_font)
+                text_x = lx + BOX_PAD + icon_size + 4
 
-        # Action names or unassigned
-        if has_actions:
-            for i, action in enumerate(actions):
-                draw.text((lx + BOX_PAD, ly + label_h + i * ACTION_LINE_H),
-                          action, fill=ASSIGNED_COLOR, font=action_font)
+        if is_dpad:
+            # D-pad compact: icon + label + action on one line
+            line_text = inp.display_name
+            if has_actions:
+                line_text += " : " + all_actions[0]
+            draw.text((text_x, ly + 1), line_text,
+                      fill=ASSIGNED_COLOR if has_actions else label_color,
+                      font=action_font if has_actions else label_font)
+            # Large "+" when extra bindings are hidden
+            if has_actions and len(all_actions) > 1:
+                plus_font = _get_font(48)
+                draw.text((lx + BOX_WIDTH + 6, ly - 10), "+",
+                          fill=ASSIGNED_COLOR, font=plus_font)
         else:
-            draw.text((lx + BOX_PAD, ly + label_h),
-                      UNASSIGNED_TEXT, fill=UNASSIGNED_COLOR,
-                      font=unassigned_font)
+            draw.text((text_x, ly + 1), inp.display_name,
+                      fill=label_color, font=label_font)
+
+            # Action names or unassigned
+            if has_actions:
+                for i, action in enumerate(actions):
+                    draw.text(
+                        (lx + BOX_PAD, ly + label_h + i * ACTION_LINE_H),
+                        action, fill=ASSIGNED_COLOR, font=action_font)
+                # "+" when actions are truncated
+                if len(all_actions) > len(actions):
+                    plus_font = _get_font(48)
+                    draw.text((lx + BOX_WIDTH + 6, ly - 10), "+",
+                              fill=ASSIGNED_COLOR, font=plus_font)
+            else:
+                draw.text((lx + BOX_PAD, ly + label_h),
+                          UNASSIGNED_TEXT, fill=UNASSIGNED_COLOR,
+                          font=unassigned_font)
+
+    # Connector bars: vertical bar + single leader line per group
+    for prefix, anchor_name in connector_groups:
+        boxes = group_boxes[prefix]
+        if not boxes:
+            continue
+        right_x = max(b[2] for b in boxes)
+        top_y = min(b[1] for b in boxes)
+        bottom_y = max(b[3] for b in boxes)
+        bar_x = right_x + 8
+        draw.line([(bar_x, top_y), (bar_x, bottom_y)],
+                  fill=LINE_COLOR, width=4)
+        anchor_inp = XBOX_INPUT_MAP.get(anchor_name)
+        if anchor_inp:
+            aax, aay = map_frac(anchor_inp.anchor_x, anchor_inp.anchor_y)
+            bar_mid_y = (top_y + bottom_y) / 2
+            draw.line([(aax, aay), (bar_x, bar_mid_y)],
+                      fill=LINE_COLOR, width=2)
 
     return page
 

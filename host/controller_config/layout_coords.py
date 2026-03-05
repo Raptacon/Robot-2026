@@ -67,71 +67,74 @@ class ButtonShape:
 
 XBOX_INPUTS: list[InputCoord] = [
     # --- Axes ---
-    # Left stick
+    # Left stick — labels in a vertical column, connector bar drawn separately
     InputCoord("left_stick_x", "Left Stick X", "axis",
-               _fx(420), _fy(695), _fx(219), _fy(768)),
+               _fx(420), _fy(695), _fx(-382), _fy(287)),
     InputCoord("left_stick_y", "Left Stick Y", "axis",
-               _fx(420), _fy(695), _fx(-80), _fy(646)),
-    # Right stick
+               _fx(420), _fy(695), _fx(-382), _fy(416)),
+    # Right stick — labels in a vertical column, connector bar drawn separately
     InputCoord("right_stick_x", "Right Stick X", "axis",
-               _fx(1210), _fy(965), _fx(1233), _fy(1100)),
+               _fx(1210), _fy(965), _fx(1646), _fy(1026)),
     InputCoord("right_stick_y", "Right Stick Y", "axis",
-               _fx(1210), _fy(965), _fx(1376), _fy(973)),
+               _fx(1210), _fy(965), _fx(1646), _fy(1156)),
     # Triggers
     InputCoord("left_trigger", "Left Trigger", "axis",
-               _fx(435), _fy(170), _fx(67), _fy(48)),
+               _fx(435), _fy(170), _fx(8), _fy(-2)),
     InputCoord("right_trigger", "Right Trigger", "axis",
-               _fx(1490), _fy(170), _fx(1501), _fy(43)),
+               _fx(1490), _fy(170), _fx(1494), _fy(1)),
 
     # --- Buttons ---
     InputCoord("a_button", "A Button", "button",
-               _fx(1480), _fy(755), _fx(1864), _fy(716)),
+               _fx(1480), _fy(755), _fx(1723), _fy(686)),
     InputCoord("b_button", "B Button", "button",
-               _fx(1629), _fy(633), _fx(1856), _fy(616)),
+               _fx(1629), _fy(633), _fx(1715), _fy(558)),
     InputCoord("x_button", "X Button", "button",
-               _fx(1344), _fy(635), _fx(1830), _fy(465)),
+               _fx(1344), _fy(635), _fx(1644), _fy(809)),
     InputCoord("y_button", "Y Button", "button",
-               _fx(1492), _fy(518), _fx(1782), _fy(302)),
+               _fx(1492), _fy(518), _fx(1654), _fy(438)),
     InputCoord("left_bumper", "Left Bumper", "button",
-               _fx(455), _fy(290), _fx(-105), _fy(219)),
+               _fx(455), _fy(290), _fx(-113), _fy(147)),
     InputCoord("right_bumper", "Right Bumper", "button",
-               _fx(1465), _fy(290), _fx(1610), _fy(175)),
+               _fx(1465), _fy(290), _fx(1556), _fy(169)),
     InputCoord("back_button", "Back", "button",
-               _fx(760), _fy(640), _fx(612), _fy(69)),
+               _fx(760), _fy(640), _fx(560), _fy(108)),
     InputCoord("start_button", "Start", "button",
-               _fx(1160), _fy(640), _fx(998), _fy(71)),
+               _fx(1160), _fy(640), _fx(965), _fy(112)),
     InputCoord("left_stick_button", "Left Stick Press", "button",
-               _fx(420), _fy(695), _fx(355), _fy(453)),
+               _fx(420), _fy(695), _fx(-382), _fy(547)),
     InputCoord("right_stick_button", "Right Stick Press", "button",
-               _fx(1210), _fy(965), _fx(941), _fy(709)),
+               _fx(1210), _fy(965), _fx(1646), _fy(1286)),
 
     # --- POV / D-pad (center ~683, 900) ---
     # D-pad directions are treated as buttons; the factory converts
     # the raw POV angle to individual boolean values at runtime.
+    # Labels in a vertical column (clockwise from Up), compact single-action,
+    # connected by a single leader line + bar (see _draw_connector_groups).
+    # Dragged as a group (see _draw_input, _on_drag).
     InputCoord("pov_up", "D-Pad Up", "button",
-               _fx(683), _fy(840), _fx(496), _fy(1012)),
+               _fx(683), _fy(840), _fx(-369), _fy(723)),
     InputCoord("pov_up_right", "D-Pad Up-Right", "button",
-               _fx(740), _fy(840), _fx(685), _fy(1098)),
+               _fx(740), _fy(840), _fx(-369), _fy(793)),
     InputCoord("pov_right", "D-Pad Right", "button",
-               _fx(740), _fy(900), _fx(804), _fy(1191)),
+               _fx(740), _fy(900), _fx(-369), _fy(862)),
     InputCoord("pov_down_right", "D-Pad Down-Right", "button",
-               _fx(740), _fy(960), _fx(694), _fy(1310)),
+               _fx(740), _fy(960), _fx(-369), _fy(931)),
     InputCoord("pov_down", "D-Pad Down", "button",
-               _fx(683), _fy(960), _fx(504), _fy(1420)),
+               _fx(683), _fy(960), _fx(-369), _fy(1001)),
     InputCoord("pov_down_left", "D-Pad Down-Left", "button",
-               _fx(626), _fy(960), _fx(292), _fy(1309)),
+               _fx(626), _fy(960), _fx(-369), _fy(1070)),
     InputCoord("pov_left", "D-Pad Left", "button",
-               _fx(626), _fy(900), _fx(178), _fy(1198)),
+               _fx(626), _fy(900), _fx(-369), _fy(1139)),
     InputCoord("pov_up_left", "D-Pad Up-Left", "button",
-               _fx(626), _fy(840), _fx(300), _fy(1091)),
+               _fx(626), _fy(840), _fx(-369), _fy(1208)),
 
     # --- Outputs (rumble) ---
     InputCoord("rumble_left", "Left Rumble", "output",
-               _fx(700), _fy(-70), _fx(298), _fy(-172)),
+               _fx(700), _fy(-70), _fx(254), _fy(-111)),
     InputCoord("rumble_both", "Both Rumble", "output",
-               _fx(960), _fy(-70), _fx(786), _fy(-191)),
+               _fx(960), _fy(-70), _fx(770), _fy(-21)),
     InputCoord("rumble_right", "Right Rumble", "output",
-               _fx(1220), _fy(-70), _fx(1282), _fy(-163)),
+               _fx(1220), _fy(-70), _fx(1275), _fy(-111)),
 ]
 
 # Clickable outlines drawn on the controller image.

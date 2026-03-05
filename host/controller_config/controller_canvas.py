@@ -26,9 +26,9 @@ except (ImportError, OSError):
     HAS_CAIROSVG = False
 
 # Visual constants
-BOX_WIDTH = 120
-BOX_HEIGHT = 22
-BOX_PAD = 4
+BOX_WIDTH = 220
+BOX_HEIGHT = 40
+BOX_PAD = 6
 LINE_COLOR = "#555555"
 LINE_SELECTED_COLOR = "#cc0000"
 BOX_OUTLINE = "#888888"
@@ -142,6 +142,7 @@ class ControllerCanvas(tk.Frame):
         self._box_items: dict[str, list[int]] = {}      # input_name -> item ids
         self._line_items: dict[str, int] = {}            # input_name -> line item id
         self._shape_items: dict[str, int] = {}           # shape.name -> canvas item id
+        self._connector_group_items: dict[str, tuple[int, int | None]] = {}
         self._shape_map: dict[str, ButtonShape] = {}     # shape.name -> ButtonShape
 
         self._hover_input: str | None = None    # hovered binding box
@@ -472,10 +473,15 @@ class ControllerCanvas(tk.Frame):
             self._draw_shape(shape)
 
         # Draw lines and binding boxes for each input
+        self._group_stack_index: dict[str, int] = {}
+        self._group_stack_origin: dict[str, tuple[float, float]] = {}
         for inp in XBOX_INPUTS:
             if self._hide_unassigned and not self._bindings.get(inp.name):
                 continue
             self._draw_input(inp)
+
+        # Draw connector bars for grouped labels (D-pad, sticks)
+        self._draw_connector_groups()
 
         # Draw rumble icons below each rumble label box
         self._draw_rumble_icons()
@@ -519,6 +525,108 @@ class ControllerCanvas(tk.Frame):
         lx = max(5, min(lx, canvas_w - BOX_WIDTH - 5))
         ly = max(5, min(ly, canvas_h - BOX_HEIGHT - 5))
         return lx, ly
+
+    # --- Connector bars for grouped inputs ---
+
+    # Groups of inputs that share a single leader line + vertical bar.
+    # Each entry: (prefix to match, anchor input for the leader line)
+    _CONNECTOR_GROUPS = [
+        ("pov_", "pov_right"),           # D-pad
+        ("left_stick", "left_stick_x"),  # Left stick
+        ("right_stick", "right_stick_x"),  # Right stick
+    ]
+
+    def _get_drag_group(self, name: str) -> list[str]:
+        """Return all names in the same connector group, or just [name]."""
+        for prefix, _ in self._CONNECTOR_GROUPS:
+            if name.startswith(prefix):
+                return [n for n in self._box_items if n.startswith(prefix)]
+        return [name]
+
+    def _draw_connector_groups(self):
+        """Draw connector bars for grouped label columns.
+
+        Each group gets a vertical bar along the right edge of its label
+        column, with a single leader line from the shared anchor point
+        to the bar midpoint.  Items are stored in ``_connector_group_items``
+        so they can be updated during drag.
+        """
+        from .layout_coords import XBOX_INPUT_MAP
+
+        self._connector_group_items: dict[str, tuple[int, int]] = {}
+
+        for prefix, anchor_name in self._CONNECTOR_GROUPS:
+            boxes = []
+            for name, item_ids in self._box_items.items():
+                if name.startswith(prefix) and item_ids:
+                    coords = self._canvas.coords(item_ids[0])
+                    if len(coords) == 4:
+                        boxes.append(coords)
+            if not boxes:
+                continue
+
+            right_x = max(c[2] for c in boxes)
+            top_y = min(c[1] for c in boxes)
+            bottom_y = max(c[3] for c in boxes)
+            bar_x = right_x + 6
+
+            # Vertical bar
+            bar_id = self._canvas.create_line(
+                bar_x, top_y, bar_x, bottom_y,
+                fill=LINE_COLOR, width=3,
+            )
+
+            # Leader line from anchor to bar midpoint
+            line_id = None
+            anchor_inp = XBOX_INPUT_MAP.get(anchor_name)
+            if anchor_inp:
+                ax, ay = self._map_frac(anchor_inp.anchor_x,
+                                        anchor_inp.anchor_y)
+                bar_mid_y = (top_y + bottom_y) / 2
+                line_id = self._canvas.create_line(
+                    ax, ay, bar_x, bar_mid_y,
+                    fill=LINE_COLOR, width=1,
+                )
+
+            self._connector_group_items[prefix] = (bar_id, line_id)
+
+    def _update_connector_group(self, prefix: str):
+        """Reposition the connector bar and leader line for a group."""
+        from .layout_coords import XBOX_INPUT_MAP
+
+        items = self._connector_group_items.get(prefix)
+        if not items:
+            return
+        bar_id, line_id = items
+
+        boxes = []
+        for name, item_ids in self._box_items.items():
+            if name.startswith(prefix) and item_ids:
+                coords = self._canvas.coords(item_ids[0])
+                if len(coords) == 4:
+                    boxes.append(coords)
+        if not boxes:
+            return
+
+        right_x = max(c[2] for c in boxes)
+        top_y = min(c[1] for c in boxes)
+        bottom_y = max(c[3] for c in boxes)
+        bar_x = right_x + 6
+
+        self._canvas.coords(bar_id, bar_x, top_y, bar_x, bottom_y)
+
+        if line_id:
+            anchor_name = None
+            for p, a in self._CONNECTOR_GROUPS:
+                if p == prefix:
+                    anchor_name = a
+                    break
+            anchor_inp = XBOX_INPUT_MAP.get(anchor_name) if anchor_name else None
+            if anchor_inp:
+                ax, ay = self._map_frac(anchor_inp.anchor_x,
+                                        anchor_inp.anchor_y)
+                bar_mid_y = (top_y + bottom_y) / 2
+                self._canvas.coords(line_id, ax, ay, bar_x, bar_mid_y)
 
     # --- Rumble icons ---
 
@@ -593,6 +701,10 @@ class ControllerCanvas(tk.Frame):
 
     # --- Binding box drawing ---
 
+    # D-pad inputs are stacked in canvas-pixel space so spacing is
+    # consistent regardless of zoom level.
+    _STACK_GROUPS = {"pov_"}
+
     def _draw_input(self, inp: InputCoord):
         """Draw a single input's leader line and binding box."""
         canvas_w = self._canvas.winfo_width()
@@ -601,22 +713,53 @@ class ControllerCanvas(tk.Frame):
         ax, ay = self._map_frac(inp.anchor_x, inp.anchor_y)
         lx, ly = self._map_label(inp, canvas_w, canvas_h)
 
+        # Stack grouped labels at fixed canvas-pixel intervals
+        for prefix in self._STACK_GROUPS:
+            if inp.name.startswith(prefix):
+                if prefix not in self._group_stack_origin:
+                    self._group_stack_origin[prefix] = (lx, ly)
+                    self._group_stack_index[prefix] = 0
+                else:
+                    idx = self._group_stack_index[prefix] + 1
+                    self._group_stack_index[prefix] = idx
+                    origin_x, origin_y = self._group_stack_origin[prefix]
+                    lx = origin_x
+                    ly = origin_y + idx * BOX_HEIGHT
+                break
+
         box_cx = lx + BOX_WIDTH / 2
         box_cy = ly + BOX_HEIGHT / 2
 
-        # Leader line (solid)
-        line_id = self._canvas.create_line(
-            ax, ay, box_cx, box_cy,
-            fill=LINE_COLOR, width=1,
-        )
-        self._line_items[inp.name] = line_id
+        # Leader line — skip for grouped inputs (connector bar drawn separately)
+        is_grouped = (inp.name.startswith("pov_")
+                      or inp.name.startswith("left_stick")
+                      or inp.name.startswith("right_stick"))
+        if not is_grouped:
+            line_id = self._canvas.create_line(
+                ax, ay, box_cx, box_cy,
+                fill=LINE_COLOR, width=1,
+            )
+            self._line_items[inp.name] = line_id
 
-        # Assigned actions
+        # Assigned actions — D-pad single-line, sticks max 2
         actions = self._bindings.get(inp.name, [])
+        is_dpad = inp.name.startswith("pov_")
+        is_stick = (inp.name.startswith("left_stick")
+                    or inp.name.startswith("right_stick"))
+        if is_dpad:
+            display_actions = actions[:1]
+        elif is_stick:
+            display_actions = actions[:2]
+        else:
+            display_actions = actions
         has_actions = len(actions) > 0
         fill = BOX_FILL_ASSIGNED if has_actions else BOX_FILL
-        total_height = (12 + len(actions) * 16
-                        if has_actions else BOX_HEIGHT)
+        if is_dpad:
+            total_height = BOX_HEIGHT
+        elif has_actions:
+            total_height = 22 + len(display_actions) * 28
+        else:
+            total_height = BOX_HEIGHT
 
         # Box background
         box_id = self._canvas.create_rectangle(
@@ -632,43 +775,74 @@ class ControllerCanvas(tk.Frame):
 
         items = [box_id]
 
-        # Input icon (next to label)
+        # Input icon (scaled to box height)
+        icon_size = BOX_HEIGHT - 8
         text_offset = BOX_PAD
         if self._icon_loader:
-            icon = self._icon_loader.get_tk_icon(inp.name, 16)
+            icon = self._icon_loader.get_tk_icon(inp.name, icon_size)
             if icon:
                 self._label_icon_refs.append(icon)
                 icon_id = self._canvas.create_image(
                     lx + BOX_PAD, ly + 1, image=icon, anchor=tk.NW)
                 items.append(icon_id)
-                text_offset = BOX_PAD + 18
+                text_offset = BOX_PAD + icon_size + 4
 
         # Input label
         label_color = (AXIS_INDICATOR_COLORS[axis_tag]
                        if axis_tag else "#555555")
-        label_id = self._canvas.create_text(
-            lx + text_offset, ly + 2,
-            text=inp.display_name, anchor=tk.NW,
-            font=("Arial", 7), fill=label_color,
-        )
-        items.append(label_id)
 
-        # Action names or unassigned text
-        if has_actions:
-            for i, action in enumerate(actions):
+        if is_dpad:
+            # D-pad compact: icon + label + action on one line
+            line_text = inp.display_name
+            if has_actions:
+                line_text += " : " + actions[0]
+            label_id = self._canvas.create_text(
+                lx + text_offset, ly + 2,
+                text=line_text, anchor=tk.NW,
+                font=("Arial", 12, "bold" if has_actions else ""),
+                fill=ASSIGNED_COLOR if has_actions else label_color,
+            )
+            items.append(label_id)
+            # Large "+" indicator when extra bindings are hidden
+            if has_actions and len(actions) > 1:
+                plus_id = self._canvas.create_text(
+                    lx + BOX_WIDTH + 4, ly - 4,
+                    text="+", anchor=tk.NW,
+                    font=("Arial", 28, "bold"), fill=ASSIGNED_COLOR,
+                )
+                items.append(plus_id)
+        else:
+            label_id = self._canvas.create_text(
+                lx + text_offset, ly + 2,
+                text=inp.display_name, anchor=tk.NW,
+                font=("Arial", 12), fill=label_color,
+            )
+            items.append(label_id)
+
+            # Action names or unassigned text
+            if has_actions:
+                for i, action in enumerate(display_actions):
+                    txt_id = self._canvas.create_text(
+                        lx + BOX_PAD, ly + 22 + i * 28,
+                        text=action, anchor=tk.NW,
+                        font=("Arial", 14, "bold"), fill=ASSIGNED_COLOR,
+                    )
+                    items.append(txt_id)
+                # "+" when actions are truncated (sticks capped at 2)
+                if len(actions) > len(display_actions):
+                    plus_id = self._canvas.create_text(
+                        lx + BOX_WIDTH + 4, ly - 4,
+                        text="+", anchor=tk.NW,
+                        font=("Arial", 28, "bold"), fill=ASSIGNED_COLOR,
+                    )
+                    items.append(plus_id)
+            else:
                 txt_id = self._canvas.create_text(
-                    lx + BOX_PAD, ly + 12 + i * 16,
-                    text=action, anchor=tk.NW,
-                    font=("Arial", 8, "bold"), fill=ASSIGNED_COLOR,
+                    lx + BOX_PAD, ly + 22,
+                    text=UNASSIGNED_TEXT, anchor=tk.NW,
+                    font=("Arial", 14), fill=UNASSIGNED_COLOR,
                 )
                 items.append(txt_id)
-        else:
-            txt_id = self._canvas.create_text(
-                lx + BOX_PAD, ly + 12,
-                text=UNASSIGNED_TEXT, anchor=tk.NW,
-                font=("Arial", 8), fill=UNASSIGNED_COLOR,
-            )
-            items.append(txt_id)
 
         self._box_items[inp.name] = items
 
@@ -975,9 +1149,17 @@ class ControllerCanvas(tk.Frame):
             self._did_drag = True
             self._canvas.config(cursor="fleur")
 
-        # Move the box items
-        self._move_box(self._dragging, dx, dy)
-        self._update_line_for_box(self._dragging)
+        # Move the box items — group drag for connected labels
+        group_names = self._get_drag_group(self._dragging)
+        for gname in group_names:
+            self._move_box(gname, dx, dy)
+            self._update_line_for_box(gname)
+
+        # Update connector bar/line for the dragged group
+        for prefix, _ in self._CONNECTOR_GROUPS:
+            if self._dragging.startswith(prefix):
+                self._update_connector_group(prefix)
+                break
 
         self._drag_start = (event.x, event.y)
 
@@ -987,16 +1169,17 @@ class ControllerCanvas(tk.Frame):
         self._dragging = None
 
         if name and self._did_drag:
-            # Drag finished — save position
-            box_items = self._box_items.get(name, [])
-            if box_items:
-                coords = self._canvas.coords(box_items[0])
-                if len(coords) == 4:
-                    lx, ly = coords[0], coords[1]
-                    img_x, img_y = self._unmap_to_img(lx, ly)
-                    self._custom_label_pos[name] = (img_x, img_y)
-                    if self._on_label_moved:
-                        self._on_label_moved(name, img_x, img_y)
+            # Drag finished — save positions for all group members
+            for gname in self._get_drag_group(name):
+                box_items = self._box_items.get(gname, [])
+                if box_items:
+                    coords = self._canvas.coords(box_items[0])
+                    if len(coords) == 4:
+                        lx, ly = coords[0], coords[1]
+                        img_x, img_y = self._unmap_to_img(lx, ly)
+                        self._custom_label_pos[gname] = (img_x, img_y)
+                        if self._on_label_moved:
+                            self._on_label_moved(gname, img_x, img_y)
             self._canvas.config(cursor="hand2")
             self._did_drag = False
             return
