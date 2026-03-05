@@ -62,22 +62,16 @@ class RobotShooter:
 
         # For tuning robot
         # Create methods to set each motor reference and remove parallel command
-        self.xbox.x().onTrue(commands2.cmd.parallel(           
-            commands2.cmd.runOnce(lambda: self.shooter.setMotorReference('intake', 0), self.shooter),
-            commands2.cmd.runOnce(lambda: self.shooter.setMotorReference('top', 0), self.shooter),
-            commands2.cmd.runOnce(lambda: self.shooter.setMotorReference('bottom', 0), self.shooter))
+        self.xbox.x().onTrue(        
+            commands2.cmd.runOnce(lambda: self.shooter.setAllMotorReferences(0), self.shooter)
         )
 
-        self.xbox.x().onTrue(commands2.cmd.parallel(            
-            commands2.cmd.runOnce(lambda: self.shooter.setMotorReference('intake', 3000), self.shooter),
-            commands2.cmd.runOnce(lambda: self.shooter.setMotorReference('top', 3000), self.shooter),
-            commands2.cmd.runOnce(lambda: self.shooter.setMotorReference('bottom', 3000), self.shooter))
+        self.xbox.a().onTrue(   
+            commands2.cmd.runOnce(lambda: self.shooter.setAllMotorReferences(3000), self.shooter)
         )
 
-        self.xbox.x().onTrue(commands2.cmd.parallel(            
-            commands2.cmd.runOnce(lambda: self.shooter.setMotorReference('intake', 4000), self.shooter),
-            commands2.cmd.runOnce(lambda: self.shooter.setMotorReference('top', 4500), self.shooter),
-            commands2.cmd.runOnce(lambda: self.shooter.setMotorReference('bottom', 4500), self.shooter))
+        self.xbox.b().onTrue(
+            commands2.cmd.runOnce(lambda: self.shooter.setAllMotorReferences(4500), self.shooter)
         )
 
     def testPeriodic(self):
