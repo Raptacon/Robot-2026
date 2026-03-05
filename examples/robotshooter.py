@@ -30,7 +30,7 @@ class RobotShooter:
     def robotPeriodic(self):
         pass
     def disabledInit(self):
-        self.shooter.RPM = 0
+        self.shooter.setRPM(0)
     def disabledPeriodic(self):
         pass
 
@@ -40,27 +40,26 @@ class RobotShooter:
         pass
 
     def teleopInit(self):
-        # For tuning
-        wpilib.SmartDashboard.putNumberArray("Intake PIDF", [0, 0, 0, 0])
-        wpilib.SmartDashboard.putNumberArray("Top PIDF", [0, 0, 0, 0])
-        wpilib.SmartDashboard.putNumberArray("Bottom PIDF", [0, 0, 0, 0])
-
         # Offset RPM by +100
         self.xbox.povUp().onTrue(commands2.cmd.runOnce(lambda: self.shooter.increaseOffset, self.shooter))
         # Offset RPM by -100
         self.xbox.povDown().onTrue(commands2.cmd.runOnce(lambda: self.shooter.decreaseOffset, self.shooter))
 
     def teleopPeriodic(self):
-        wpilib.SmartDashboard.putNumber("In_Velocity", self.shooter.getVelocity('intake'))
-        wpilib.SmartDashboard.putNumber("Top_Velocity", self.shooter.getVelocity('top'))
-        wpilib.SmartDashboard.putNumber("Bottom_Velocity", self.shooter.getVelocity('bottom'))
+        wpilib.SmartDashboard.putNumber("Feed_Velocity", self.shooter.getVelocity('feed'))
+        wpilib.SmartDashboard.putNumber("Lead_Fly_Velocity", self.shooter.getVelocity('lead'))
+        wpilib.SmartDashboard.putNumber("Follower_Fly_Velocity", self.shooter.getVelocity('follower'))
 
         self.shooter.getLookupTable(1)
 
     def testInit(self):
         commands2.CommandScheduler.getInstance().cancelAll()
 
-        # For tuning robot
+        # For tuning shooter
+        wpilib.SmartDashboard.putNumberArray("Feed PIDF", [0, 0, 0, 0])
+        wpilib.SmartDashboard.putNumberArray("Lead Flywheel PIDF", [0, 0, 0, 0])
+        wpilib.SmartDashboard.putNumberArray("Folower Flywheel PIDF", [0, 0, 0, 0])
+
         self.xbox.x().onTrue(        
             commands2.cmd.runOnce(lambda: self.shooter.setRPM(0), self.shooter)
         )
@@ -74,18 +73,18 @@ class RobotShooter:
         )
 
     def testPeriodic(self):
-        self.intakeMotorPIDF: typing.Tuple[float, float, float, float] = wpilib.SmartDashboard.getNumberArray("Intake PIDF", [0, 0, 0, 0])
-        self.topMotorPIDF: typing.Tuple[float, float, float, float] = wpilib.SmartDashboard.getNumberArray("Top PIDF", [0, 0, 0, 0])
-        self.bottomMotorPIDF: typing.Tuple[float, float, float, float] = wpilib.SmartDashboard.getNumberArray("Bottom PIDF", [0, 0, 0, 0])
+        self.feedMotorPIDF: typing.Tuple[float, float, float, float] = wpilib.SmartDashboard.getNumberArray("Feed PIDF", [0, 0, 0, 0])
+        self.leadFlywheelMotorPIDF: typing.Tuple[float, float, float, float] = wpilib.SmartDashboard.getNumberArray("Lead Flywheel PIDF", [0, 0, 0, 0])
+        self.followerFlywheelMotorPIDF: typing.Tuple[float, float, float, float] = wpilib.SmartDashboard.getNumberArray("Follower Flywheel PIDF", [0, 0, 0, 0])
 
-        self.configs.closedLoop.pidf(*self.intakeMotorPIDF, rev.ClosedLoopSlot.kSlot0)
-        self.shooter.intakeMotor.configure(self.configs, rev.ResetMode.kNoResetSafeParameters, rev.PersistMode.kNoPersistParameters)
+        self.configs.closedLoop.pidf(*self.feedMotorPIDF, rev.ClosedLoopSlot.kSlot0)
+        self.shooter.motors["feed"].configure(self.configs, rev.ResetMode.kNoResetSafeParameters, rev.PersistMode.kNoPersistParameters)
 
-        self.configs.closedLoop.pidf(*self.topMotorPIDF, rev.ClosedLoopSlot.kSlot0)
-        self.shooter.topMotor.configure(self.configs, rev.ResetMode.kNoResetSafeParameters, rev.PersistMode.kNoPersistParameters)
+        self.configs.closedLoop.pidf(*self.leadFlywheelMotorPIDF, rev.ClosedLoopSlot.kSlot0)
+        self.shooter.motors["lead"].configure(self.configs, rev.ResetMode.kNoResetSafeParameters, rev.PersistMode.kNoPersistParameters)
 
-        self.configs.closedLoop.pidf(*self.bottomMotorPIDF, rev.ClosedLoopSlot.kSlot0)
-        self.shooter.bottomMotor.configure(self.configs, rev.ResetMode.kNoResetSafeParameters, rev.PersistMode.kNoPersistParameters)
+        self.configs.closedLoop.pidf(*self.followerFlywheelMotorPIDF, rev.ClosedLoopSlot.kSlot0)
+        self.shooter.motors["follower"].configure(self.configs, rev.ResetMode.kNoResetSafeParameters, rev.PersistMode.kNoPersistParameters)
 
     def getDeployInfo(self, key: str) -> str:
         """Gets the Git SHA of the deployed robot by parsing ~/deploy.json and returning the git-hash from the JSON key OR if deploy.json is unavailable will return "unknown"
