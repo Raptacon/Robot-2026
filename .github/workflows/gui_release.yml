@@ -79,5 +79,5 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
-          name: gui-${{ runner.os }}
+          name: raptacon-controls-editor-${{ runner.os }}
           path: dist/${{ matrix.artifact_name }}
