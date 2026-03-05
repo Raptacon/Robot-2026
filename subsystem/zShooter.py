@@ -87,7 +87,7 @@ class zShooter(Subsystem):
         """
         Sets the voltage of the motor
 
-        Args: 
+        Args:
             motorName: Name of the motor to set a voltage for (ie: 'feed')
             voltage: Voltage to set the motor at
 
