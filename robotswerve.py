@@ -18,7 +18,6 @@ import wpimath
 
 # Internal imports
 from data.telemetry import Telemetry
-from vision import Vision
 from commands.default_swerve_drive import DefaultDrive
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
 from utils.input import InputFactory
@@ -44,15 +43,6 @@ class RobotSwerve:
 
         # Alliance instantiation
         self.updateAlliance()
-
-        # Vision setup
-        try:
-            self.vision = Vision(self.drivetrain)
-        except Exception:
-            self.vision = None
-            wpilib.reportError("Unable to load vision class", printTrace=True)
-        self.alignmentTagId = None
-        self.caughtPeriodicVisionError = False
 
         # Initialize timer
         self.timer = wpilib.Timer()
@@ -82,7 +72,7 @@ class RobotSwerve:
         self.enableTelemetry = wpilib.SmartDashboard.getBoolean("enableTelemetry", True)
         if self.enableTelemetry:
             self.telemetry = Telemetry(
-                driveTrain=self.drivetrain, vision=self.vision,
+                driveTrain=self.drivetrain,
                 driverController=self.factory.getController(0),
                 mechController=self.factory.getController(1),
             )
@@ -112,15 +102,6 @@ class RobotSwerve:
             self.telemetry.runDefaultDataCollections()
 
         self.field.setRobotPose(self.drivetrain.current_pose())
-
-        if self.vision is not None:
-            try:
-                self.vision.getCamEstimates(specificTagId=lambda: self.alignmentTagId)
-                self.vision.showTargetData()
-            except Exception:
-                if not self.caughtPeriodicVisionError:
-                    self.caughtPeriodicVisionError = True
-                    wpilib.reportError("Retrieval of vision info failed in periodic", printTrace=True)
 
     def disabledInit(self):
         self.updateAlliance()
@@ -255,7 +236,3 @@ class RobotSwerve:
         self.alliance = wpilib.DriverStation.getAlliance()
         self.drivetrain.update_alliance_flag(self.alliance)
 
-    def setAlignmentTag(self, alignmentTagId: int | None) -> None:
-        """
-        """
-        self.alignmentTagId = alignmentTagId
