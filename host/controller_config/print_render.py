@@ -129,6 +129,7 @@ def render_controller(
     height: int,
     label_positions: dict[str, tuple[int, int]] | None = None,
     hide_unassigned: bool = False,
+    icon_loader=None,
 ) -> Image.Image:
     """Render a single controller layout to a PIL Image.
 
@@ -259,8 +260,14 @@ def render_controller(
         label_color = (AXIS_INDICATOR_COLORS[axis_tag]
                        if axis_tag else "#555555")
 
-        # Input label
-        draw.text((lx + BOX_PAD, ly + 1), inp.display_name,
+        # Input icon + label
+        text_x = lx + BOX_PAD
+        if icon_loader:
+            icon = icon_loader.get_pil_icon(inp.name, 18)
+            if icon:
+                page.paste(icon, (int(lx + BOX_PAD), int(ly + 1)), icon)
+                text_x = lx + BOX_PAD + 20
+        draw.text((text_x, ly + 1), inp.display_name,
                   fill=label_color, font=label_font)
 
         # Action names or unassigned
@@ -280,6 +287,7 @@ def render_portrait_page(
     controllers: list[ControllerConfig],
     label_positions: dict[str, tuple[int, int]] | None = None,
     hide_unassigned: bool = False,
+    icon_loader=None,
 ) -> Image.Image:
     """Render up to 2 controllers stacked vertically on a portrait page."""
     page = Image.new("RGB", (PAGE_W_PORTRAIT, PAGE_H_PORTRAIT), "white")
@@ -288,7 +296,7 @@ def render_portrait_page(
     for i, ctrl in enumerate(controllers[:2]):
         ctrl_img = render_controller(
             ctrl, PAGE_W_PORTRAIT, slot_h, label_positions,
-            hide_unassigned)
+            hide_unassigned, icon_loader)
         page.paste(ctrl_img, (0, i * slot_h + (MARGIN // 2)))
 
     return page
@@ -298,11 +306,12 @@ def render_landscape_page(
     ctrl: ControllerConfig,
     label_positions: dict[str, tuple[int, int]] | None = None,
     hide_unassigned: bool = False,
+    icon_loader=None,
 ) -> Image.Image:
     """Render 1 controller on a landscape page."""
     return render_controller(
         ctrl, PAGE_W_LANDSCAPE, PAGE_H_LANDSCAPE, label_positions,
-        hide_unassigned)
+        hide_unassigned, icon_loader)
 
 
 def export_pages(
@@ -311,6 +320,7 @@ def export_pages(
     output_path: str | Path,
     label_positions: dict[str, tuple[int, int]] | None = None,
     hide_unassigned: bool = False,
+    icon_loader=None,
 ):
     """Export all controllers as PNG or multi-page PDF.
 
@@ -338,11 +348,11 @@ def export_pages(
         for i in range(0, len(controllers), 2):
             batch = controllers[i:i + 2]
             pages.append(render_portrait_page(
-                batch, label_positions, hide_unassigned))
+                batch, label_positions, hide_unassigned, icon_loader))
     else:
         for ctrl in controllers:
             pages.append(render_landscape_page(
-                ctrl, label_positions, hide_unassigned))
+                ctrl, label_positions, hide_unassigned, icon_loader))
 
     if fmt == "pdf":
         # Pillow multi-page PDF

@@ -99,7 +99,8 @@ class ControllerCanvas(tk.Frame):
                  on_mouse_coord=None, on_label_moved=None,
                  on_hover_input=None, on_hover_shape=None,
                  on_action_remove=None,
-                 label_positions=None):
+                 label_positions=None,
+                 icon_loader=None):
         """
         Args:
             parent: tkinter parent widget
@@ -126,6 +127,8 @@ class ControllerCanvas(tk.Frame):
         self._on_hover_input = on_hover_input
         self._on_hover_shape = on_hover_shape
         self._on_action_remove = on_action_remove
+        self._icon_loader = icon_loader
+        self._label_icon_refs: list[ImageTk.PhotoImage] = []
         self._bindings: dict[str, list[str]] = {}
 
         # Custom label positions: input_name -> (img_px_x, img_px_y)
@@ -431,6 +434,7 @@ class ControllerCanvas(tk.Frame):
         self._shape_map.clear()
         self._hover_shape = None
         self._rumble_label_icons.clear()
+        self._label_icon_refs.clear()
 
         canvas_w = self._canvas.winfo_width()
         canvas_h = self._canvas.winfo_height()
@@ -628,11 +632,22 @@ class ControllerCanvas(tk.Frame):
 
         items = [box_id]
 
+        # Input icon (next to label)
+        text_offset = BOX_PAD
+        if self._icon_loader:
+            icon = self._icon_loader.get_tk_icon(inp.name, 16)
+            if icon:
+                self._label_icon_refs.append(icon)
+                icon_id = self._canvas.create_image(
+                    lx + BOX_PAD, ly + 1, image=icon, anchor=tk.NW)
+                items.append(icon_id)
+                text_offset = BOX_PAD + 18
+
         # Input label
         label_color = (AXIS_INDICATOR_COLORS[axis_tag]
                        if axis_tag else "#555555")
         label_id = self._canvas.create_text(
-            lx + BOX_PAD, ly + 2,
+            lx + text_offset, ly + 2,
             text=inp.display_name, anchor=tk.NW,
             font=("Arial", 7), fill=label_color,
         )

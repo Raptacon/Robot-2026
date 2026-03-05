@@ -83,7 +83,8 @@ class ActionEditorTab(ttk.Frame):
                  is_action_bound=None,
                  get_all_actions=None,
                  get_group_names=None,
-                 get_advanced_flags=None):
+                 get_advanced_flags=None,
+                 icon_loader=None):
         super().__init__(parent)
         _configure_styles()
 
@@ -99,6 +100,8 @@ class ActionEditorTab(ttk.Frame):
         self._get_all_controllers = get_all_controllers
         self._get_compatible_inputs = get_compatible_inputs
         self._is_action_bound = is_action_bound
+        self._icon_loader = icon_loader
+        self._binding_icons: list = []  # Prevent GC of PhotoImage refs
 
         self._action: ActionDefinition | None = None
         self._qname: str | None = None
@@ -167,7 +170,7 @@ class ActionEditorTab(ttk.Frame):
         _tip(self._assign_label, TIP_ASSIGN_INPUT)
         _tip(self._assign_combo, TIP_ASSIGN_INPUT)
         _tip(self._assign_btn, TIP_ASSIGN_BTN)
-        _tip(self._bound_listbox, TIP_BOUND_LIST)
+        _tip(self._bound_tree, TIP_BOUND_LIST)
         _tip(self._unassign_btn, TIP_UNASSIGN_BTN)
         # --- Button options pane ---
         _tip(self._btn_trigger_label, TIP_TRIGGER_BUTTON)
@@ -329,19 +332,24 @@ class ActionEditorTab(ttk.Frame):
             assign_frame, text="+", width=3, command=self._on_assign)
         self._assign_btn.pack(side=tk.LEFT, padx=(4, 0))
 
-        # Assigned inputs listbox (double-click to remove)
+        # Assigned inputs treeview (double-click to remove)
         row += 1
-        self._bound_listbox = tk.Listbox(
+        style = ttk.Style()
+        style.configure("BoundInputs.Treeview",
+                         rowheight=26,
+                         font=("TkDefaultFont", 10))
+        self._bound_tree = ttk.Treeview(
             self._bindings_frame, height=5,
-            selectmode=tk.BROWSE, exportselection=False)
-        self._bound_listbox.grid(
+            selectmode="browse", show="tree",
+            style="BoundInputs.Treeview")
+        self._bound_tree.grid(
             row=row, column=0, columnspan=2, sticky=tk.NSEW, pady=(4, 2))
-        self._bound_listbox.bind("<Double-1>", lambda e: self._on_unassign())
+        self._bound_tree.bind("<Double-1>", lambda e: self._on_unassign())
         scrollbar = ttk.Scrollbar(
             self._bindings_frame, orient=tk.VERTICAL,
-            command=self._bound_listbox.yview)
+            command=self._bound_tree.yview)
         scrollbar.grid(row=row, column=2, sticky=tk.NS, pady=(4, 2))
-        self._bound_listbox.config(yscrollcommand=scrollbar.set)
+        self._bound_tree.config(yscrollcommand=scrollbar.set)
 
         row += 1
         self._unassign_btn = ttk.Button(
@@ -608,7 +616,7 @@ class ActionEditorTab(ttk.Frame):
         finally:
             self._updating_form = False
 
-        self._bound_listbox.delete(0, tk.END)
+        self._bound_tree.delete(*self._bound_tree.get_children())
         self._bound_map.clear()
         self._assign_combo.config(values=[])
         self._assign_map.clear()
@@ -772,9 +780,10 @@ class ActionEditorTab(ttk.Frame):
     # ------------------------------------------------------------------
 
     def _refresh_bindings(self):
-        """Refresh the assigned-inputs listbox and assign dropdown."""
-        self._bound_listbox.delete(0, tk.END)
+        """Refresh the assigned-inputs treeview and assign dropdown."""
+        self._bound_tree.delete(*self._bound_tree.get_children())
         self._bound_map.clear()
+        self._binding_icons.clear()
         self._assign_combo.config(values=[])
         self._assign_map.clear()
 
@@ -787,12 +796,21 @@ class ActionEditorTab(ttk.Frame):
         controllers = self._get_all_controllers()
         all_inputs = self._get_compatible_inputs(self._qname)
 
-        # Populate assigned inputs listbox + bound_map
+        # Populate assigned inputs treeview + bound_map
         for port, ctrl_name in controllers:
             for input_name, display in all_inputs:
                 if self._is_action_bound(self._qname, port, input_name):
                     label = f"{ctrl_name}: {display}"
-                    self._bound_listbox.insert(tk.END, label)
+                    icon = None
+                    if self._icon_loader:
+                        icon = self._icon_loader.get_tk_icon(
+                            input_name, 20)
+                    kwargs = {}
+                    if icon:
+                        self._binding_icons.append(icon)
+                        kwargs["image"] = icon
+                    self._bound_tree.insert(
+                        "", tk.END, text=label, **kwargs)
                     self._bound_map[label] = (port, input_name)
 
         # Populate assign dropdown with compatible unbound inputs
@@ -876,10 +894,10 @@ class ActionEditorTab(ttk.Frame):
         """Remove the selected binding from the current action."""
         if not self._qname:
             return
-        sel = self._bound_listbox.curselection()
+        sel = self._bound_tree.selection()
         if not sel:
             return
-        label = self._bound_listbox.get(sel[0])
+        label = self._bound_tree.item(sel[0], "text")
         mapping = self._bound_map.get(label)
         if not mapping:
             return

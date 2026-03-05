@@ -73,8 +73,12 @@ def main():
 
         output_path = Path(args.export)
         try:
+            from host.controller_config.icon_loader import InputIconLoader
+            icons_dir = _get_project_root() / "images" / "XboxControlIcons" / "Buttons Full Solid"
+            cli_icon_loader = InputIconLoader(icons_dir) if icons_dir.exists() else None
             export_pages(config, args.orientation, output_path,
-                         label_positions, args.hide_unassigned)
+                         label_positions, args.hide_unassigned,
+                         cli_icon_loader)
             print(f"Exported to {output_path}")
         except Exception as e:
             print(f"Error: {e}", file=sys.stderr)

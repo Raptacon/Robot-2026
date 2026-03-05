@@ -14,6 +14,7 @@ from pathlib import Path
 import sys
 
 from host.controller_config.main import _get_project_root
+from host.controller_config.icon_loader import InputIconLoader
 
 # Ensure project root is on the path so utils.controller can be imported
 _project_root = _get_project_root()
@@ -177,6 +178,10 @@ class ControllerConfigApp(tk.Tk):
         self._drag_action: str | None = None
         self._drag_bindings_saved: dict = {}  # saved bind_all IDs
 
+        # Icon loader for Xbox controller button icons
+        icons_dir = _project_root / "images" / "XboxControlIcons" / "Buttons Full Solid"
+        self._icon_loader = InputIconLoader(icons_dir, root=self)
+
         self._build_menu()
         self._build_layout()
 
@@ -324,6 +329,7 @@ class ControllerConfigApp(tk.Tk):
             on_action_renamed=self._on_action_renamed,
             on_selection_changed=self._on_action_selection_changed,
             get_advanced_flags=self.get_advanced_flags,
+            icon_loader=self._icon_loader,
         )
         # Apply initial edit-details state
         self._action_panel.set_details_editable(
@@ -358,6 +364,7 @@ class ControllerConfigApp(tk.Tk):
             get_all_actions=lambda: self._config.actions,
             get_group_names=self._get_all_group_names,
             get_advanced_flags=self.get_advanced_flags,
+            icon_loader=self._icon_loader,
         )
         self._notebook.add(self._action_editor, text="Action Editor")
 
@@ -701,6 +708,7 @@ class ControllerConfigApp(tk.Tk):
             on_hover_shape=lambda input_names, p=port: self._on_hover_shape(p, input_names),
             on_action_remove=lambda input_name, action, p=port: self._on_action_remove(p, input_name, action),
             label_positions=self._settings.get("label_positions", {}),
+            icon_loader=self._icon_loader,
         )
         canvas.pack(fill=tk.BOTH, expand=True)
         canvas.set_bindings(ctrl.bindings)
@@ -1080,10 +1088,12 @@ class ControllerConfigApp(tk.Tk):
                 compatible.add(inp.name)
         return compatible
 
-    def _get_binding_info_for_action(self, qname: str) -> list[tuple[str, str]]:
-        """Return list of (controller_name, input_display) for an action.
+    def _get_binding_info_for_action(
+        self, qname: str
+    ) -> list[tuple[str, str, str]]:
+        """Return list of (controller_name, input_display, input_name).
 
-        Used by ActionPanel for tooltips and color-coding.
+        Used by ActionPanel for tooltips, color-coding, and icons.
         """
         result = []
         for port, ctrl in self._config.controllers.items():
@@ -1092,7 +1102,7 @@ class ControllerConfigApp(tk.Tk):
                 if qname in actions:
                     inp = XBOX_INPUT_MAP.get(input_name)
                     display = inp.display_name if inp else input_name
-                    result.append((ctrl_label, display))
+                    result.append((ctrl_label, display, input_name))
         return result
 
     def _get_all_group_names(self) -> list[str]:
@@ -1567,7 +1577,8 @@ class ControllerConfigApp(tk.Tk):
             label_positions = self._settings.get("label_positions", {})
             export_pages(self._config, orientation, Path(path),
                          label_positions,
-                         self._hide_unassigned_var.get())
+                         self._hide_unassigned_var.get(),
+                         self._icon_loader)
             self._status_var.set(
                 f"Exported {orientation} {fmt.upper()} to {Path(path).name}")
         except Exception as e:

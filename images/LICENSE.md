@@ -10,3 +10,6 @@ xbox-controller-black
 License: CC Attribution
 https://skfb.ly/oVv9D
 
+Control Icons
+"Xbox Series Button Icons and Controls - Zacksly
+Licensed under CC BY 3.0 - https://zacksly.itch.io"

@@ -163,7 +163,8 @@ class ActionPanel(tk.Frame):
                  get_compatible_inputs=None, is_action_bound=None,
                  on_action_renamed=None,
                  on_selection_changed=None,
-                 get_advanced_flags=None):
+                 get_advanced_flags=None,
+                 icon_loader=None):
         """
         Args:
             parent: tkinter parent widget
@@ -205,6 +206,8 @@ class ActionPanel(tk.Frame):
         self._on_selection_changed = on_selection_changed
         self._get_advanced_flags = get_advanced_flags or (
             lambda: {"splines": True, "nonmono": True})
+        self._icon_loader = icon_loader
+        self._tree_icons: list = []  # Prevent GC of PhotoImage refs
         self._details_editable = True
         self._actions: dict[str, ActionDefinition] = {}
         self._empty_groups: set[str] = set()
@@ -271,7 +274,12 @@ class ActionPanel(tk.Frame):
         tree_container = tk.Frame(list_frame)
         tree_container.pack(fill=tk.BOTH, expand=True)
 
-        self._tree = ttk.Treeview(tree_container, selectmode="browse", show="tree")
+        style = ttk.Style()
+        style.configure("ActionList.Treeview",
+                         rowheight=26,
+                         font=("TkDefaultFont", 10))
+        self._tree = ttk.Treeview(tree_container, selectmode="browse",
+                                  show="tree", style="ActionList.Treeview")
         self._tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self._tree.bind("<<TreeviewSelect>>", self._on_select)
         self._tree.bind("<<TreeviewOpen>>", self._on_tree_toggle)
@@ -702,11 +710,11 @@ class ActionPanel(tk.Frame):
         self._group_combo['values'] = sorted_groups
 
         # Style rows
-        self._tree.tag_configure("group", font=("TkDefaultFont", 9, "bold"))
-        self._tree.tag_configure("action", font=("TkDefaultFont", 9))
+        self._tree.tag_configure("group", font=("TkDefaultFont", 10, "bold"))
+        self._tree.tag_configure("action", font=("TkDefaultFont", 10))
         self._tree.tag_configure("empty_placeholder",
                                  foreground="#999999",
-                                 font=("TkDefaultFont", 9, "italic"))
+                                 font=("TkDefaultFont", 10, "italic"))
 
         self.update_binding_tags()
 
@@ -721,23 +729,23 @@ class ActionPanel(tk.Frame):
         """
         self._tree.tag_configure("unassigned",
                                  background="#ffdddd",
-                                 font=("TkDefaultFont", 9))
+                                 font=("TkDefaultFont", 10))
         self._tree.tag_configure("multi_bound",
                                  background="#ffffcc",
-                                 font=("TkDefaultFont", 9))
+                                 font=("TkDefaultFont", 10))
         self._tree.tag_configure("action",
                                  background="",
-                                 font=("TkDefaultFont", 9))
+                                 font=("TkDefaultFont", 10))
         # Group-level status tags (shown when collapsed)
         self._tree.tag_configure("group_unassigned",
                                  background="#ffdddd",
-                                 font=("TkDefaultFont", 9, "bold"))
+                                 font=("TkDefaultFont", 10, "bold"))
         self._tree.tag_configure("group_multi_bound",
                                  background="#ffffcc",
-                                 font=("TkDefaultFont", 9, "bold"))
+                                 font=("TkDefaultFont", 10, "bold"))
         self._tree.tag_configure("group_mixed",
                                  background="#ffddbb",
-                                 font=("TkDefaultFont", 9, "bold"))
+                                 font=("TkDefaultFont", 10, "bold"))
 
         if not self._get_binding_info:
             return
@@ -745,6 +753,9 @@ class ActionPanel(tk.Frame):
         # Track per-group status flags
         group_has_unassigned: dict[str, bool] = {}
         group_has_multi: dict[str, bool] = {}
+
+        # Clear old icon refs before rebuilding
+        self._tree_icons.clear()
 
         for qname, action in self._actions.items():
             if not self._tree.exists(qname):
@@ -758,6 +769,17 @@ class ActionPanel(tk.Frame):
                 group_has_multi[action.group] = True
             else:
                 self._tree.item(qname, tags=("action",))
+
+            # Set icon from first binding's input name
+            icon = None
+            if bindings and self._icon_loader:
+                input_name = bindings[0][2]  # (ctrl, display, input_name)
+                icon = self._icon_loader.get_tk_icon(input_name, 20)
+            if icon:
+                self._tree_icons.append(icon)
+                self._tree.item(qname, image=icon)
+            else:
+                self._tree.item(qname, image="")
 
         # Apply status colors to collapsed group nodes
         self._update_group_tags(group_has_unassigned, group_has_multi)
@@ -1999,7 +2021,8 @@ class ActionPanel(tk.Frame):
             if bindings:
                 lines.append("")
                 lines.append("Assigned to:")
-                for ctrl_name, input_display in bindings:
+                for binding in bindings:
+                    ctrl_name, input_display = binding[0], binding[1]
                     lines.append(f"  {ctrl_name} > {input_display}")
                 if len(bindings) > 1:
                     lines.append("")
