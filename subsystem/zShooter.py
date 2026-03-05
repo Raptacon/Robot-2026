@@ -70,6 +70,7 @@ class zShooter(Subsystem):
             motor: the motor on the shooter to configure
             pidf: the PIDF constants to set on the given motor
             invert: if True, invert the rotation direction of the given motor
+            leader: the motor to follow. If None, do not set this motor as a follower
 
         Returns:
             None
