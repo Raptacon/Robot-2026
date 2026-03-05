@@ -62,15 +62,15 @@ class RobotShooter:
 
         # For tuning robot
         self.xbox.x().onTrue(        
-            commands2.cmd.runOnce(lambda: self.shooter.setAllMotorReferences(0), self.shooter)
+            commands2.cmd.runOnce(lambda: self.shooter.setRPM(0), self.shooter)
         )
 
         self.xbox.a().onTrue(   
-            commands2.cmd.runOnce(lambda: self.shooter.setAllMotorReferences(3000), self.shooter)
+            commands2.cmd.runOnce(lambda: self.shooter.setRPM(3000), self.shooter)
         )
 
         self.xbox.b().onTrue(
-            commands2.cmd.runOnce(lambda: self.shooter.setAllMotorReferences(4500), self.shooter)
+            commands2.cmd.runOnce(lambda: self.shooter.setRPM(4500), self.shooter)
         )
 
     def testPeriodic(self):

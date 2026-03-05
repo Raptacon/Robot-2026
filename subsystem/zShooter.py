@@ -99,10 +99,9 @@ class zShooter():
         """
         self.PIDs[motorName].setReference(rpm, rev.SparkLowLevel.ControlType.kVelocity, rev.ClosedLoopSlot.kSlot0)
 
-    def setAllMotorReferences(self, rpm: float):
+    def setRPM(self, rpm: float):
         """
-        Give a custom setpoint for PID to achieve in terms of velocity and apply to all
-        motors on the shooter
+        Directly set the RPM using the given value
 
         Args:
             rpm: The velocity setpoint for the motor in RPM
@@ -110,8 +109,7 @@ class zShooter():
         Returns:
             None
         """
-        for motorName in self.PIDs:
-            self.setMotorReference(motorName=motorName, rpm=rpm)
+        self.RPM = rpm
 
     def getVelocity(self, motorName: str):
         """
