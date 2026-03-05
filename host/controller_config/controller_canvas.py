@@ -798,18 +798,17 @@ class ControllerCanvas(tk.Frame):
         is_dpad = inp.name.startswith("pov_")
         is_stick = (inp.name.startswith("left_stick")
                     or inp.name.startswith("right_stick"))
+        all_actions = actions
         if is_dpad:
-            display_actions = actions[:1]
+            actions = all_actions[:1]
         elif is_stick:
-            display_actions = actions[:2]
-        else:
-            display_actions = actions
-        has_actions = len(actions) > 0
+            actions = all_actions[:2]
+        has_actions = len(all_actions) > 0
         fill = BOX_FILL_ASSIGNED if has_actions else BOX_FILL
         if is_dpad:
             total_height = bh
         elif has_actions:
-            total_height = ly_off + len(display_actions) * a_step
+            total_height = ly_off + len(actions) * a_step
         else:
             total_height = bh
 
@@ -855,7 +854,7 @@ class ControllerCanvas(tk.Frame):
             )
             items.append(label_id)
             # "+" indicator when extra bindings are hidden
-            if has_actions and len(actions) > 1:
+            if has_actions and len(all_actions) > 1:
                 plus_id = self._canvas.create_text(
                     lx + bw + max(2, int(4 * self._s)), ly - int(4 * self._s),
                     text="+", anchor=tk.NW,
@@ -872,7 +871,7 @@ class ControllerCanvas(tk.Frame):
 
             # Action names or unassigned text
             if has_actions:
-                for i, action in enumerate(display_actions):
+                for i, action in enumerate(actions):
                     txt_id = self._canvas.create_text(
                         lx + bp, ly + ly_off + i * a_step,
                         text=action, anchor=tk.NW,
@@ -880,7 +879,7 @@ class ControllerCanvas(tk.Frame):
                     )
                     items.append(txt_id)
                 # "+" when actions are truncated (sticks capped at 2)
-                if len(actions) > len(display_actions):
+                if len(all_actions) > len(actions):
                     plus_id = self._canvas.create_text(
                         lx + bw + max(2, int(4 * self._s)),
                         ly - int(4 * self._s),

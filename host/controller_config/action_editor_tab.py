@@ -1110,29 +1110,29 @@ class ActionEditorTab(ttk.Frame):
             try:
                 action.trigger_mode = EventTriggerMode(trigger_str)
             except ValueError:
-                pass
+                pass  # Invalid trigger mode string; keep previous value
 
         # Analog fields
         try:
             action.deadband = float(self._deadband_var.get() or 0.0)
         except ValueError:
-            pass
+            pass  # Invalid input; keep previous deadband value
         action.inversion = self._inversion_var.get()
         try:
             action.scale = float(self._scale_var.get() or 1.0)
         except ValueError:
-            pass
+            pass  # Invalid input; keep previous scale value
         try:
             action.slew_rate = float(self._slew_var.get() or 0.0)
         except ValueError:
-            pass
+            pass  # Invalid input; keep previous slew rate value
 
         if self._neg_slew_enable_var.get():
             try:
                 val = float(self._neg_slew_var.get() or 0.0)
                 action.extra[EXTRA_NEGATIVE_SLEW_RATE] = min(val, 0.0)
             except ValueError:
-                pass
+                pass  # Invalid input; keep previous negative slew value
         else:
             action.extra.pop(EXTRA_NEGATIVE_SLEW_RATE, None)
 

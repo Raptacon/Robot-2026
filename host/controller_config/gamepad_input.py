@@ -38,7 +38,7 @@ class GamepadPoller:
             XInput.set_deadzone(XInput.DEADZONE_RIGHT_THUMB, 0)
             XInput.set_deadzone(XInput.DEADZONE_TRIGGER, 0)
         except (ImportError, OSError):
-            pass
+            pass  # XInput unavailable; self._xinput stays None, fallback to no gamepad
 
     @property
     def available(self) -> bool:
