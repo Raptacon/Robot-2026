@@ -128,6 +128,50 @@ def parse_qualified_name(qualified: str) -> tuple[str, str]:
     return DEFAULT_GROUP, qualified
 
 
+def validate_action_name(name: str) -> str | None:
+    """Validate an action short name.
+
+    Returns None if valid, or an error message string if invalid.
+    """
+    if not name:
+        return "Name cannot be empty."
+    if '.' in name:
+        return "Name cannot contain dots."
+    return None
+
+
+def validate_action_group(group: str) -> str | None:
+    """Validate an action group name.
+
+    Returns None if valid, or an error message string if invalid.
+    """
+    if not group:
+        return "Group cannot be empty."
+    return None
+
+
+def validate_action_rename(old_qname: str, new_qname: str,
+                           actions: dict[str, 'ActionDefinition']
+                           ) -> str | None:
+    """Validate renaming an action from old_qname to new_qname.
+
+    Checks name, group, and duplicate constraints.
+    Returns None if valid, or an error message string if invalid.
+    """
+    if old_qname == new_qname:
+        return None
+    group, name = parse_qualified_name(new_qname)
+    name_err = validate_action_name(name)
+    if name_err:
+        return name_err
+    group_err = validate_action_group(group)
+    if group_err:
+        return group_err
+    if new_qname in actions:
+        return f"An action named '{new_qname}' already exists."
+    return None
+
+
 @dataclass
 class ControllerConfig:
     """Configuration for a single controller (port + bindings)."""

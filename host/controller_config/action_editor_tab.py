@@ -27,6 +27,8 @@ from utils.controller.model import (
     InputType,
     EventTriggerMode,
     STICK_PAIRS,
+    validate_action_name,
+    validate_action_group,
 )
 
 
@@ -79,13 +81,15 @@ class ActionEditorTab(ttk.Frame):
                  get_all_controllers=None,
                  get_compatible_inputs=None,
                  is_action_bound=None,
-                 get_all_actions=None):
+                 get_all_actions=None,
+                 get_group_names=None):
         super().__init__(parent)
         _configure_styles()
 
         self._on_before_change = on_before_change
         self._on_field_changed = on_field_changed
         self._get_all_actions = get_all_actions
+        self._get_group_names = get_group_names
         self._get_binding_info = get_binding_info
         self._on_assign_action = on_assign_action
         self._on_unassign_action = on_unassign_action
@@ -248,7 +252,9 @@ class ActionEditorTab(ttk.Frame):
         self._name_entry = ttk.Entry(
             self._common_frame, textvariable=self._name_var, width=17)
         self._name_entry.grid(row=row, column=1, sticky=tk.EW, pady=1)
-        self._name_var.trace_add("write", self._on_field_changed_trace)
+        # Name commits on focus-out/Enter, not on every keystroke
+        self._name_entry.bind("<Return>", self._commit_name_group)
+        self._name_entry.bind("<FocusOut>", self._commit_name_group)
 
         # Group
         row += 1
@@ -259,7 +265,11 @@ class ActionEditorTab(ttk.Frame):
         self._group_combo = ttk.Combobox(
             self._common_frame, textvariable=self._group_var, width=15)
         self._group_combo.grid(row=row, column=1, sticky=tk.EW, pady=1)
-        self._group_var.trace_add("write", self._on_field_changed_trace)
+        # Group commits on focus-out/Enter/selection, not on every keystroke
+        self._group_combo.bind("<Return>", self._commit_name_group)
+        self._group_combo.bind("<FocusOut>", self._commit_name_group)
+        self._group_combo.bind("<<ComboboxSelected>>",
+                               self._commit_name_group)
 
         # Description (multi-line wrapped text)
         row += 1
@@ -517,6 +527,13 @@ class ActionEditorTab(ttk.Frame):
         self._updating_form = True
         try:
             self._name_var.set(action.name)
+            # Populate group dropdown with all known groups
+            if self._get_group_names:
+                self._group_combo['values'] = self._get_group_names()
+            elif self._get_all_actions:
+                groups = sorted({a.group
+                                 for a in self._get_all_actions().values()})
+                self._group_combo['values'] = groups
             self._group_var.set(action.group)
             self._desc_text.delete("1.0", tk.END)
             self._desc_text.insert("1.0", action.description)
@@ -851,6 +868,72 @@ class ActionEditorTab(ttk.Frame):
         if self._on_field_changed:
             self._on_field_changed()
 
+    def _set_field_error(self, widget, has_error: bool):
+        """Apply or clear error styling on a ttk Entry or Combobox."""
+        base = widget.winfo_class()
+        widget.configure(style=f"Error.{base}" if has_error else f"{base}")
+
+    def _flash_field_warning(self, widget, err: str):
+        """Flash error styling and show a warning for an invalid field."""
+        if getattr(self, '_showing_warning', False):
+            return
+        self._showing_warning = True
+        self._set_field_error(widget, True)
+        messagebox.showwarning("Invalid Value", err)
+        self._set_field_error(widget, False)
+        self._showing_warning = False
+
+    def _commit_name_group(self, event=None):
+        """Commit name/group changes on focus-out or Enter."""
+        if self._updating_form or not self._action:
+            return
+
+        action = self._action
+        new_name = self._name_var.get().strip()
+        new_group = self._group_var.get().strip()
+        changed = False
+
+        # Validate and apply name
+        if new_name and new_name != action.name:
+            err = validate_action_name(new_name)
+            if err:
+                self._flash_field_warning(self._name_entry, err)
+                self._updating_form = True
+                self._name_var.set(action.name)
+                self._updating_form = False
+            else:
+                action.name = new_name
+                changed = True
+        elif not new_name:
+            self._flash_field_warning(
+                self._name_entry, "Name cannot be empty.")
+            self._updating_form = True
+            self._name_var.set(action.name)
+            self._updating_form = False
+        self._set_field_error(self._name_entry, False)
+
+        # Validate and apply group
+        if new_group and new_group != action.group:
+            err = validate_action_group(new_group)
+            if err:
+                self._flash_field_warning(self._group_combo, err)
+                self._updating_form = True
+                self._group_var.set(action.group)
+                self._updating_form = False
+            else:
+                action.group = new_group
+                changed = True
+        elif not new_group:
+            self._flash_field_warning(
+                self._group_combo, "Group cannot be empty.")
+            self._updating_form = True
+            self._group_var.set(action.group)
+            self._updating_form = False
+        self._set_field_error(self._group_combo, False)
+
+        if changed and self._on_field_changed:
+            self._on_field_changed()
+
     def _on_desc_modified(self, event=None):
         """Handle description Text widget changes."""
         if not self._desc_text.edit_modified():
@@ -944,11 +1027,9 @@ class ActionEditorTab(ttk.Frame):
         if self._on_before_change:
             self._on_before_change(200)
 
-        new_name = self._name_var.get().strip()
-        new_group = self._group_var.get().strip()
         action.description = self._desc_text.get("1.0", "end-1c").strip()
-        action.name = new_name if new_name else action.name
-        action.group = new_group if new_group else action.group
+        # Name and group are committed on focus-out/Enter, not on every
+        # keystroke — see _commit_name_group().
 
         # Trigger mode from the active pane
         if action.input_type in (InputType.BUTTON,

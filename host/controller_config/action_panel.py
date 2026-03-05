@@ -20,6 +20,8 @@ from utils.controller.model import (
     EXTRA_SPLINE_POINTS,
     InputType,
     EventTriggerMode,
+    validate_action_name,
+    validate_action_rename,
 )
 from .tooltips import (
     TIP_NAME, TIP_GROUP, TIP_DESC, TIP_INPUT_TYPE,
@@ -217,6 +219,11 @@ class ActionPanel(tk.Frame):
     # ------------------------------------------------------------------
 
     def _build_ui(self):
+        # Error styling for invalid field values
+        style = ttk.Style(self)
+        style.configure("Error.TEntry", foreground="red")
+        style.configure("Error.TCombobox", foreground="red")
+
         # --- Action Tree ---
         list_frame = ttk.LabelFrame(self, text="Actions", padding=5)
         list_frame.pack(fill=tk.BOTH, expand=True)
@@ -326,6 +333,8 @@ class ActionPanel(tk.Frame):
                                      textvariable=self._name_var, width=20)
         self._name_entry.grid(row=row, column=1, sticky=tk.EW, pady=2)
         self._name_var.trace_add("write", self._on_name_changed)
+        self._name_entry.bind("<Return>", self._commit_name)
+        self._name_entry.bind("<FocusOut>", self._commit_name)
 
         # Group
         row += 1
@@ -336,6 +345,9 @@ class ActionPanel(tk.Frame):
                                          textvariable=self._group_var, width=17)
         self._group_combo.grid(row=row, column=1, sticky=tk.EW, pady=2)
         self._group_var.trace_add("write", self._on_group_changed)
+        self._group_combo.bind("<Return>", self._commit_group)
+        self._group_combo.bind("<FocusOut>", self._commit_group)
+        self._group_combo.bind("<<ComboboxSelected>>", self._commit_group)
 
         # Description (multi-line wrapped text)
         row += 1
@@ -592,6 +604,14 @@ class ActionPanel(tk.Frame):
     def _sorted_group_names(self, groups: dict[str, list[str]]) -> list[str]:
         """Sort group names with 'general' first."""
         return sorted(groups.keys(), key=lambda g: (g != DEFAULT_GROUP, g))
+
+    def get_group_names(self) -> list[str]:
+        """Return sorted list of all group names (including empty/default).
+
+        Single source of truth for group names used by both the
+        ActionPanel and ActionEditorTab group dropdowns.
+        """
+        return self._sorted_group_names(self._collect_groups())
 
     # Prefix for placeholder items in empty groups
     _EMPTY_PREFIX = "empty::"
@@ -1191,25 +1211,57 @@ class ActionPanel(tk.Frame):
             if self._on_actions_changed:
                 self._on_actions_changed()
 
+    def _set_field_error(self, widget, has_error: bool):
+        """Apply or clear error styling on a ttk Entry or Combobox."""
+        base = widget.winfo_class()  # "TEntry" or "TCombobox"
+        widget.configure(style=f"Error.{base}" if has_error else f"{base}")
+
+    def _flash_field_warning(self, widget, err: str):
+        """Flash error styling and show a warning for an invalid field."""
+        if getattr(self, '_showing_warning', False):
+            return
+        self._showing_warning = True
+        self._set_field_error(widget, True)
+        messagebox.showwarning("Invalid Value", err)
+        self._set_field_error(widget, False)
+        self._showing_warning = False
+
     def _on_name_changed(self, *args):
-        """Handle renaming an action (short name)."""
+        """Trace callback — deferred to commit on focus-out / Enter."""
+        # Only update the tree label in real-time; actual rename is deferred
+        pass
+
+    def _commit_name(self, *args):
+        """Commit name change on focus-out or Enter key."""
         if self._updating_form or self._selected_name is None:
             return
 
         new_name = self._name_var.get().strip()
         old_qname = self._selected_name
         action = self._actions.get(old_qname)
-        if not action or not new_name or new_name == action.name:
+        if not action:
             return
 
-        # Reject dots in short names
-        if '.' in new_name:
+        # No change — just clear any error styling
+        if not new_name or new_name == action.name:
+            self._set_field_error(self._name_entry, False)
             return
 
-        new_qname = f"{action.group}.{new_name}"
-        if new_qname in self._actions and new_qname != old_qname:
-            return  # Duplicate
+        err = validate_action_name(new_name)
+        if not err:
+            new_qname = f"{action.group}.{new_name}"
+            err = validate_action_rename(
+                old_qname, new_qname, self._actions)
 
+        if err:
+            self._flash_field_warning(self._name_entry, err)
+            # Revert to the current valid name
+            self._updating_form = True
+            self._name_var.set(action.name)
+            self._updating_form = False
+            return
+
+        self._set_field_error(self._name_entry, False)
         if self._on_before_change:
             self._on_before_change(500)
         del self._actions[old_qname]
@@ -1227,25 +1279,77 @@ class ActionPanel(tk.Frame):
         if self._on_actions_changed:
             self._on_actions_changed()
 
+    def rename_action(self, old_qname: str, new_qname: str):
+        """Re-key an action in the dict and refresh the tree.
+
+        Called by the App when the Action Editor tab changes an action's
+        name or group, so the sidebar tree stays in sync.
+        Returns True if the rename succeeded, False if rejected.
+        """
+        action = self._actions.get(old_qname)
+        if not action or old_qname == new_qname:
+            return False
+        err = validate_action_rename(old_qname, new_qname, self._actions)
+        if err:
+            messagebox.showwarning("Invalid Name", err)
+            return False
+
+        del self._actions[old_qname]
+        self._actions[new_qname] = action
+        self._selected_name = new_qname
+
+        if self._on_action_renamed and old_qname != new_qname:
+            self._on_action_renamed(old_qname, new_qname)
+
+        self._refresh_tree()
+        self._reselect(new_qname)
+        return True
+
     def _on_group_changed(self, *args):
-        """Handle changing an action's group via the combo box."""
+        """Trace callback — deferred to commit on focus-out / Enter."""
+        pass
+
+    def _commit_group(self, *args):
+        """Commit group change on focus-out or Enter key."""
         if self._updating_form or self._selected_name is None:
             return
 
         new_group = self._group_var.get().strip()
-        if not new_group:
-            return
-
         action = self._actions.get(self._selected_name)
-        if not action or new_group == action.group:
+        if not action:
             return
 
+        if not new_group:
+            self._flash_field_warning(
+                self._group_combo, "Group cannot be empty.")
+            self._updating_form = True
+            self._group_var.set(action.group)
+            self._updating_form = False
+            return
+
+        if new_group == action.group:
+            self._set_field_error(self._group_combo, False)
+            return
+
+        self._set_field_error(self._group_combo, False)
         self._move_action_to_group(self._selected_name, new_group)
 
     def _move_action_to_group(self, qname: str, new_group: str):
-        """Move an action to a different group, handling collisions and undo."""
+        """Move an action to a different group, rejecting on collision."""
         action = self._actions.get(qname)
         if not action or new_group == action.group:
+            return
+
+        new_qname = f"{new_group}.{action.name}"
+        if new_qname in self._actions:
+            self._flash_field_warning(
+                self._group_combo,
+                f"An action named '{new_qname}' already exists.\n"
+                "Rename the action first, or choose a different group.")
+            # Revert the group field
+            self._updating_form = True
+            self._group_var.set(action.group)
+            self._updating_form = False
             return
 
         if self._on_before_change:
@@ -1256,17 +1360,6 @@ class ActionPanel(tk.Frame):
         del self._actions[qname]
 
         action.group = new_group
-        new_qname = action.qualified_name
-
-        # Handle name collision in new group
-        if new_qname in self._actions:
-            base = action.name
-            i = 1
-            while f"{new_group}.{base}_{i}" in self._actions:
-                i += 1
-            action.name = f"{base}_{i}"
-            new_qname = action.qualified_name
-
         self._actions[new_qname] = action
         self._selected_name = new_qname
 

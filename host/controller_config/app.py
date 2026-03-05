@@ -326,6 +326,7 @@ class ControllerConfigApp(tk.Tk):
             get_compatible_inputs=self._get_compatible_inputs_with_display,
             is_action_bound=self._is_action_bound_to,
             get_all_actions=lambda: self._config.actions,
+            get_group_names=self._get_all_group_names,
         )
         self._notebook.add(self._action_editor, text="Action Editor")
 
@@ -988,6 +989,10 @@ class ControllerConfigApp(tk.Tk):
                     result.append((ctrl_label, display))
         return result
 
+    def _get_all_group_names(self) -> list[str]:
+        """Delegate to ActionPanel — single source of truth for group names."""
+        return self._action_panel.get_group_names()
+
     def _get_all_controllers(self) -> list[tuple[int, str]]:
         """Return list of (port, controller_name) for the context menu."""
         return [
@@ -1040,6 +1045,7 @@ class ControllerConfigApp(tk.Tk):
                 canvas.set_bindings(ctrl.bindings)
         if changed:
             self._mark_dirty()
+            self._action_editor.refresh_bindings()
             self._status_var.set(f"Removed {qname} from all inputs")
 
     def _bind_dropped_action(self, port: int, input_name: str, action: str):
@@ -1067,6 +1073,7 @@ class ControllerConfigApp(tk.Tk):
         if canvas:
             canvas.set_bindings(ctrl.bindings)
         self._mark_dirty()
+        self._action_editor.refresh_bindings()
         self._status_var.set(f"Bound {action} \u2192 {display}")
 
     def _show_drop_input_menu(self, event, port: int, shape, action: str):
@@ -1139,6 +1146,25 @@ class ControllerConfigApp(tk.Tk):
         """Sync sidebar and mark dirty when Action Editor edits a field."""
         if self._restoring:
             return
+
+        # Detect name/group change: the editor's qname is the old key,
+        # but the action object already has the new name/group.
+        old_qname = self._action_editor._qname
+        action = self._action_editor._action
+        if old_qname and action:
+            new_qname = action.qualified_name
+            if new_qname != old_qname:
+                if self._action_panel.rename_action(old_qname, new_qname):
+                    # Update the editor's tracked qname to match
+                    self._action_editor._qname = new_qname
+                else:
+                    # Rename rejected (duplicate) — revert the action object
+                    parts = old_qname.split(".", 1)
+                    action.group = parts[0]
+                    action.name = parts[1] if len(parts) > 1 else parts[0]
+                    self._action_editor.load_action(action, old_qname)
+                    return
+
         self._config.actions = self._action_panel.get_actions()
         # Reload the sidebar detail form to show updated values
         selected = self._action_panel._selected_name
@@ -1233,6 +1259,7 @@ class ControllerConfigApp(tk.Tk):
             if canvas:
                 canvas.set_bindings(ctrl.bindings)
             self._mark_dirty()
+            self._action_editor.refresh_bindings()
 
     def _on_action_remove(self, port: int, input_name: str, action: str):
         """Remove a single action from an input's bindings."""
@@ -1249,6 +1276,7 @@ class ControllerConfigApp(tk.Tk):
             if canvas:
                 canvas.set_bindings(ctrl.bindings)
             self._mark_dirty()
+            self._action_editor.refresh_bindings()
             self._status_var.set(f"Removed {action} from {input_name}")
 
     def _on_binding_click(self, port: int, input_name: str):
@@ -1285,6 +1313,7 @@ class ControllerConfigApp(tk.Tk):
             if canvas:
                 canvas.set_bindings(ctrl.bindings)
             self._mark_dirty()
+            self._action_editor.refresh_bindings()
 
         # Clear selection so line returns to default color
         if canvas:
