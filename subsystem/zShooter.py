@@ -16,57 +16,57 @@ class zShooter():
         self.lookupTable = ([1000]*25) + ([2000]*25) + ([3000]*25) + ([4000]*25)
 
         # Instantiate motors
-        # Check if top or bottom motor needs to be a follower
-        self.intakeMotor = rev.SparkFlex(14, rev.SparkLowLevel.MotorType.kBrushless)
-        self.topMotor = rev.SparkFlex(10, rev.SparkLowLevel.MotorType.kBrushless)
-        self.bottomMotor = rev.SparkMax(6, rev.SparkLowLevel.MotorType.kBrushless)
+        # TODO: set a f
+        self.feedMotor = rev.SparkFlex(30, rev.SparkLowLevel.MotorType.kBrushless)
+        self.leadFlywheelMotor = rev.SparkFlex(10, rev.SparkLowLevel.MotorType.kBrushless)
+        self.followerFlywheelMotor = rev.SparkMax(6, rev.SparkLowLevel.MotorType.kBrushless)
         self.motors: Dict[str, rev.SparkFlex | rev.SparkMax] = {
-            'intake': self.intakeMotor,
-            'top': self.topMotor,
-            'bottom': self.bottomMotor
+            'feed': self.feedMotor,
+            'lead': self.leadFlywheelMotor,
+            'follower': self.followerFlywheelMotor
         }
 
         # Get encoders from each motor to read data
-        self.intakeEncoder = self.intakeMotor.getEncoder()
-        self.topEncoder = self.topMotor.getEncoder()
-        self.bottomEncoder = self.bottomMotor.getEncoder()
+        self.feedEncoder = self.feedMotor.getEncoder()
+        self.leadFlywheelEncoder = self.leadFlywheelMotor.getEncoder()
+        self.followerFlywheelEncoder = self.followerFlywheelMotor.getEncoder()
         self.encoders = {
-            'intake': self.intakeEncoder,
-            'top': self.topEncoder,
-            'bottom': self.bottomEncoder
+            'feed': self.feedEncoder,
+            'lead': self.leadFlywheelEncoder,
+            'follower': self.followerFlywheelEncoder
         }
 
         # Create closed loop controllers to be able to set a reference/goal for pid
-        self.intakePID = self.intakeMotor.getClosedLoopController()
-        self.topPID = self.topMotor.getClosedLoopController()
-        self.bottomPID = self.bottomMotor.getClosedLoopController()
+        self.feedPID = self.feedMotor.getClosedLoopController()
+        self.leadFlywheelPID = self.leadFlywheelMotor.getClosedLoopController()
+        self.followerFlywheelPID = self.followerFlywheelMotor.getClosedLoopController()
         self.PIDs = {
-            'intake': self.intakePID,
-            'top': self.topPID,
-            'bottom': self.bottomPID
+            'feed': self.feedPID,
+            'lead': self.leadFlywheelPID,
+            'follower': self.followerFlywheelPID
         }
 
         # Set up configs for each motor
         # Check if motors should be inverted
         # Create method to combine PIDF values and inverted
-        self.configs.closedLoop.pidf(*self.robotConfigs.shooterIntakeMotorPIDF, rev.ClosedLoopSlot.kSlot0)
+        self.configs.closedLoop.pidf(*self.robotConfigs.shooterFeedMotorPIDF, rev.ClosedLoopSlot.kSlot0)
         self.configs.inverted(self.robotConfigs.shooterInverted[0])
-        self.intakeMotor.configure(self.configs, rev.ResetMode.kNoResetSafeParameters, rev.PersistMode.kPersistParameters)
+        self.feedMotor.configure(self.configs, rev.ResetMode.kNoResetSafeParameters, rev.PersistMode.kPersistParameters)
         
-        self.configs.closedLoop.pidf(*self.robotConfigs.shooterTopMotorPIDF, rev.ClosedLoopSlot.kSlot0)
+        self.configs.closedLoop.pidf(*self.robotConfigs.shooterLeadMotorPIDF, rev.ClosedLoopSlot.kSlot0)
         self.configs.inverted(self.robotConfigs.shooterInverted[0])
-        self.topMotor.configure(self.configs, rev.ResetMode.kNoResetSafeParameters, rev.PersistMode.kPersistParameters)
+        self.leadFlywheelMotor.configure(self.configs, rev.ResetMode.kNoResetSafeParameters, rev.PersistMode.kPersistParameters)
         
-        self.configs.closedLoop.pidf(*self.robotConfigs.shooterBottomMotorPIDF, rev.ClosedLoopSlot.kSlot0)
+        self.configs.closedLoop.pidf(*self.robotConfigs.shooterFollowerMotorPIDF, rev.ClosedLoopSlot.kSlot0)
         self.configs.inverted(self.robotConfigs.shooterInverted[0])
-        self.bottomMotor.configure(self.configs, rev.ResetMode.kNoResetSafeParameters, rev.PersistMode.kPersistParameters)
+        self.followerFlywheelMotor.configure(self.configs, rev.ResetMode.kNoResetSafeParameters, rev.PersistMode.kPersistParameters)
 
     def setMotorVoltage(self, motorName: str, voltage: float):
         """
         Sets the voltage of the motor
         
         Args: 
-            motorName: Name of the motor to set a voltage for (ie: 'intake')
+            motorName: Name of the motor to set a voltage for (ie: 'feed')
             voltage: Voltage to set the motor at
         
         Returns:
@@ -222,6 +222,6 @@ class zShooter():
         return self.offsetAmount
 
     def periodic(self):
-        self.setMotorReference('intake', self.RPM)
-        self.setMotorReference('top', self.RPM)
-        self.setMotorReference('bottom', self.RPM)
+        self.setMotorReference('feed', self.RPM)
+        self.setMotorReference('lead', self.RPM)
+        self.setMotorReference('follower', self.RPM)
