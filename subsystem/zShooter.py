@@ -30,8 +30,8 @@ class zShooter():
         # Instantiate motors
         # TODO: set a follower motor
         self.feedMotor = rev.SparkFlex(30, rev.SparkLowLevel.MotorType.kBrushless)
-        self.leadFlywheelMotor = rev.SparkFlex(10, rev.SparkLowLevel.MotorType.kBrushless)
-        self.followerFlywheelMotor = rev.SparkMax(6, rev.SparkLowLevel.MotorType.kBrushless)
+        self.leadFlywheelMotor = rev.SparkFlex(32, rev.SparkLowLevel.MotorType.kBrushless)
+        self.followerFlywheelMotor = rev.SparkMax(33, rev.SparkLowLevel.MotorType.kBrushless)
         self.motors: Dict[str, rev.SparkFlex | rev.SparkMax] = {
             ShooterMotorNames.FEED: self.feedMotor,
             ShooterMotorNames.LEAD_FLYWHEEL: self.leadFlywheelMotor,
