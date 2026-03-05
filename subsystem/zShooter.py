@@ -86,11 +86,11 @@ class zShooter(Subsystem):
     def setMotorVoltage(self, motorName: str, voltage: float):
         """
         Sets the voltage of the motor
-        
+
         Args: 
             motorName: Name of the motor to set a voltage for (ie: 'feed')
             voltage: Voltage to set the motor at
-        
+
         Returns:
             None
         """
@@ -99,11 +99,11 @@ class zShooter(Subsystem):
     def setMotorReference(self, motorName: str, rpm: float):
         """
         Give a custom setpoint for PID to achieve in terms of velocity
-        
+
         Args:
             motorName: Name of the motor
             rpm: The velocity setpoint for the motor in RPM
-        
+
         Returns:
             None
         """
@@ -124,7 +124,7 @@ class zShooter(Subsystem):
     def getVelocity(self, motorName: str):
         """
         Get the current velocity of a motor in RPM
-        
+
         Args:
             motorName: Name of the motor
         
@@ -136,7 +136,7 @@ class zShooter(Subsystem):
     def calculateDistance(self, a, b, c, d, RPM, angle):
         """
         Calculate the distance a ball will travel when given RPM and angle of the shooter
-        
+
         Args:
             a: Some constant
             b: Some constant
@@ -144,7 +144,7 @@ class zShooter(Subsystem):
             d: Some constant
             RPM: revolutions per minute of the motor
             Angle: the angle in degrees(?) that the ball exits at
-        
+
         Returns:
             Distance the ball is expected to travel
         """
@@ -154,12 +154,12 @@ class zShooter(Subsystem):
     def calculateRpmFromDistance(self, a, b, distance):
         """
         Calculate either the rpm needed to travel a certain distance
-        
+
         Args:
             a: Some constant
             b: Some constant
             distance: the length in meters(?) the ball needs to travel
-        
+
         Returns:
             None
         """
@@ -170,10 +170,10 @@ class zShooter(Subsystem):
     def getLookupTable(self, distance: float):
         """
         Get the RPM needed to shoot the ball at a specified distance
-        
+
         Args:
             distance: distance in meters from a target point
-        
+
         Returns:
             RPM needed to hit distance target
         """
@@ -191,10 +191,10 @@ class zShooter(Subsystem):
     def increaseOffset(self):
         """
         Increase the RPM by a set amount if it is inaccurate
-        
+
         Args:
             None
-        
+
         Returns:
             None
         """
@@ -203,10 +203,10 @@ class zShooter(Subsystem):
     def decreaseOffset(self):
         """
         Decrease the RPM by a set amount if it is inaccurate
-        
+
         Args:
             None
-        
+
         Returns:
             None
         """
@@ -215,10 +215,10 @@ class zShooter(Subsystem):
     def resetOffset(self):
         """
         Reset the RPM offset
-        
+
         Args:
             None
-        
+
         Returns:
             None
         """
@@ -227,7 +227,7 @@ class zShooter(Subsystem):
     def getOffset(self):
         """
         Get the RPM offset
-        
+
         Args:
             None
         
