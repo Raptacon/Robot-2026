@@ -127,7 +127,7 @@ class zShooter(Subsystem):
 
         Args:
             motorName: Name of the motor
-        
+
         Returns:
             Velocity of the motor in RPM
         """
@@ -230,7 +230,7 @@ class zShooter(Subsystem):
 
         Args:
             None
-        
+
         Returns:
             None
         """

@@ -66,11 +66,11 @@ class RobotShooter:
         wpilib.SmartDashboard.putNumberArray("Lead Flywheel PIDF", [0, 0, 0, 0])
         wpilib.SmartDashboard.putNumberArray("Folower Flywheel PIDF", [0, 0, 0, 0])
 
-        self.xbox.x().onTrue(        
+        self.xbox.x().onTrue(
             commands2.cmd.runOnce(lambda: self.shooter.setRPM(0), self.shooter)
         )
 
-        self.xbox.a().onTrue(   
+        self.xbox.a().onTrue(
             commands2.cmd.runOnce(lambda: self.shooter.setRPM(3000), self.shooter)
         )
 
