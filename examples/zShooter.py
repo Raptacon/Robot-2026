@@ -12,10 +12,10 @@ from config import OperatorRobotConfig
 import commands2
 import rev
 import wpilib
-from subsystem.z_Shooter import zShooter as Shooter
+from subsystem.zShooter import zShooter as Shooter
 import typing
 
-class RobotSwerve:
+class RobotShooter:
     """
     Container to hold the main robot code
     """
@@ -87,10 +87,10 @@ class RobotSwerve:
 
         self.configs.closedLoop.pidf(*self.intakeMotorPIDF, rev.ClosedLoopSlot.kSlot0)
         self.shooter.intakeMotor.configure(self.configs, rev.ResetMode.kNoResetSafeParameters, rev.PersistMode.kNoPersistParameters)
-        
+
         self.configs.closedLoop.pidf(*self.topMotorPIDF, rev.ClosedLoopSlot.kSlot0)
         self.shooter.topMotor.configure(self.configs, rev.ResetMode.kNoResetSafeParameters, rev.PersistMode.kNoPersistParameters)
-        
+
         self.configs.closedLoop.pidf(*self.bottomMotorPIDF, rev.ClosedLoopSlot.kSlot0)
         self.shooter.bottomMotor.configure(self.configs, rev.ResetMode.kNoResetSafeParameters, rev.PersistMode.kNoPersistParameters)
 
@@ -121,13 +121,3 @@ class RobotSwerve:
             return "unknown"
         except json.JSONDecodeError:
             return "bad json in deploy file check for unescaped "
-
-    def isArmSafe(self) -> bool:
-        """
-        """
-        return True
-
-    def setAlignmentTag(self, alignmentTagId: int | None) -> None:
-        """
-        """
-        self.alignmentTagId = alignmentTagId

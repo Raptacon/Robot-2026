@@ -1,8 +1,6 @@
-import commands2
 from config import OperatorRobotConfig
 import rev
 from typing import Dict
-import wpilib
 from math import sqrt
 from math import floor
 
