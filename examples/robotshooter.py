@@ -27,15 +27,21 @@ class RobotShooter:
         self.configs = rev.SparkBaseConfig()
         self.robotConfigs = OperatorRobotConfig()
         self.xbox = commands2.button.CommandXboxController(0)
+
     def robotPeriodic(self):
         pass
+
     def disabledInit(self):
         self.shooter.setRPM(0)
+        for motor in ["feed", "lead", "follower"]:
+            self.shooter.setMotorVoltage(motor, 0)
+
     def disabledPeriodic(self):
         pass
 
     def autonomousInit(self):
         pass
+
     def autonomousPeriodic(self):
         pass
 
