@@ -142,6 +142,7 @@ class RobotSwerve:
         self.drivetrain.setSpeedMultiplier(self.speedMultiplier)
 
     def testInit(self):
+        #TODO Move to NT listener on change listener
         self.updateAlliance()
         commands2.CommandScheduler.getInstance().cancelAll()
         self.drivetrain.setDefaultCommand(
