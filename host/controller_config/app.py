@@ -869,21 +869,19 @@ class ControllerConfigApp(tk.Tk):
         except OSError:
             img_license = "(Could not read images/LICENSE.md)"
 
+        sep = "=" * 40
         content = (
             "Raptacon Controller Config\n"
             "FRC Team 3200\n"
             "\n"
-            "=" * 40 + "\n"
-            "Project License\n"
-            "=" * 40 + "\n\n"
             + proj_license.strip() + "\n\n"
-            + "=" * 40 + "\n"
-            "Image Licenses\n"
-            "=" * 40 + "\n\n"
+            + sep + "\n"
+            + "Image Licenses\n"
+            + sep + "\n\n"
             + img_license.strip() + "\n"
         )
 
-        text = tk.Text(about, wrap=tk.WORD, width=60, height=25,
+        text = tk.Text(about, wrap=tk.NONE, width=60, height=25,
                        font=("TkDefaultFont", 9))
         scroll = ttk.Scrollbar(about, orient=tk.VERTICAL,
                                command=text.yview)
