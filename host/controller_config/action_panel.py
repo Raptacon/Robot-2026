@@ -25,7 +25,7 @@ from utils.controller.model import (
 )
 from .tooltips import (
     TIP_NAME, TIP_GROUP, TIP_DESC, TIP_INPUT_TYPE,
-    TIP_TRIGGER, TIP_DEADBAND, TIP_INVERSION, TIP_SCALE,
+    TIP_TRIGGER, TIP_THRESHOLD, TIP_DEADBAND, TIP_INVERSION, TIP_SCALE,
     TIP_SLEW, TIP_NEG_SLEW,
     TIP_EDIT_SPLINE, TIP_EDIT_SEGMENTS,
     TIP_FILTER, TIP_FILTER_UNASSIGNED, TIP_FILTER_MULTI,
@@ -402,6 +402,19 @@ class ActionPanel(tk.Frame):
         self._trigger_var.trace_add("write", self._on_field_changed)
         self._trigger_var.trace_add("write", self._check_spline_gate)
 
+        # Threshold (boolean_trigger; greyed out for button)
+        row += 1
+        self._threshold_label = ttk.Label(
+            self._detail_frame, text="Threshold:")
+        self._threshold_label.grid(row=row, column=0, sticky=tk.W, pady=2)
+        self._threshold_var = tk.StringVar(value="0.5")
+        self._threshold_spin = ttk.Spinbox(
+            self._detail_frame, textvariable=self._threshold_var,
+            from_=0.0, to=1.0, increment=0.05, width=17,
+        )
+        self._threshold_spin.grid(row=row, column=1, sticky=tk.EW, pady=2)
+        self._threshold_var.trace_add("write", self._on_field_changed)
+
         # Deadband (axis only)
         row += 1
         self._deadband_label = ttk.Label(self._detail_frame, text="Deadband:")
@@ -520,6 +533,8 @@ class ActionPanel(tk.Frame):
         self._trigger_tooltip = _WidgetTooltip(
             self._trigger_label, TIP_TRIGGER)
         _WidgetTooltip(self._trigger_combo, TIP_TRIGGER)
+        _WidgetTooltip(self._threshold_label, TIP_THRESHOLD)
+        _WidgetTooltip(self._threshold_spin, TIP_THRESHOLD)
         _WidgetTooltip(self._deadband_label, TIP_DEADBAND)
         _WidgetTooltip(self._deadband_spin, TIP_DEADBAND)
         _WidgetTooltip(self._inversion_label, TIP_INVERSION)
@@ -931,6 +946,7 @@ class ActionPanel(tk.Frame):
             self._input_type_var.set(action.input_type.value)
             self._update_trigger_mode_options(action.input_type)
             self._trigger_var.set(action.trigger_mode.value)
+            self._threshold_var.set(str(action.threshold))
             self._deadband_var.set(str(action.deadband))
             self._inversion_var.set(action.inversion)
             self._scale_var.set(str(action.scale))
@@ -1057,6 +1073,19 @@ class ActionPanel(tk.Frame):
         """
         input_type_str = self._input_type_var.get()
         is_analog = input_type_str == InputType.ANALOG.value
+        is_bool_trigger = input_type_str == InputType.BOOLEAN_TRIGGER.value
+        is_button = input_type_str == InputType.BUTTON.value
+
+        # Threshold: visible for BUTTON (disabled) and BOOLEAN_TRIGGER (enabled)
+        if is_button or is_bool_trigger:
+            self._threshold_label.grid()
+            self._threshold_spin.grid()
+            self._threshold_spin.config(
+                state="normal" if is_bool_trigger else "disabled")
+        else:
+            self._threshold_label.grid_remove()
+            self._threshold_spin.grid_remove()
+
         for label, widget in self._axis_widgets:
             if is_analog:
                 label.grid()
@@ -1134,6 +1163,9 @@ class ActionPanel(tk.Frame):
                 trig_val = self._trigger_var.get()
                 if not trig_val.endswith(_SPLINE_ADV_SUFFIX):
                     action.trigger_mode = EventTriggerMode(trig_val)
+            if action.input_type == InputType.BOOLEAN_TRIGGER:
+                action.threshold = float(
+                    self._threshold_var.get() or 0.5)
             action.deadband = float(self._deadband_var.get() or 0)
             action.inversion = self._inversion_var.get()
             action.scale = float(self._scale_var.get() or 1.0)

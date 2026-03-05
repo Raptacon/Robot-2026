@@ -20,6 +20,7 @@ TIP_DESC = ("Human-readable description of\n"
 TIP_INPUT_TYPE = ("Input type determines available options:\n"
                   "  button — digital on/off (incl. D-pad)\n"
                   "  analog — continuous value (stick, trigger)\n"
+                  "  boolean trigger — axis threshold to on/off\n"
                   "  output — rumble or LED feedback")
 
 # ---------------------------------------------------------------------------
@@ -77,6 +78,10 @@ TIP_SLEW = ("Max rate of output change per second.\n"
 TIP_NEG_SLEW = ("Separate slew rate for decreasing values.\n"
                 "Enables asymmetric acceleration/braking.\n"
                 "Must be negative or zero.")
+
+TIP_THRESHOLD = ("Axis value threshold for boolean conversion.\n"
+                 "Input above this value reads as True.\n"
+                 "Range: 0.0 to 1.0 (default 0.5).")
 
 # ---------------------------------------------------------------------------
 #   Curve editor buttons (sidebar)

@@ -12,7 +12,7 @@ from .action_panel import _WidgetTooltip
 from .preview_widget import PreviewWidget
 from .tooltips import (
     TIP_NAME, TIP_GROUP, TIP_DESC, TIP_INPUT_TYPE,
-    TIP_TRIGGER_BUTTON, TIP_TRIGGER_ANALOG,
+    TIP_TRIGGER_BUTTON, TIP_TRIGGER_ANALOG, TIP_THRESHOLD,
     TIP_DEADBAND, TIP_INVERSION, TIP_SCALE, TIP_SLEW, TIP_NEG_SLEW,
     TIP_ASSIGN_INPUT, TIP_ASSIGN_BTN, TIP_BOUND_LIST, TIP_UNASSIGN_BTN,
 )
@@ -393,6 +393,20 @@ class ActionEditorTab(ttk.Frame):
             "write", self._on_field_changed_trace)
 
         row += 1
+        self._threshold_label = ttk.Label(
+            self._button_frame, text="Threshold:")
+        self._threshold_label.grid(row=row, column=0, sticky=tk.W, pady=2)
+        self._threshold_var = tk.StringVar(value="0.5")
+        self._threshold_spin = ttk.Spinbox(
+            self._button_frame, textvariable=self._threshold_var,
+            from_=0.0, to=1.0, increment=0.05, width=18)
+        self._threshold_spin.grid(row=row, column=1, sticky=tk.EW, pady=2)
+        self._threshold_var.trace_add(
+            "write", self._on_field_changed_trace)
+        _WidgetTooltip(self._threshold_label, TIP_THRESHOLD)
+        _WidgetTooltip(self._threshold_spin, TIP_THRESHOLD)
+
+        row += 1
         self._btn_info_label = ttk.Label(
             self._button_frame,
             text="Select a button-type action\nto edit trigger options.",
@@ -568,6 +582,9 @@ class ActionEditorTab(ttk.Frame):
             else:
                 self._analog_trigger_var.set(action.trigger_mode.value)
 
+            # Threshold (BOOLEAN_TRIGGER)
+            self._threshold_var.set(str(action.threshold))
+
             # Analog fields
             self._deadband_var.set(str(action.deadband))
             self._inversion_var.set(action.inversion)
@@ -640,6 +657,7 @@ class ActionEditorTab(ttk.Frame):
             self._updating_form = True
             try:
                 self._scale_var.set(str(self._action.scale))
+                self._threshold_var.set(str(self._action.threshold))
             finally:
                 self._updating_form = False
         self._preview.refresh()
@@ -715,6 +733,10 @@ class ActionEditorTab(ttk.Frame):
         if is_button:
             self._show_options_pane("button")
             self._btn_info_label.config(text="")
+            # Threshold: enabled for BOOLEAN_TRIGGER, disabled for BUTTON
+            thresh_state = ("normal" if itype == InputType.BOOLEAN_TRIGGER
+                            else "disabled")
+            self._threshold_spin.config(state=thresh_state)
         elif is_analog:
             self._show_options_pane("analog")
             self._update_analog_trigger_values()
@@ -1111,6 +1133,14 @@ class ActionEditorTab(ttk.Frame):
                 action.trigger_mode = EventTriggerMode(trigger_str)
             except ValueError:
                 pass  # Invalid trigger mode string; keep previous value
+
+        # Threshold (BOOLEAN_TRIGGER)
+        if action.input_type == InputType.BOOLEAN_TRIGGER:
+            try:
+                action.threshold = float(
+                    self._threshold_var.get() or 0.5)
+            except ValueError:
+                pass  # Invalid input; keep previous threshold
 
         # Analog fields
         try:

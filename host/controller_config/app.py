@@ -66,14 +66,14 @@ def load_settings() -> dict:
 # converts the raw POV angle to individual booleans at runtime.
 _COMPAT_ACTION_TYPES: dict[str, set[InputType]] = {
     "button": {InputType.BUTTON},
-    "axis":   {InputType.ANALOG},
+    "axis":   {InputType.ANALOG, InputType.BOOLEAN_TRIGGER},
     "output": {InputType.OUTPUT},
 }
 
 # Human-readable descriptions of what each input type accepts
 _INPUT_TYPE_DESCRIPTION: dict[str, str] = {
     "button": "Button inputs accept Button actions",
-    "axis":   "Axis inputs accept Analog actions",
+    "axis":   "Axis inputs accept Analog and Boolean Trigger actions",
     "output": "Output inputs accept Output actions",
 }
 

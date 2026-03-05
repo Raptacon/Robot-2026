@@ -466,8 +466,14 @@ class PreviewWidget(ttk.Frame):
         Returns (pipeline_fn, is_raw).  Returns (None, False) when
         the action is not ANALOG.
         """
-        if not action or action.input_type != InputType.ANALOG:
+        if not action or action.input_type not in (
+                InputType.ANALOG, InputType.BOOLEAN_TRIGGER):
             return None, False
+
+        # BOOLEAN_TRIGGER: step function at threshold
+        if action.input_type == InputType.BOOLEAN_TRIGGER:
+            threshold = action.threshold
+            return (lambda raw: 1.0 if raw > threshold else 0.0), False
 
         mode = action.trigger_mode
         if mode == EventTriggerMode.RAW:

@@ -1,12 +1,13 @@
 """Embeddable, resizable curve editor widget for the Action Editor tab.
 
-Supports five modes:
-  - "spline"   — interactive cubic hermite spline editing
-  - "segment"  — interactive piecewise-linear editing
-  - "raw"      — read-only visualization of y = x
-  - "scaled"   — visualization with draggable scale handle
-  - "squared"  — visualization with draggable scale handle (quadratic)
-  - None       — inactive (button input type or no action selected)
+Supports six modes:
+  - "spline"     — interactive cubic hermite spline editing
+  - "segment"    — interactive piecewise-linear editing
+  - "raw"        — read-only visualization of y = x
+  - "scaled"     — visualization with draggable scale handle
+  - "squared"    — visualization with draggable scale handle (quadratic)
+  - "threshold"  — step function with draggable threshold for BOOLEAN_TRIGGER
+  - None         — inactive (button input type or no action selected)
 """
 
 import math
@@ -66,6 +67,9 @@ _SCALE_HANDLE_OUTLINE = "#906010"
 _TRACKER_FILL = "#ff6600"
 _TRACKER_RADIUS = 4
 _TRACKER_TAG = "tracker"
+_THRESHOLD_LINE = "#c03030"
+_THRESHOLD_HANDLE = "#e04040"
+_THRESHOLD_HANDLE_OUTLINE = "#901010"
 
 
 # ---------------------------------------------------------------------------
@@ -372,7 +376,9 @@ class CurveEditorWidget(ttk.Frame):
         self._mono_var.set(True)
 
         # Determine mode from input_type + trigger_mode
-        if action.input_type != InputType.ANALOG:
+        if action.input_type == InputType.BOOLEAN_TRIGGER:
+            self._mode = "threshold"
+        elif action.input_type != InputType.ANALOG:
             self._mode = None
         elif action.trigger_mode == EventTriggerMode.SPLINE:
             self._mode = "spline"
@@ -506,7 +512,12 @@ class CurveEditorWidget(ttk.Frame):
     def _update_canvas_bg(self):
         bg = BG_INACTIVE if self._mode is None else BG_WHITE
         self._canvas.configure(bg=bg)
-        cursor = "crosshair" if self._mode in ("spline", "segment") else ""
+        if self._mode in ("spline", "segment"):
+            cursor = "crosshair"
+        elif self._mode == "threshold":
+            cursor = "sb_h_double_arrow"
+        else:
+            cursor = ""
         self._canvas.configure(cursor=cursor)
         if self._mode is None:
             self._status_var.set("No action selected")
@@ -520,6 +531,8 @@ class CurveEditorWidget(ttk.Frame):
         elif self._mode == "segment":
             self._status_var.set(
                 "Click to add | Right-click to remove | Drag to adjust")
+        elif self._mode == "threshold":
+            self._status_var.set("Drag handle to adjust threshold")
 
     # ------------------------------------------------------------------
     # Drawing
@@ -569,6 +582,9 @@ class CurveEditorWidget(ttk.Frame):
             else:
                 self._y_min = -1.0
                 self._y_max = 1.0
+        elif self._mode == "threshold":
+            self._y_min = -0.1
+            self._y_max = 1.1
         else:
             self._y_min = -1.0
             self._y_max = 1.0
@@ -592,6 +608,9 @@ class CurveEditorWidget(ttk.Frame):
             self._draw_computed_curve()
             if self._mode in ("scaled", "squared"):
                 self._draw_scale_handle()
+        elif self._mode == "threshold":
+            self._draw_threshold_curve()
+            self._draw_threshold_handle()
         elif self._mode == "spline":
             self._draw_spline_curve()
             self._draw_handles()
@@ -755,6 +774,52 @@ class CurveEditorWidget(ttk.Frame):
             cx, cy - r, cx + r, cy, cx, cy + r, cx - r, cy,
             fill=_SCALE_HANDLE, outline=_SCALE_HANDLE_OUTLINE, width=2)
 
+    # --- Threshold Mode ---
+
+    def _draw_threshold_curve(self):
+        """Draw a step function: 0 below threshold, 1 at/above threshold."""
+        if not self._action:
+            return
+        c = self._canvas
+        t = self._action.threshold
+
+        # Horizontal line at y=0 from x_min to threshold
+        x0c, y0c = self._d2c(self._x_min, 0.0)
+        xtc_lo, ytc_lo = self._d2c(t, 0.0)
+        c.create_line(x0c, y0c, xtc_lo, ytc_lo,
+                      fill=CURVE_LINE, width=2)
+
+        # Vertical step at threshold
+        xtc_hi, ytc_hi = self._d2c(t, 1.0)
+        c.create_line(xtc_lo, ytc_lo, xtc_hi, ytc_hi,
+                      fill=CURVE_LINE, width=2)
+
+        # Horizontal line at y=1 from threshold to x_max=1.0
+        x1c, y1c = self._d2c(1.0, 1.0)
+        c.create_line(xtc_hi, ytc_hi, x1c, y1c,
+                      fill=CURVE_LINE, width=2)
+
+    def _draw_threshold_handle(self):
+        """Draw a draggable vertical line and diamond handle at threshold."""
+        if not self._action:
+            return
+        c = self._canvas
+        t = self._action.threshold
+
+        # Vertical dashed guide line spanning the plot
+        xtc, ytop = self._d2c(t, self._y_max)
+        _, ybot = self._d2c(t, self._y_min)
+        c.create_line(xtc, ytop, xtc, ybot,
+                      fill=_THRESHOLD_LINE, width=1, dash=(6, 3))
+
+        # Diamond handle at (threshold, 0.5) — midpoint of the step
+        _, yh = self._d2c(t, 0.5)
+        r = _POINT_RADIUS + 1
+        c.create_polygon(
+            xtc, yh - r, xtc + r, yh, xtc, yh + r, xtc - r, yh,
+            fill=_THRESHOLD_HANDLE, outline=_THRESHOLD_HANDLE_OUTLINE,
+            width=2)
+
     # --- Spline Mode ---
 
     def _draw_spline_curve(self):
@@ -915,6 +980,13 @@ class CurveEditorWidget(ttk.Frame):
             if math.hypot(cx - hcx, cy - hcy) <= _POINT_RADIUS + 5:
                 return ("scale_handle", 0, None)
 
+        if self._mode == "threshold" and self._action:
+            # Check threshold handle at (threshold, 0.5)
+            t = self._action.threshold
+            hcx, hcy = self._d2c(t, 0.5)
+            if math.hypot(cx - hcx, cy - hcy) <= _POINT_RADIUS + 5:
+                return ("threshold_handle", 0, None)
+
         return None
 
     # ------------------------------------------------------------------
@@ -940,6 +1012,10 @@ class CurveEditorWidget(ttk.Frame):
 
         if self._drag_type == "scale_handle":
             self._drag_scale_handle(event)
+            return
+
+        if self._drag_type == "threshold_handle":
+            self._drag_threshold_handle(event)
             return
 
         if self._mode not in ("spline", "segment"):
@@ -1055,6 +1131,25 @@ class CurveEditorWidget(ttk.Frame):
         if self._on_curve_changed:
             self._on_curve_changed()
 
+    def _drag_threshold_handle(self, event):
+        """Drag the threshold handle to adjust action.threshold."""
+        if not self._action:
+            return
+        if not self._drag_undo_pushed:
+            if self._on_before_change:
+                self._on_before_change(200)
+            self._drag_undo_pushed = True
+
+        # Convert pixel X to data X, clamp to 0..1
+        x, _ = self._c2d(event.x, event.y)
+        new_threshold = round(max(0.0, min(1.0, x)), 2)
+        self._action.threshold = new_threshold
+        self._status_var.set(f"Threshold: {new_threshold:.2f}")
+        self._draw()
+
+        if self._on_curve_changed:
+            self._on_curve_changed()
+
     def _on_release(self, event):
         if self._drag_type in ("point", "handle") and self._drag_undo_pushed:
             self._save_to_action()
@@ -1064,6 +1159,8 @@ class CurveEditorWidget(ttk.Frame):
                 "Click to add | Right-click to remove | Drag to adjust")
         elif self._mode in ("scaled", "squared"):
             self._status_var.set("Drag handle to adjust scale")
+        elif self._mode == "threshold":
+            self._status_var.set("Drag handle to adjust threshold")
         elif self._mode == "raw":
             self._status_var.set("Read-only: raw input (no shaping)")
 

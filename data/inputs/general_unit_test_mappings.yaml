@@ -132,6 +132,10 @@ actions:
       input_type: analog
       trigger_mode: scaled
       scale: -2.0
+    general_bool_trigger:
+      description: boolean trigger test (axis > threshold = true)
+      input_type: boolean_trigger
+      trigger_mode: toggle_on_true
     general_duplidcate_press: {}
   test_group:
     button_onpress:
@@ -199,6 +203,7 @@ controllers:
       - general.general_analog_raw_inverted_trigger
       right_trigger:
       - general.general_analog_scaled_trigger
+      - general.general_bool_trigger
   1:
     name: Operator
     bindings:

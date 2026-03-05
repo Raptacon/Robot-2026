@@ -177,7 +177,7 @@ Portable curve math lives in `utils/math/curves.py` (shared by both robot code a
 
 ## Future: Controller Config GUI Updates
 
-- [ ] Add BOOLEAN_TRIGGER input type to action panel dropdown
+- [x] Add BOOLEAN_TRIGGER input type to action panel dropdown
   - Show threshold field when BOOLEAN_TRIGGER selected
   - Restrict trigger_mode dropdown to button modes
   - Validation: warn if bound to non-axis input
@@ -189,7 +189,7 @@ Portable curve math lives in `utils/math/curves.py` (shared by both robot code a
 - [x] Add slew_rate field to action panel for ANALOG inputs
   - Numeric input with 0 = disabled
   - Optional negative_slew_rate in extra (enable checkbox + spinbox)
-- [ ] Add threshold field to action panel for BOOLEAN_TRIGGER inputs
+- [x] Add threshold field to action panel for BOOLEAN_TRIGGER inputs
 - [x] Disable deadband/inversion/scale/slew fields when trigger_mode is RAW
   - RAW bypasses all shaping — fields greyed out to avoid confusion
 - [ ] Refactor: spline_editor.py and segment_editor.py already import
