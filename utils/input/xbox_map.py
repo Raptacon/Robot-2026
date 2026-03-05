@@ -76,7 +76,7 @@ OUTPUT_ACCESSORS: dict[
 }
 
 
-# --- Aggregate sets ---
+# --- Aggregate sets (exported for use by validation.py) ---
 
 ALL_INPUT_NAMES: set[str] = (
     set(BUTTON_ACCESSORS)

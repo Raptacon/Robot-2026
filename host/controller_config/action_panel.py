@@ -1410,7 +1410,7 @@ class ActionPanel(tk.Frame):
         self._actions[new_qname] = action
         self._selected_name = new_qname
 
-        if self._on_action_renamed and old_qname != new_qname:
+        if self._on_action_renamed:
             self._on_action_renamed(old_qname, new_qname)
 
         self._refresh_tree()

@@ -382,4 +382,4 @@ def publish_bindings_nt(
                     table.getSubTable(ctrl_name).getSubTable(
                         input_name).putString("action", action_name)
     except ImportError:
-        pass
+        pass  # ntcore unavailable outside robot environment

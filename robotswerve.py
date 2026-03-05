@@ -200,7 +200,7 @@ class RobotSwerve:
 
         # Speed toggle: Y button switches between slow and fast scale
         self.factory.getButton("drivetrain.speed_toggle").onTrue(
-            commands2.cmd.runOnce(lambda: self._toggle_drive_scale())
+            commands2.cmd.runOnce(self._toggle_drive_scale)
         )
 
         # Map all drive axes' scale to a shared SmartDashboard entry.

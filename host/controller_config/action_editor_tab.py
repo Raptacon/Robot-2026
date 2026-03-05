@@ -56,7 +56,7 @@ def _set_children_state(widget, state: str):
             else:
                 child.config(state=state)
         except tk.TclError:
-            pass
+            pass  # Some widgets don't support the 'state' option
         _set_children_state(child, state)
 
 
@@ -202,7 +202,7 @@ class ActionEditorTab(ttk.Frame):
             try:
                 pw.paneconfigure(child, minsize=mn)
             except Exception:
-                pass
+                pass  # Pane may not be mapped yet during layout
         # First configure: restore saved sash positions or default to 33% each
         # Use after_idle so minsize settles before we place sashes.
         if not self._sash_applied:
@@ -238,7 +238,7 @@ class ActionEditorTab(ttk.Frame):
             try:
                 pw.paneconfigure(child, minsize=mn)
             except Exception:
-                pass
+                pass  # Pane may not be mapped yet during layout
 
     # --- Common Pane (left, compact) ---
 
@@ -769,7 +769,7 @@ class ActionEditorTab(ttk.Frame):
             try:
                 w.config(state=state)
             except tk.TclError:
-                pass
+                pass  # Some widgets don't support the 'state' option
         if not is_raw:
             neg_state = ("normal" if self._neg_slew_enable_var.get()
                          else "disabled")
