@@ -53,7 +53,8 @@ class OperatorRobotConfig:
     shooterFeedMotorPIDF = (0, 0, 0, 0)
     shooterLeadMotorPIDF = (0, 0, 0, 0)
     shooterFollowerMotorPIDF = (0, 0, 0, 0)
-    shooterInverted = (False, False)
+    # Feed, Lead, Follower
+    shooterInverted = (False, False, False)
     shooterRangeInterval = 0.2
     shooterOffsetIncrement = 100
     shooterOffsetDecrement = -100

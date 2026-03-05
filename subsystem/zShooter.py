@@ -20,7 +20,6 @@ class zShooter():
     def __init__(self):
         super().__init__()
         self.robotConfigs = OperatorRobotConfig()
-        self.configs = rev.SparkBaseConfig()
 
         self.offsetAmount = 0
 
@@ -59,19 +58,27 @@ class zShooter():
         }
 
         # Set up configs for each motor
-        # Check if motors should be inverted
         # Create method to combine PIDF values and inverted
-        self.configs.closedLoop.pidf(*self.robotConfigs.shooterFeedMotorPIDF, rev.ClosedLoopSlot.kSlot0)
-        self.configs.inverted(self.robotConfigs.shooterInverted[0])
-        self.feedMotor.configure(self.configs, rev.ResetMode.kNoResetSafeParameters, rev.PersistMode.kPersistParameters)
+        self.configureMotor(self.feedMotor, self.robotConfigs.shooterFeedMotorPIDF, self.robotConfigs.shooterInverted[0])
+        self.configureMotor(self.leadFlywheelMotor, self.robotConfigs.shooterLeadMotorPIDF, self.robotConfigs.shooterInverted[1])
+        self.configureMotor(self.followerFlywheelMotor, self.robotConfigs.shooterFollowerMotorPIDF, self.robotConfigs.shooterInverted[2])
+
+    def configureMotor(self, motor: rev.SparkFlex | rev.SparkMax, pidf: tuple, invert: bool):
+        """
+        Configure the PIDF constants and inversion for the given motor.
         
-        self.configs.closedLoop.pidf(*self.robotConfigs.shooterLeadMotorPIDF, rev.ClosedLoopSlot.kSlot0)
-        self.configs.inverted(self.robotConfigs.shooterInverted[0])
-        self.leadFlywheelMotor.configure(self.configs, rev.ResetMode.kNoResetSafeParameters, rev.PersistMode.kPersistParameters)
-        
-        self.configs.closedLoop.pidf(*self.robotConfigs.shooterFollowerMotorPIDF, rev.ClosedLoopSlot.kSlot0)
-        self.configs.inverted(self.robotConfigs.shooterInverted[0])
-        self.followerFlywheelMotor.configure(self.configs, rev.ResetMode.kNoResetSafeParameters, rev.PersistMode.kPersistParameters)
+        Args:
+            motor: the motor on the shooter to configure
+            pidf: the PIDF constants to set on the given motor
+            invert: if True, invert the rotation direction of the given motor
+
+        Returns:
+            None
+        """
+        configs = rev.SparkBaseConfig()
+        configs.closedLoop.pidf(*pidf, rev.ClosedLoopSlot.kSlot0)
+        configs.inverted(invert)
+        motor.configure(configs, rev.ResetMode.kNoResetSafeParameters, rev.PersistMode.kPersistParameters)
 
     def setMotorVoltage(self, motorName: str, voltage: float):
         """
