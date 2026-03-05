@@ -11,16 +11,16 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            artifact_name: ControllerConfig.exe
+            artifact_name: raptacon-controls-editor.exe
             spec: controller_config_win.spec
             sign: true
           # Stage 2 — uncomment when ready:
           # - os: macos-latest
-          #   artifact_name: ControllerConfig
+          #   artifact_name: raptacon-controls-editor
           #   spec: controller_config_mac.spec
           #   sign: false
           # - os: ubuntu-latest
-          #   artifact_name: ControllerConfig
+          #   artifact_name: raptacon-controls-editor
           #   spec: controller_config_linux.spec
           #   sign: false
 
@@ -66,7 +66,7 @@ jobs:
           [IO.File]::WriteAllBytes("$env:RUNNER_TEMP\cert.pfx", $certBytes)
           & $signtool sign /f "$env:RUNNER_TEMP\cert.pfx" /p $env:CERT_PASSWORD `
               /fd sha256 /tr http://timestamp.digicert.com /td sha256 `
-              /d "Raptacon Controller Config" dist\ControllerConfig.exe
+              /d "Raptacon Controls Editor" dist\raptacon-controls-editor.exe
           Remove-Item "$env:RUNNER_TEMP\cert.pfx"
 
       - name: Upload release asset

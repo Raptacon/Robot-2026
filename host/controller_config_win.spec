@@ -41,7 +41,7 @@ exe = EXE(
     a.scripts,
     a.binaries,
     a.datas,
-    name='ControllerConfig',
+    name='raptacon-controls-editor',
     console=False,
     icon=_ico_path if _has_ico else None,
     onefile=True,

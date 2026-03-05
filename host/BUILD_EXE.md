@@ -9,7 +9,7 @@ that runs without a Python installation.
 make gui-exe
 ```
 
-The built executable appears at `dist/ControllerConfig.exe`.
+The built executable appears at `dist/raptacon-controls-editor.exe`.
 
 ## Manual Build
 
