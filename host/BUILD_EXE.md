@@ -30,8 +30,8 @@ pyinstaller controller_config_win.spec --distpath ../dist --workpath ../build/gu
 | Platform | Spec file | Status |
 |----------|-----------|--------|
 | Windows  | `host/controller_config_win.spec` | Active |
-| macOS    | `host/controller_config_mac.spec` | Planned |
-| Linux    | `host/controller_config_linux.spec` | Planned |
+| macOS    | `host/controller_config_mac.spec` | Active |
+| Linux    | `host/controller_config_linux.spec` | Active |
 
 ## CI/CD
 
