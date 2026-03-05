@@ -25,6 +25,8 @@ from .model import (
     ActionDefinition,
     BUTTON_EVENT_TRIGGER_MODES,
     ControllerConfig,
+    DEFAULT_CONTROLLER_TYPE,
+    DEFAULT_GROUP,
     FullConfig,
     InputType,
     EventTriggerMode,
@@ -58,7 +60,7 @@ def _action_to_dict(action: ActionDefinition) -> dict:
     return d
 
 
-def _dict_to_action(name: str, d: dict, group: str = "general") -> ActionDefinition:
+def _dict_to_action(name: str, d: dict, group: str = DEFAULT_GROUP) -> ActionDefinition:
     """Deserialize an ActionDefinition from a YAML dict."""
     if d is None:
         d = {}
@@ -97,7 +99,7 @@ def _controller_to_dict(ctrl: ControllerConfig) -> dict:
     d = {}
     if ctrl.name:
         d["name"] = ctrl.name
-    if ctrl.controller_type != "xbox":
+    if ctrl.controller_type != DEFAULT_CONTROLLER_TYPE:
         d["controller_type"] = ctrl.controller_type
     if ctrl.bindings:
         d["bindings"] = {
@@ -123,7 +125,7 @@ def _dict_to_controller(port: int, d: dict) -> ControllerConfig:
     return ControllerConfig(
         port=port,
         name=d.get("name", ""),
-        controller_type=d.get("controller_type", "xbox"),
+        controller_type=d.get("controller_type", DEFAULT_CONTROLLER_TYPE),
         bindings=bindings,
     )
 
@@ -180,6 +182,16 @@ def _actions_to_nested_dict(actions: dict[str, ActionDefinition],
     return groups
 
 
+# --- Helpers ---
+
+def _dump_yaml(path: str | Path, data: dict) -> None:
+    """Write a data dict as YAML, creating parent directories if needed."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w") as f:
+        yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+
+
 # --- Public API ---
 
 def save_config(config: FullConfig, path: str | Path) -> None:
@@ -196,10 +208,7 @@ def save_config(config: FullConfig, path: str | Path) -> None:
             for port, ctrl in config.controllers.items()
         }
 
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w") as f:
-        yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+    _dump_yaml(path, data)
 
 
 def load_config(path: str | Path) -> FullConfig:
@@ -243,10 +252,7 @@ def save_actions_to_file(actions: dict[str, ActionDefinition],
     if actions:
         data["actions"] = _actions_to_nested_dict(actions)
 
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w") as f:
-        yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+    _dump_yaml(path, data)
 
 
 def save_assignments_to_file(controllers: dict[int, ControllerConfig],
@@ -259,10 +265,7 @@ def save_assignments_to_file(controllers: dict[int, ControllerConfig],
             for port, ctrl in controllers.items()
         }
 
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w") as f:
-        yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+    _dump_yaml(path, data)
 
 
 def load_assignments_from_file(path: str | Path) -> dict[int, ControllerConfig]:

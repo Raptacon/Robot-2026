@@ -9,16 +9,24 @@ import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 
 import fnmatch
-import sys
-import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 from utils.controller.model import (
     ANALOG_EVENT_TRIGGER_MODES,
     ActionDefinition,
     BUTTON_EVENT_TRIGGER_MODES,
+    DEFAULT_GROUP,
+    EXTRA_NEGATIVE_SLEW_RATE,
+    EXTRA_SEGMENT_POINTS,
+    EXTRA_SPLINE_POINTS,
     InputType,
     EventTriggerMode,
+)
+from .tooltips import (
+    TIP_NAME, TIP_GROUP, TIP_DESC, TIP_INPUT_TYPE,
+    TIP_TRIGGER, TIP_DEADBAND, TIP_INVERSION, TIP_SCALE,
+    TIP_SLEW, TIP_NEG_SLEW,
+    TIP_EDIT_SPLINE, TIP_EDIT_SEGMENTS,
+    TIP_FILTER, TIP_FILTER_UNASSIGNED, TIP_FILTER_MULTI,
 )
 
 # Tooltip delay in milliseconds (500ms balances responsiveness vs flicker)
@@ -148,7 +156,8 @@ class ActionPanel(tk.Frame):
                  on_assign_action=None, on_unassign_action=None,
                  on_unassign_all=None, get_all_controllers=None,
                  get_compatible_inputs=None, is_action_bound=None,
-                 on_action_renamed=None):
+                 on_action_renamed=None,
+                 on_selection_changed=None):
         """
         Args:
             parent: tkinter parent widget
@@ -170,6 +179,8 @@ class ActionPanel(tk.Frame):
             on_action_renamed: callback(old_qname, new_qname) when an action's
                 qualified name changes (group or name change) so bindings can
                 be updated
+            on_selection_changed: callback(qname | None) when tree selection
+                changes, allowing external listeners to sync
         """
         super().__init__(parent, padx=5, pady=5)
         self._on_actions_changed = on_actions_changed
@@ -185,6 +196,7 @@ class ActionPanel(tk.Frame):
         self._get_compatible_inputs = get_compatible_inputs
         self._is_action_bound_cb = is_action_bound
         self._on_action_renamed = on_action_renamed
+        self._on_selection_changed = on_selection_changed
         self._actions: dict[str, ActionDefinition] = {}
         self._empty_groups: set[str] = set()
         self._selected_name: str | None = None
@@ -307,7 +319,7 @@ class ActionPanel(tk.Frame):
         row = 0
 
         # Name
-        self._name_label = ttk.Label(self._detail_frame, text="Name:")
+        self._name_label = ttk.Label(self._detail_frame, text="Name:", width=8)
         self._name_label.grid(row=row, column=0, sticky=tk.W, pady=2)
         self._name_var = tk.StringVar()
         self._name_entry = ttk.Entry(self._detail_frame,
@@ -317,7 +329,7 @@ class ActionPanel(tk.Frame):
 
         # Group
         row += 1
-        self._group_label = ttk.Label(self._detail_frame, text="Group:")
+        self._group_label = ttk.Label(self._detail_frame, text="Group:", width=8)
         self._group_label.grid(row=row, column=0, sticky=tk.W, pady=2)
         self._group_var = tk.StringVar()
         self._group_combo = ttk.Combobox(self._detail_frame,
@@ -325,19 +337,21 @@ class ActionPanel(tk.Frame):
         self._group_combo.grid(row=row, column=1, sticky=tk.EW, pady=2)
         self._group_var.trace_add("write", self._on_group_changed)
 
-        # Description
+        # Description (multi-line wrapped text)
         row += 1
-        self._desc_label = ttk.Label(self._detail_frame, text="Description:")
-        self._desc_label.grid(row=row, column=0, sticky=tk.W, pady=2)
-        self._desc_var = tk.StringVar()
-        self._desc_entry = ttk.Entry(self._detail_frame,
-                                     textvariable=self._desc_var, width=20)
-        self._desc_entry.grid(row=row, column=1, sticky=tk.EW, pady=2)
-        self._desc_var.trace_add("write", self._on_field_changed)
+        self._desc_label = ttk.Label(self._detail_frame, text="Description:",
+                                         width=12)
+        self._desc_label.grid(row=row, column=0, sticky=tk.NW, pady=2)
+        self._desc_text = tk.Text(self._detail_frame, width=23, height=3,
+                                  wrap=tk.WORD, font=("TkDefaultFont", 9),
+                                  relief=tk.SUNKEN, borderwidth=1)
+        self._desc_text.grid(row=row, column=1, sticky=tk.EW, pady=2)
+        self._desc_text.bind("<<Modified>>", self._on_desc_modified)
 
         # Input Type
         row += 1
-        self._input_type_label = ttk.Label(self._detail_frame, text="Input Type:")
+        self._input_type_label = ttk.Label(self._detail_frame, text="Input Type:",
+                                                 width=8, wraplength=55)
         self._input_type_label.grid(row=row, column=0, sticky=tk.W, pady=2)
         self._input_type_var = tk.StringVar()
         self._input_type_combo = ttk.Combobox(
@@ -466,71 +480,34 @@ class ActionPanel(tk.Frame):
         self._segment_widgets = [self._edit_segments_btn]
         self._edit_segments_btn.grid_remove()
 
-        # Tooltips for detail form fields (label + widget share the same text)
-        _name_tip = ("Short action name (no dots). Combined with\n"
-                     "group to form qualified name: group.name")
-        _group_tip = ("Group this action belongs to.\n"
-                      "Type a new name to create a group.")
-        _desc_tip = ("Human-readable description of what\n"
-                     "this action does on the robot.")
-        _input_tip = ("button: digital on/off (incl. D-pad)\n"
-                      "analog: continuous value (stick, trigger)\n"
-                      "output: rumble or LED feedback")
-        _trigger_tip = ("Button: when the command fires.\n"
-                        "Analog: how the input value is shaped.")
-        _deadband_tip = ("Ignore input values below this threshold.\n"
-                         "Prevents drift from stick center (0.0-1.0).")
-        _inversion_tip = ("Negate the input value.\n"
-                          "Useful for reversing stick directions.")
-        _scale_tip = ("Multiplier applied to the input value.\n"
-                      "Use to limit max speed or amplify input.")
-        _slew_tip = ("Max rate of output change (units/sec).\n"
-                     "0 = disabled (no slew limiting).")
-        _neg_slew_tip = ("Enable asymmetric slew: separate rate\n"
-                         "for decreasing values. Must be negative\n"
-                         "or zero (clamped to max 0).")
-
-        _WidgetTooltip(self._name_label, _name_tip)
-        _WidgetTooltip(self._name_entry, _name_tip)
-        _WidgetTooltip(self._group_label, _group_tip)
-        _WidgetTooltip(self._group_combo, _group_tip)
-        _WidgetTooltip(self._desc_label, _desc_tip)
-        _WidgetTooltip(self._desc_entry, _desc_tip)
-        _WidgetTooltip(self._input_type_label, _input_tip)
-        _WidgetTooltip(self._input_type_combo, _input_tip)
-        self._trigger_tooltip = _WidgetTooltip(self._trigger_label, _trigger_tip)
-        _WidgetTooltip(self._trigger_combo, _trigger_tip)
-        _WidgetTooltip(self._deadband_label, _deadband_tip)
-        _WidgetTooltip(self._deadband_spin, _deadband_tip)
-        _WidgetTooltip(self._inversion_label, _inversion_tip)
-        _WidgetTooltip(self._inversion_check, _inversion_tip)
-        _WidgetTooltip(self._scale_label, _scale_tip)
-        _WidgetTooltip(self._scale_spin, _scale_tip)
-        _WidgetTooltip(self._slew_label, _slew_tip)
-        _WidgetTooltip(self._slew_spin, _slew_tip)
-        _WidgetTooltip(self._neg_slew_check, _neg_slew_tip)
-        _WidgetTooltip(self._neg_slew_spin, _neg_slew_tip)
-
-        _edit_spline_tip = ("Open the visual spline curve editor.\n"
-                            "Click to add points, right-click to remove.")
-        _WidgetTooltip(self._edit_spline_btn, _edit_spline_tip)
-
-        _edit_seg_tip = ("Open the piecewise-linear curve editor.\n"
-                         "Click to add points, right-click to remove.")
-        _WidgetTooltip(self._edit_segments_btn, _edit_seg_tip)
-
+        # Tooltips for detail form fields
+        _WidgetTooltip(self._name_label, TIP_NAME)
+        _WidgetTooltip(self._name_entry, TIP_NAME)
+        _WidgetTooltip(self._group_label, TIP_GROUP)
+        _WidgetTooltip(self._group_combo, TIP_GROUP)
+        _WidgetTooltip(self._desc_label, TIP_DESC)
+        _WidgetTooltip(self._desc_text, TIP_DESC)
+        _WidgetTooltip(self._input_type_label, TIP_INPUT_TYPE)
+        _WidgetTooltip(self._input_type_combo, TIP_INPUT_TYPE)
+        self._trigger_tooltip = _WidgetTooltip(
+            self._trigger_label, TIP_TRIGGER)
+        _WidgetTooltip(self._trigger_combo, TIP_TRIGGER)
+        _WidgetTooltip(self._deadband_label, TIP_DEADBAND)
+        _WidgetTooltip(self._deadband_spin, TIP_DEADBAND)
+        _WidgetTooltip(self._inversion_label, TIP_INVERSION)
+        _WidgetTooltip(self._inversion_check, TIP_INVERSION)
+        _WidgetTooltip(self._scale_label, TIP_SCALE)
+        _WidgetTooltip(self._scale_spin, TIP_SCALE)
+        _WidgetTooltip(self._slew_label, TIP_SLEW)
+        _WidgetTooltip(self._slew_spin, TIP_SLEW)
+        _WidgetTooltip(self._neg_slew_check, TIP_NEG_SLEW)
+        _WidgetTooltip(self._neg_slew_spin, TIP_NEG_SLEW)
+        _WidgetTooltip(self._edit_spline_btn, TIP_EDIT_SPLINE)
+        _WidgetTooltip(self._edit_segments_btn, TIP_EDIT_SEGMENTS)
         # Filter bar tooltips
-        _WidgetTooltip(self._filter_entry,
-                       "Filter by name, group, or description.\n"
-                       "Wildcards: * = any chars, ? = one char.\n"
-                       "e.g. r*n = starts with r ends with n,\n"
-                       "*ee* = contains ee. Escape to clear.")
-        _WidgetTooltip(self._filter_unassigned_cb,
-                       "Show only actions not assigned\n"
-                       "to any controller input.")
-        _WidgetTooltip(self._filter_multi_cb,
-                       "Show only actions bound to\n"
-                       "more than one input.")
+        _WidgetTooltip(self._filter_entry, TIP_FILTER)
+        _WidgetTooltip(self._filter_unassigned_cb, TIP_FILTER_UNASSIGNED)
+        _WidgetTooltip(self._filter_multi_cb, TIP_FILTER_MULTI)
 
         self._set_detail_enabled(False)
 
@@ -554,9 +531,9 @@ class ActionPanel(tk.Frame):
             or abs(action.scale - 1.0) > 0.01
             or action.slew_rate > 0.01
             or action.trigger_mode != default_trigger
-            or action.extra.get("spline_points")
-            or action.extra.get("segment_points")
-            or action.extra.get("negative_slew_rate") is not None
+            or action.extra.get(EXTRA_SPLINE_POINTS)
+            or action.extra.get(EXTRA_SEGMENT_POINTS)
+            or action.extra.get(EXTRA_NEGATIVE_SLEW_RATE) is not None
         )
 
     def _tag_actions_custom(self):
@@ -604,7 +581,7 @@ class ActionPanel(tk.Frame):
         The "general" group is always included so actions can be
         assigned to it even when it has no members.
         """
-        groups: dict[str, list[str]] = {"general": []}
+        groups: dict[str, list[str]] = {DEFAULT_GROUP: []}
         for qname, action in self._actions.items():
             groups.setdefault(action.group, []).append(qname)
         for g in self._empty_groups:
@@ -614,7 +591,7 @@ class ActionPanel(tk.Frame):
 
     def _sorted_group_names(self, groups: dict[str, list[str]]) -> list[str]:
         """Sort group names with 'general' first."""
-        return sorted(groups.keys(), key=lambda g: (g != "general", g))
+        return sorted(groups.keys(), key=lambda g: (g != DEFAULT_GROUP, g))
 
     # Prefix for placeholder items in empty groups
     _EMPTY_PREFIX = "empty::"
@@ -846,6 +823,7 @@ class ActionPanel(tk.Frame):
         if not sel:
             self._selected_name = None
             self._set_detail_enabled(False)
+            self._notify_selection_changed()
             return
 
         item_id = sel[0]
@@ -853,11 +831,18 @@ class ActionPanel(tk.Frame):
                 or item_id.startswith(self._EMPTY_PREFIX)):
             self._selected_name = None
             self._set_detail_enabled(False)
+            self._notify_selection_changed()
             return
 
         self._selected_name = item_id
         self._load_detail(item_id)
         self._set_detail_enabled(True)
+        self._notify_selection_changed()
+
+    def _notify_selection_changed(self):
+        """Notify external listeners of the current selection."""
+        if self._on_selection_changed:
+            self._on_selection_changed(self._selected_name)
 
     def _load_detail(self, qname: str):
         """Populate the detail form from an action."""
@@ -869,7 +854,9 @@ class ActionPanel(tk.Frame):
         try:
             self._name_var.set(action.name)
             self._group_var.set(action.group)
-            self._desc_var.set(action.description)
+            self._desc_text.delete("1.0", tk.END)
+            self._desc_text.insert("1.0", action.description)
+            self._desc_text.edit_modified(False)
             self._input_type_var.set(action.input_type.value)
             self._update_trigger_mode_options(action.input_type)
             self._trigger_var.set(action.trigger_mode.value)
@@ -877,7 +864,7 @@ class ActionPanel(tk.Frame):
             self._inversion_var.set(action.inversion)
             self._scale_var.set(str(action.scale))
             self._slew_var.set(str(action.slew_rate))
-            neg_slew = action.extra.get("negative_slew_rate")
+            neg_slew = action.extra.get(EXTRA_NEGATIVE_SLEW_RATE)
             if neg_slew is not None:
                 self._neg_slew_enable_var.set(True)
                 self._neg_slew_var.set(str(min(float(neg_slew), 0.0)))
@@ -1014,7 +1001,8 @@ class ActionPanel(tk.Frame):
             return False
 
         try:
-            action.description = self._desc_var.get()
+            action.description = self._desc_text.get(
+                "1.0", "end-1c").strip()
             action.input_type = InputType(self._input_type_var.get())
             if action.input_type == InputType.OUTPUT:
                 action.trigger_mode = EventTriggerMode.RAW
@@ -1026,13 +1014,22 @@ class ActionPanel(tk.Frame):
             action.slew_rate = float(self._slew_var.get() or 0.0)
             if self._neg_slew_enable_var.get():
                 val = float(self._neg_slew_var.get() or 0.0)
-                action.extra["negative_slew_rate"] = min(val, 0.0)
+                action.extra[EXTRA_NEGATIVE_SLEW_RATE] = min(val, 0.0)
             else:
-                action.extra.pop("negative_slew_rate", None)
+                action.extra.pop(EXTRA_NEGATIVE_SLEW_RATE, None)
         except (ValueError, KeyError):
             return False
 
         return True
+
+    def _on_desc_modified(self, event=None):
+        """Handle description Text widget changes."""
+        if not self._desc_text.edit_modified():
+            return
+        self._desc_text.edit_modified(False)
+        if self._updating_form:
+            return
+        self._on_field_changed()
 
     def _on_field_changed(self, *args):
         """Handle changes to detail fields (not name or group)."""
@@ -1106,9 +1103,9 @@ class ActionPanel(tk.Frame):
                     self._neg_slew_var.set("0.0")
                     action = self._actions.get(self._selected_name)
                     if action:
-                        action.extra.pop("spline_points", None)
-                        action.extra.pop("segment_points", None)
-                        action.extra.pop("negative_slew_rate", None)
+                        action.extra.pop(EXTRA_SPLINE_POINTS, None)
+                        action.extra.pop(EXTRA_SEGMENT_POINTS, None)
+                        action.extra.pop(EXTRA_NEGATIVE_SLEW_RATE, None)
                 # Update trigger mode options and default
                 self._update_trigger_mode_options(input_type)
             finally:
@@ -1136,7 +1133,7 @@ class ActionPanel(tk.Frame):
             SplineEditorDialog, default_points,
         )
 
-        points = action.extra.get("spline_points")
+        points = action.extra.get(EXTRA_SPLINE_POINTS)
         if not points:
             points = default_points()
 
@@ -1144,7 +1141,7 @@ class ActionPanel(tk.Frame):
         other_curves = {}
         for qname, act in self._actions.items():
             if qname != self._selected_name:
-                pts = act.extra.get("spline_points")
+                pts = act.extra.get(EXTRA_SPLINE_POINTS)
                 if pts:
                     other_curves[qname] = pts
 
@@ -1155,7 +1152,7 @@ class ActionPanel(tk.Frame):
         if result is not None:
             if self._on_before_change:
                 self._on_before_change(0)
-            action.extra["spline_points"] = result
+            action.extra[EXTRA_SPLINE_POINTS] = result
             if self._on_actions_changed:
                 self._on_actions_changed()
 
@@ -1171,7 +1168,7 @@ class ActionPanel(tk.Frame):
             SegmentEditorDialog, default_segment_points,
         )
 
-        points = action.extra.get("segment_points")
+        points = action.extra.get(EXTRA_SEGMENT_POINTS)
         if not points:
             points = default_segment_points()
 
@@ -1179,7 +1176,7 @@ class ActionPanel(tk.Frame):
         other_curves = {}
         for qname, act in self._actions.items():
             if qname != self._selected_name:
-                pts = act.extra.get("segment_points")
+                pts = act.extra.get(EXTRA_SEGMENT_POINTS)
                 if pts:
                     other_curves[qname] = pts
 
@@ -1190,7 +1187,7 @@ class ActionPanel(tk.Frame):
         if result is not None:
             if self._on_before_change:
                 self._on_before_change(0)
-            action.extra["segment_points"] = result
+            action.extra[EXTRA_SEGMENT_POINTS] = result
             if self._on_actions_changed:
                 self._on_actions_changed()
 
@@ -1764,7 +1761,7 @@ class ActionPanel(tk.Frame):
                 return item_id[len(self._GROUP_PREFIX):]
             if item_id in self._actions:
                 return self._actions[item_id].group
-        return "general"
+        return DEFAULT_GROUP
 
     def _get_selected_group_name(self) -> str | None:
         """Return the group name if a group node is selected, else None."""

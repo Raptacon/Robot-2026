@@ -8,6 +8,26 @@ No wpilib dependencies - pure Python.
 from dataclasses import dataclass, field
 from enum import Enum
 
+# Default group/controller type names
+DEFAULT_GROUP = "general"
+DEFAULT_CONTROLLER_TYPE = "xbox"
+
+# Extra-dict key names used by ActionDefinition.extra
+EXTRA_SPLINE_POINTS = "spline_points"
+EXTRA_SEGMENT_POINTS = "segment_points"
+EXTRA_NEGATIVE_SLEW_RATE = "negative_slew_rate"
+
+# Stick axis natural pairs (wpilib input names)
+STICK_PAIRS = {
+    "left_stick_x": "left_stick_y",
+    "left_stick_y": "left_stick_x",
+    "right_stick_x": "right_stick_y",
+    "right_stick_y": "right_stick_x",
+}
+
+# Input names that only produce 0..1 range (Xbox analog triggers)
+TRIGGER_INPUTS = {"left_trigger", "right_trigger"}
+
 
 class EventTriggerMode(Enum):
     """How a button/analog action is triggered or shaped.
@@ -79,7 +99,7 @@ class ActionDefinition:
     """
     name: str
     description: str = ""
-    group: str = "general"
+    group: str = DEFAULT_GROUP
     input_type: InputType = InputType.BUTTON
     trigger_mode: EventTriggerMode = EventTriggerMode.ON_TRUE
     deadband: float = 0.0
@@ -87,7 +107,7 @@ class ActionDefinition:
     inversion: bool = False
     slew_rate: float = 0.0  # Max output change rate (units/sec), 0 = disabled.
     # Symmetric by default. For asymmetric, set
-    # extra["negative_slew_rate"] to a negative value.
+    # extra[EXTRA_NEGATIVE_SLEW_RATE] to a negative value.
     scale: float = 1.0
     extra: dict = field(default_factory=dict)
 
@@ -105,7 +125,7 @@ def parse_qualified_name(qualified: str) -> tuple[str, str]:
     if '.' in qualified:
         group, _, name = qualified.partition('.')
         return group, name
-    return 'general', qualified
+    return DEFAULT_GROUP, qualified
 
 
 @dataclass
@@ -113,7 +133,7 @@ class ControllerConfig:
     """Configuration for a single controller (port + bindings)."""
     port: int
     name: str = ""
-    controller_type: str = "xbox"
+    controller_type: str = DEFAULT_CONTROLLER_TYPE
     bindings: dict[str, list[str]] = field(default_factory=dict)
 
 

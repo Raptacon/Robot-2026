@@ -13,8 +13,16 @@ import argparse
 import sys
 from pathlib import Path
 
+def _get_project_root() -> Path:
+    """Return the project root, handling PyInstaller frozen bundles."""
+    if getattr(sys, 'frozen', False):
+        # PyInstaller extracts data to a temp dir stored in sys._MEIPASS
+        return Path(sys._MEIPASS)
+    return Path(__file__).resolve().parent.parent.parent
+
+
 # Ensure project root is importable
-_project_root = Path(__file__).resolve().parent.parent.parent
+_project_root = _get_project_root()
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 

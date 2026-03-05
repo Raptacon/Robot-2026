@@ -4,7 +4,7 @@ actions:
     speed:
       description: speedy driver drive
       input_type: analog
-      trigger_mode: raw
+      trigger_mode: scaled
       deadband: 0.05
     rotation:
       description: rotate the robot
@@ -71,6 +71,11 @@ actions:
     deploy:
       description: Toggles if Intake is deployed or not
       trigger_mode: toggle_on_true
+    triggerTest:
+      description: Test the trigger action
+      input_type: analog
+      trigger_mode: scaled
+      deadband: 0.05
 controllers:
   0:
     name: Driver
@@ -83,6 +88,8 @@ controllers:
       - drivetrain.speed
       right_stick_x:
       - drivetrain.spliney
+      left_trigger:
+      - intake.triggerTest
   1:
     name: Operator
     bindings:
