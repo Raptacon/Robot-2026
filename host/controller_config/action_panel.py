@@ -34,6 +34,9 @@ from .tooltips import (
 # Tooltip delay in milliseconds (500ms balances responsiveness vs flicker)
 _TOOLTIP_DELAY_MS = 500
 
+# Suffix appended to SPLINE trigger mode when splines are disabled
+_SPLINE_ADV_SUFFIX = "  (Advanced)"
+
 
 class _WidgetTooltip:
     """Tooltip that appears after hovering over a widget for a delay."""
@@ -159,7 +162,8 @@ class ActionPanel(tk.Frame):
                  on_unassign_all=None, get_all_controllers=None,
                  get_compatible_inputs=None, is_action_bound=None,
                  on_action_renamed=None,
-                 on_selection_changed=None):
+                 on_selection_changed=None,
+                 get_advanced_flags=None):
         """
         Args:
             parent: tkinter parent widget
@@ -199,6 +203,9 @@ class ActionPanel(tk.Frame):
         self._is_action_bound_cb = is_action_bound
         self._on_action_renamed = on_action_renamed
         self._on_selection_changed = on_selection_changed
+        self._get_advanced_flags = get_advanced_flags or (
+            lambda: {"splines": True, "nonmono": True})
+        self._details_editable = True
         self._actions: dict[str, ActionDefinition] = {}
         self._empty_groups: set[str] = set()
         self._selected_name: str | None = None
@@ -385,6 +392,7 @@ class ActionPanel(tk.Frame):
         )
         self._trigger_combo.grid(row=row, column=1, sticky=tk.EW, pady=2)
         self._trigger_var.trace_add("write", self._on_field_changed)
+        self._trigger_var.trace_add("write", self._check_spline_gate)
 
         # Deadband (axis only)
         row += 1
@@ -556,6 +564,27 @@ class ActionPanel(tk.Frame):
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
+
+    def set_details_editable(self, enabled: bool):
+        """Enable or disable editing of Action Details fields.
+
+        When disabled, all detail form fields become display-only.
+        """
+        self._details_editable = enabled
+        if self._selected_name:
+            self._apply_details_editable()
+
+    def _apply_details_editable(self):
+        """Apply the current _details_editable state to detail widgets."""
+        # Re-run _set_detail_enabled which checks _details_editable
+        self._set_detail_enabled(True)
+
+    def on_advanced_changed(self):
+        """Refresh UI elements affected by Advanced menu toggles."""
+        if self._selected_name:
+            action = self._actions.get(self._selected_name)
+            if action and action.input_type == InputType.ANALOG:
+                self._refresh_spline_gate()
 
     def set_actions(self, actions: dict[str, ActionDefinition]):
         """Load a full set of actions (e.g., from file)."""
@@ -897,9 +926,16 @@ class ActionPanel(tk.Frame):
         self._update_type_visibility()
 
     def _set_detail_enabled(self, enabled: bool):
-        """Enable or disable the detail form."""
-        state = "normal" if enabled else "disabled"
-        readonly_state = "readonly" if enabled else "disabled"
+        """Enable or disable the detail form.
+
+        When *enabled* is True but ``_details_editable`` is False, the form
+        fields remain disabled (display-only).
+        """
+        # If the form is being enabled but detail editing is locked,
+        # force display-only mode.
+        effective = enabled and self._details_editable
+        state = "normal" if effective else "disabled"
+        readonly_state = "readonly" if effective else "disabled"
         self._name_entry.config(state=state)
         self._group_combo.config(state=state)
         for child in self._detail_frame.winfo_children():
@@ -914,8 +950,11 @@ class ActionPanel(tk.Frame):
             if isinstance(child, (ttk.Spinbox, ttk.Checkbutton)):
                 child.config(state=state)
         # The group combo is editable (not readonly) so users can type new names
-        if enabled:
+        if effective:
             self._group_combo.config(state=state)
+        # Also update desc text widget (not a ttk widget, skipped above)
+        self._desc_text.config(
+            state="normal" if effective else "disabled")
 
     def _update_trigger_mode_options(self, input_type: InputType):
         """Update the trigger mode dropdown to show modes for the current input type.
@@ -939,12 +978,51 @@ class ActionPanel(tk.Frame):
             modes = BUTTON_EVENT_TRIGGER_MODES
             default = EventTriggerMode.ON_TRUE
 
-        values = [m.value for m in modes]
+        current = self._trigger_var.get()
+        flags = self._get_advanced_flags()
+        values = []
+        for m in modes:
+            label = m.value
+            if (m == EventTriggerMode.SPLINE and not flags["splines"]
+                    and current != EventTriggerMode.SPLINE.value):
+                label += _SPLINE_ADV_SUFFIX
+            values.append(label)
         self._trigger_combo['values'] = values
 
         # If current selection isn't valid for the new type, reset to default
-        if self._trigger_var.get() not in values:
+        clean_values = [m.value for m in modes]
+        if current not in clean_values:
             self._trigger_var.set(default.value)
+
+    def _refresh_spline_gate(self):
+        """Update trigger combo values to reflect current spline gate state."""
+        flags = self._get_advanced_flags()
+        current = self._trigger_var.get()
+        values = []
+        for m in ANALOG_EVENT_TRIGGER_MODES:
+            label = m.value
+            if (m == EventTriggerMode.SPLINE and not flags["splines"]
+                    and current != EventTriggerMode.SPLINE.value):
+                label += _SPLINE_ADV_SUFFIX
+            values.append(label)
+        self._trigger_combo['values'] = values
+
+    def _check_spline_gate(self, *args):
+        """Revert spline selection if splines are disabled."""
+        if self._updating_form:
+            return
+        val = self._trigger_var.get()
+        if val.endswith(_SPLINE_ADV_SUFFIX):
+            action = (self._actions.get(self._selected_name)
+                      if self._selected_name else None)
+            self._updating_form = True
+            self._trigger_var.set(
+                action.trigger_mode.value
+                if action else EventTriggerMode.SCALED.value)
+            self._updating_form = False
+            messagebox.showinfo(
+                "Advanced Feature",
+                "Enable splines in Advanced menu to use this mode.")
 
     def _update_type_visibility(self):
         """Show/hide fields based on input type and trigger mode.
@@ -971,6 +1049,10 @@ class ActionPanel(tk.Frame):
                 w.grid()
             else:
                 w.grid_remove()
+
+        # Refresh combo values to re-gate SPLINE based on current trigger
+        if is_analog:
+            self._refresh_spline_gate()
 
         # Spline controls: visible only for ANALOG + SPLINE
         trigger_str = self._trigger_var.get()
@@ -1027,7 +1109,9 @@ class ActionPanel(tk.Frame):
             if action.input_type == InputType.OUTPUT:
                 action.trigger_mode = EventTriggerMode.RAW
             else:
-                action.trigger_mode = EventTriggerMode(self._trigger_var.get())
+                trig_val = self._trigger_var.get()
+                if not trig_val.endswith(_SPLINE_ADV_SUFFIX):
+                    action.trigger_mode = EventTriggerMode(trig_val)
             action.deadband = float(self._deadband_var.get() or 0)
             action.inversion = self._inversion_var.get()
             action.scale = float(self._scale_var.get() or 1.0)
@@ -1166,7 +1250,9 @@ class ActionPanel(tk.Frame):
                     other_curves[qname] = pts
 
         dialog = SplineEditorDialog(self.winfo_toplevel(), points,
-                                    other_curves)
+                                    other_curves,
+                                    scale=action.scale,
+                                    inversion=action.inversion)
         result = dialog.get_result()
 
         if result is not None:
@@ -1200,8 +1286,12 @@ class ActionPanel(tk.Frame):
                 if pts:
                     other_curves[qname] = pts
 
+        flags = self._get_advanced_flags()
         dialog = SegmentEditorDialog(self.winfo_toplevel(), points,
-                                     other_curves)
+                                     other_curves,
+                                     scale=action.scale,
+                                     inversion=action.inversion,
+                                     allow_nonmono=flags["nonmono"])
         result = dialog.get_result()
 
         if result is not None:

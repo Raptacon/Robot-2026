@@ -279,6 +279,13 @@ class PreviewWidget(ttk.Frame):
             style="TCheckbutton")
         self._sync_check.pack(side=tk.LEFT, padx=(6, 0))
 
+        # Dual Axis checkbox — show/hide paired axis curve, motor, overlay
+        self._dual_axis_var = tk.BooleanVar(value=True)
+        self._dual_axis_check = ttk.Checkbutton(
+            input_frame, text="Dual Axis", variable=self._dual_axis_var,
+            style="TCheckbutton")
+        self._dual_axis_check.pack(side=tk.LEFT, padx=(6, 0))
+
         # Start periodic controller refresh
         self._schedule_controller_refresh()
 
@@ -556,6 +563,12 @@ class PreviewWidget(ttk.Frame):
         if self._pipeline:
             self._compute_y_range()
 
+    @property
+    def _show_paired(self):
+        """True when paired axis should be drawn and processed."""
+        return (self._paired_pipeline is not None
+                and self._dual_axis_var.get())
+
     _Y_RANGE_SAMPLES = 200
 
     def _compute_y_range(self):
@@ -572,7 +585,7 @@ class PreviewWidget(ttk.Frame):
         n = self._Y_RANGE_SAMPLES
         x_span = 1.0 - self._x_min
         pipelines = [self._pipeline]
-        if self._paired_pipeline:
+        if self._show_paired:
             pipelines.append(self._paired_pipeline)
         for pipe in pipelines:
             for i in range(n + 1):
@@ -654,7 +667,7 @@ class PreviewWidget(ttk.Frame):
         self._draw_trail()
         self._draw_current()
         self._draw_motors()
-        if self._paired_pipeline:
+        if self._show_paired:
             self._draw_2d_overlay()
             self._draw_legend()
 
@@ -760,7 +773,7 @@ class PreviewWidget(ttk.Frame):
 
     def _draw_trail(self):
         """Draw fading history dots for primary and paired pipelines."""
-        if self._paired_pipeline:
+        if self._show_paired:
             if self._primary_is_y:
                 prim_new, prim_old = _Y_TRAIL_NEWEST, _Y_TRAIL_OLDEST
                 pair_new, pair_old = _X_TRAIL_NEWEST, _X_TRAIL_OLDEST
@@ -777,7 +790,7 @@ class PreviewWidget(ttk.Frame):
     def _draw_current(self):
         """Draw the large dot at current (input, output)."""
         c = self._canvas
-        if self._paired_pipeline:
+        if self._show_paired:
             if self._primary_is_y:
                 prim_fill, prim_out = _Y_AXIS_COLOR, _Y_AXIS_OUTLINE
                 pair_fill, pair_out = _X_AXIS_COLOR, _X_AXIS_OUTLINE
@@ -832,7 +845,7 @@ class PreviewWidget(ttk.Frame):
         ph = self._plot_h
 
         # Determine which axes have active outputs
-        both = self._paired_pipeline is not None
+        both = self._show_paired
         if self._primary_is_y:
             y_active = self._pipeline is not None
             x_active = both
@@ -1130,7 +1143,7 @@ class PreviewWidget(ttk.Frame):
             self._trail.pop(0)
 
         # --- Paired axis (2D overlay) ---
-        if self._paired_pipeline:
+        if self._show_paired:
             if controller_active and self._paired_input_name:
                 y_raw = self._gamepad.get_axis(
                     self._input_mode, self._paired_input_name)
@@ -1173,7 +1186,7 @@ class PreviewWidget(ttk.Frame):
                 self._paired_trail.pop(0)
 
         # Update readout
-        if self._paired_pipeline:
+        if self._show_paired:
             pi = self._last_paired_input
             po = self._last_paired_output
             if self._primary_is_y:

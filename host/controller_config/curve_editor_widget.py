@@ -83,12 +83,15 @@ class CurveEditorWidget(ttk.Frame):
     def __init__(self, parent, *,
                  on_before_change=None,
                  on_curve_changed=None,
-                 get_other_curves=None):
+                 get_other_curves=None,
+                 get_advanced_flags=None):
         super().__init__(parent)
 
         self._on_before_change = on_before_change
         self._on_curve_changed = on_curve_changed
         self._get_other_curves = get_other_curves
+        self._get_advanced_flags = get_advanced_flags or (
+            lambda: {"splines": True, "nonmono": True})
 
         self._action: ActionDefinition | None = None
         self._qname: str | None = None
@@ -128,7 +131,7 @@ class CurveEditorWidget(ttk.Frame):
     # ------------------------------------------------------------------
 
     def _build_ui(self):
-        # Toolbar (top)
+        # Toolbar row 1: checkboxes
         self._toolbar = ttk.Frame(self)
         self._toolbar.pack(fill=tk.X, padx=2, pady=(2, 0))
 
@@ -144,24 +147,33 @@ class CurveEditorWidget(ttk.Frame):
             variable=self._mono_var, command=self._on_monotonic_toggle)
         self._mono_cb.pack(side=tk.LEFT, padx=3)
 
+        self._proc_var = tk.BooleanVar(value=True)
+        self._proc_cb = ttk.Checkbutton(
+            self._toolbar, text="Show Processed",
+            variable=self._proc_var, command=self._on_processed_toggle)
+        # Packed dynamically in _update_toolbar after the checkboxes
+
+        # Toolbar row 2: action buttons
+        self._toolbar2 = ttk.Frame(self)
+
         self._undo_btn = ttk.Button(
-            self._toolbar, text="Undo", command=self._pop_undo, width=5)
+            self._toolbar2, text="Undo", command=self._pop_undo, width=5)
         self._undo_btn.pack(side=tk.LEFT, padx=3)
 
         self._reset_btn = ttk.Button(
-            self._toolbar, text="Reset", command=self._on_reset, width=5)
+            self._toolbar2, text="Reset", command=self._on_reset, width=5)
         self._reset_btn.pack(side=tk.LEFT, padx=3)
 
         self._export_btn = ttk.Button(
-            self._toolbar, text="Export", command=self._on_export, width=6)
+            self._toolbar2, text="Export", command=self._on_export, width=6)
         self._export_btn.pack(side=tk.LEFT, padx=3)
 
         self._import_btn = ttk.Button(
-            self._toolbar, text="Import", command=self._on_import, width=6)
+            self._toolbar2, text="Import", command=self._on_import, width=6)
         self._import_btn.pack(side=tk.LEFT, padx=3)
 
         self._copy_btn = ttk.Button(
-            self._toolbar, text="Copy from...",
+            self._toolbar2, text="Copy from...",
             command=self._on_copy_from, width=10)
         self._copy_btn.pack(side=tk.LEFT, padx=3)
 
@@ -196,8 +208,9 @@ class CurveEditorWidget(ttk.Frame):
 
         self.bind("<Control-z>", self._on_ctrl_z)
 
-        # Start with toolbar hidden
+        # Start with toolbars hidden
         self._toolbar.pack_forget()
+        self._toolbar2.pack_forget()
 
     # ------------------------------------------------------------------
     # Dynamic Canvas Sizing
@@ -261,8 +274,12 @@ class CurveEditorWidget(ttk.Frame):
         Includes inversion as a sign flip so the curve visually reflects
         the runtime shaping pipeline.  This is exact for odd-symmetric
         curves (the common case) and a close approximation otherwise.
+
+        Controlled by the "Show Processed" checkbox — when unchecked,
+        returns 1.0 (raw view).
         """
-        if self._action and self._mode in ("spline", "segment"):
+        if (self._action and self._mode in ("spline", "segment")
+                and self._proc_var.get()):
             s = self._action.scale
             if self._action.inversion:
                 s = -s
@@ -329,6 +346,11 @@ class CurveEditorWidget(ttk.Frame):
 
     # Input names that only produce 0..1 (Xbox triggers)
     _TRIGGER_INPUTS = TRIGGER_INPUTS
+
+    def on_advanced_changed(self):
+        """Refresh UI elements affected by Advanced menu toggles."""
+        if self._mode in ("spline", "segment"):
+            self._update_toolbar()
 
     def load_action(self, action: ActionDefinition, qname: str,
                     bound_inputs: list[str] | None = None):
@@ -441,29 +463,44 @@ class CurveEditorWidget(ttk.Frame):
     # ------------------------------------------------------------------
 
     def _update_toolbar(self):
-        """Show/hide toolbar and mode-specific controls."""
+        """Show/hide toolbar rows and mode-specific controls."""
         is_editable = self._mode in ("spline", "segment")
         is_vis_draggable = self._mode in ("scaled", "squared")
         if is_editable:
             self._vis_toolbar.pack_forget()
             self._toolbar.pack(fill=tk.X, padx=2, pady=(2, 0))
-            # Repack canvas after toolbar
+            self._toolbar2.pack(fill=tk.X, padx=2, pady=(0, 0))
+            # Repack canvas after toolbars
             self._canvas.pack_forget()
             self._canvas.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
-            # Show/hide monotonic
+            # Show/hide monotonic and position Show Processed
             if self._mode == "segment":
                 self._mono_cb.pack(side=tk.LEFT, padx=3,
                                    after=self._sym_cb)
+                flags = self._get_advanced_flags()
+                if not flags["nonmono"]:
+                    self._mono_var.set(True)
+                    self._mono_cb.config(state="disabled")
+                else:
+                    self._mono_cb.config(state="normal")
+                self._proc_cb.pack(side=tk.LEFT, padx=3,
+                                   after=self._mono_cb)
             else:
                 self._mono_cb.pack_forget()
+                self._proc_cb.pack(side=tk.LEFT, padx=3,
+                                   after=self._sym_cb)
         elif is_vis_draggable:
             self._toolbar.pack_forget()
+            self._toolbar2.pack_forget()
+            self._proc_cb.pack_forget()
             self._vis_toolbar.pack(fill=tk.X, padx=2, pady=(2, 0))
             # Repack canvas after vis toolbar
             self._canvas.pack_forget()
             self._canvas.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
         else:
             self._toolbar.pack_forget()
+            self._toolbar2.pack_forget()
+            self._proc_cb.pack_forget()
             self._vis_toolbar.pack_forget()
 
     def _update_canvas_bg(self):
@@ -1136,6 +1173,10 @@ class CurveEditorWidget(ttk.Frame):
 
     def _on_wide_range_toggle(self):
         """Toggle wide range mode for scaled/squared visualization."""
+        self._draw()
+
+    def _on_processed_toggle(self):
+        """Toggle display of scale and inversion on the curve."""
         self._draw()
 
     def _on_symmetry_toggle(self):

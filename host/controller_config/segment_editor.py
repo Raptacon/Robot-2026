@@ -76,12 +76,16 @@ class SegmentEditorDialog(tk.Toplevel):
     """
 
     def __init__(self, parent, points: list[dict],
-                 other_curves: dict[str, list[dict]] | None = None):
+                 other_curves: dict[str, list[dict]] | None = None,
+                 scale: float = 1.0, inversion: bool = False,
+                 allow_nonmono: bool = True):
         """
         Args:
             parent: parent window
             points: initial control points
             other_curves: optional {action_name: points} for "Copy from..."
+            scale: action scale factor for processed display
+            inversion: action inversion flag for processed display
         """
         super().__init__(parent)
         self.title("Segmented Response Curve Editor")
@@ -94,6 +98,10 @@ class SegmentEditorDialog(tk.Toplevel):
         self._symmetric = False
         self._monotonic = True
         self._other_curves = other_curves or {}
+        self._scale = scale
+        self._inversion = inversion
+        self._show_processed = False
+        self._allow_nonmono = allow_nonmono
 
         # Drag state
         self._drag_idx = None
@@ -125,6 +133,20 @@ class SegmentEditorDialog(tk.Toplevel):
         """Block until dialog closes. Returns points list or None."""
         self.wait_window()
         return self._result
+
+    # ------------------------------------------------------------------
+    # Display scale
+    # ------------------------------------------------------------------
+
+    @property
+    def _display_scale(self) -> float:
+        """Scale factor for displayed Y values when processed view is on."""
+        if self._show_processed:
+            s = self._scale
+            if self._inversion:
+                s = -s
+            return s
+        return 1.0
 
     # ------------------------------------------------------------------
     # Undo
@@ -302,9 +324,17 @@ class SegmentEditorDialog(tk.Toplevel):
                         command=self._on_symmetry_toggle
                         ).pack(side=tk.LEFT, padx=5)
         self._mono_var = tk.BooleanVar(value=True)
+        mono_state = "normal" if self._allow_nonmono else "disabled"
         ttk.Checkbutton(btn, text="Monotonic", variable=self._mono_var,
-                        command=self._on_monotonic_toggle
+                        command=self._on_monotonic_toggle,
+                        state=mono_state
                         ).pack(side=tk.LEFT, padx=5)
+        self._proc_var = tk.BooleanVar(value=False)
+        self._proc_cb = ttk.Checkbutton(
+            btn, text="Show Processed",
+            variable=self._proc_var,
+            command=self._on_processed_toggle)
+        self._proc_cb.pack(side=tk.LEFT, padx=5)
         ttk.Button(btn, text="Cancel",
                    command=self._on_cancel).pack(side=tk.RIGHT, padx=5)
         ttk.Button(btn, text="OK",
@@ -316,16 +346,23 @@ class SegmentEditorDialog(tk.Toplevel):
     # Coordinate conversion
     # ------------------------------------------------------------------
 
+    @property
+    def _y_extent(self) -> float:
+        """Half-range for Y axis, expanded to fit scaled values."""
+        return max(1.0, abs(self._display_scale))
+
     def _d2c(self, x: float, y: float) -> tuple[float, float]:
-        """Data (-1..1) to canvas pixels."""
+        """Data to canvas pixels."""
+        ext = self._y_extent
         cx = DIALOG_MARGIN + (x + 1) / 2 * DIALOG_PLOT_W
-        cy = DIALOG_MARGIN + (1 - y) / 2 * DIALOG_PLOT_H
+        cy = DIALOG_MARGIN + (ext - y) / (2 * ext) * DIALOG_PLOT_H
         return cx, cy
 
     def _c2d(self, cx: float, cy: float) -> tuple[float, float]:
-        """Canvas pixels to data (-1..1)."""
+        """Canvas pixels to data."""
+        ext = self._y_extent
         x = (cx - DIALOG_MARGIN) / DIALOG_PLOT_W * 2 - 1
-        y = 1 - (cy - DIALOG_MARGIN) / DIALOG_PLOT_H * 2
+        y = ext - (cy - DIALOG_MARGIN) / DIALOG_PLOT_H * (2 * ext)
         return x, y
 
     # ------------------------------------------------------------------
@@ -340,17 +377,20 @@ class SegmentEditorDialog(tk.Toplevel):
         self._draw_points()
 
     def _draw_grid(self):
+        ext = self._y_extent
         draw_editor_grid(self._canvas, self._d2c,
                          DIALOG_MARGIN, DIALOG_PLOT_W, DIALOG_PLOT_H,
-                         DIALOG_W, DIALOG_H)
+                         DIALOG_W, DIALOG_H,
+                         y_min=-ext, y_max=ext)
 
     def _draw_curve(self):
         pts = self._points
         if len(pts) < 2:
             return
+        s = self._display_scale
         coords = []
         for pt in pts:
-            cx, cy = self._d2c(pt["x"], pt["y"])
+            cx, cy = self._d2c(pt["x"], pt["y"] * s)
             coords.extend([cx, cy])
         if len(coords) >= 4:
             self._canvas.create_line(
@@ -358,8 +398,9 @@ class SegmentEditorDialog(tk.Toplevel):
 
     def _draw_points(self):
         c = self._canvas
+        s = self._display_scale
         for i, pt in enumerate(self._points):
-            cx, cy = self._d2c(pt["x"], pt["y"])
+            cx, cy = self._d2c(pt["x"], pt["y"] * s)
             is_endpoint = (i == 0 or i == len(self._points) - 1)
             is_mirror = (self._symmetric
                          and pt["x"] < -_MIN_X_GAP / 2)
@@ -383,10 +424,11 @@ class SegmentEditorDialog(tk.Toplevel):
         Returns index or None.
         When symmetry is on, negative-side mirrors are not interactive.
         """
+        s = self._display_scale
         for i, pt in enumerate(self._points):
             if self._symmetric and pt["x"] < -_MIN_X_GAP / 2:
                 continue
-            px, py = self._d2c(pt["x"], pt["y"])
+            px, py = self._d2c(pt["x"], pt["y"] * s)
             if math.hypot(cx - px, cy - py) <= _POINT_RADIUS + 3:
                 return i
         return None
@@ -396,7 +438,7 @@ class SegmentEditorDialog(tk.Toplevel):
 
     def _add_point_at(self, cx, cy):
         """Add a new control point at canvas position."""
-        x, y = self._c2d(cx, cy)
+        x, vis_y = self._c2d(cx, cy)
 
         if self._symmetric and x < -_MIN_X_GAP / 2:
             self._status_var.set(
@@ -407,6 +449,9 @@ class SegmentEditorDialog(tk.Toplevel):
         x_max = self._points[-1]["x"]
         if x <= x_min + _MIN_X_GAP or x >= x_max - _MIN_X_GAP:
             return
+        # Un-scale the visual Y to get the raw point value
+        s = self._display_scale
+        y = vis_y / s if abs(s) > 1e-6 else vis_y
         y = max(-1.0, min(1.0, y))
 
         for pt in self._points:
@@ -460,14 +505,16 @@ class SegmentEditorDialog(tk.Toplevel):
         i = self._drag_idx
         pt = self._points[i]
 
-        _, y = self._c2d(event.x, event.y)
+        _, vis_y = self._c2d(event.x, event.y)
+        s = self._display_scale
+        raw_y = vis_y / s if abs(s) > 1e-6 else vis_y
         if self._symmetric and abs(pt["x"]) < _MIN_X_GAP / 2:
             pt["y"] = 0.0
         else:
-            y = max(-1.0, min(1.0, y))
+            raw_y = max(-1.0, min(1.0, raw_y))
             if self._monotonic:
-                y = self._clamp_monotonic(i, y)
-            pt["y"] = round(y, 3)
+                raw_y = self._clamp_monotonic(i, raw_y)
+            pt["y"] = round(raw_y, 3)
 
         if not self._is_endpoint(i):
             x, _ = self._c2d(event.x, event.y)
@@ -579,6 +626,25 @@ class SegmentEditorDialog(tk.Toplevel):
         new_points.append(center)
         new_points.extend(positive)
         self._points = new_points
+
+    # ------------------------------------------------------------------
+    # Processed view toggle
+    # ------------------------------------------------------------------
+
+    def _on_processed_toggle(self):
+        """Toggle display of scale and inversion on the curve."""
+        self._show_processed = self._proc_var.get()
+        self._draw()
+        if self._show_processed:
+            parts = []
+            if self._inversion:
+                parts.append("inverted")
+            if self._scale != 1.0:
+                parts.append(f"scale={self._scale}")
+            detail = ", ".join(parts) if parts else "no change"
+            self._status_var.set(f"Processed view ({detail})")
+        else:
+            self._status_var.set("Raw view")
 
     # ------------------------------------------------------------------
     # Monotonic toggle

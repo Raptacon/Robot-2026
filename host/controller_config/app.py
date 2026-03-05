@@ -245,6 +245,13 @@ class ControllerConfigApp(tk.Tk):
                               accelerator="Ctrl+Z")
         edit_menu.add_command(label="Redo", command=self._redo,
                               accelerator="Ctrl+Y")
+        edit_menu.add_separator()
+        self._edit_details_var = tk.BooleanVar(
+            value=self._settings.get("edit_details", False))
+        edit_menu.add_checkbutton(
+            label="Enable Action Details Edit",
+            variable=self._edit_details_var,
+            command=self._toggle_edit_details)
 
         view_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="View", menu=view_menu)
@@ -266,6 +273,25 @@ class ControllerConfigApp(tk.Tk):
         view_menu.add_separator()
         view_menu.add_command(label="Reset GUI Layout",
                               command=self._reset_gui_layout)
+
+        # --- Advanced menu (session-only, not persisted) ---
+        adv_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Advanced", menu=adv_menu)
+        self._adv_splines_var = tk.BooleanVar(value=False)
+        adv_menu.add_checkbutton(
+            label="Enable Splines",
+            variable=self._adv_splines_var,
+            command=self._on_advanced_changed)
+        self._adv_nonmono_var = tk.BooleanVar(value=False)
+        adv_menu.add_checkbutton(
+            label="Enable Non-Monotonic",
+            variable=self._adv_nonmono_var,
+            command=self._on_advanced_changed)
+
+        # --- Help menu ---
+        help_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Help", menu=help_menu)
+        help_menu.add_command(label="About...", command=self._show_about)
 
         self.bind_all("<Control-n>", lambda e: self._new_config())
         self.bind_all("<Control-o>", lambda e: self._open_dialog())
@@ -297,7 +323,11 @@ class ControllerConfigApp(tk.Tk):
             is_action_bound=self._is_action_bound_to,
             on_action_renamed=self._on_action_renamed,
             on_selection_changed=self._on_action_selection_changed,
+            get_advanced_flags=self.get_advanced_flags,
         )
+        # Apply initial edit-details state
+        self._action_panel.set_details_editable(
+            self._edit_details_var.get())
         self._paned.add(self._action_panel, weight=0)
 
         # Right: Controller tabs + add button
@@ -327,6 +357,7 @@ class ControllerConfigApp(tk.Tk):
             is_action_bound=self._is_action_bound_to,
             get_all_actions=lambda: self._config.actions,
             get_group_names=self._get_all_group_names,
+            get_advanced_flags=self.get_advanced_flags,
         )
         self._notebook.add(self._action_editor, text="Action Editor")
 
@@ -794,6 +825,83 @@ class ControllerConfigApp(tk.Tk):
         self._status_var.set(
             "Unassigned inputs hidden" if hide
             else "Unassigned inputs shown")
+
+    def _on_advanced_changed(self):
+        """Notify children when Advanced menu toggles change."""
+        self._action_panel.on_advanced_changed()
+        self._action_editor.on_advanced_changed()
+
+    def _toggle_edit_details(self):
+        """Toggle whether the Action Details panel fields are editable."""
+        enabled = self._edit_details_var.get()
+        self._action_panel.set_details_editable(enabled)
+        self._settings["edit_details"] = enabled
+        self._save_settings()
+
+    def get_advanced_flags(self) -> dict:
+        """Return current advanced feature flags (session-only)."""
+        return {
+            "splines": self._adv_splines_var.get(),
+            "nonmono": self._adv_nonmono_var.get(),
+        }
+
+    def _show_about(self):
+        """Show the About dialog with license information."""
+        about = tk.Toplevel(self)
+        about.title("About")
+        about.resizable(True, True)
+        about.transient(self)
+        about.grab_set()
+
+        # Read license files
+        proj_license = ""
+        img_license = ""
+        try:
+            lf = _project_root / "LICENSE"
+            if lf.exists():
+                proj_license = lf.read_text(encoding="utf-8")
+        except OSError:
+            proj_license = "(Could not read LICENSE file)"
+        try:
+            lf = _project_root / "images" / "LICENSE.md"
+            if lf.exists():
+                img_license = lf.read_text(encoding="utf-8")
+        except OSError:
+            img_license = "(Could not read images/LICENSE.md)"
+
+        content = (
+            "Raptacon Controller Config\n"
+            "FRC Team 3200\n"
+            "\n"
+            "=" * 40 + "\n"
+            "Project License\n"
+            "=" * 40 + "\n\n"
+            + proj_license.strip() + "\n\n"
+            + "=" * 40 + "\n"
+            "Image Licenses\n"
+            "=" * 40 + "\n\n"
+            + img_license.strip() + "\n"
+        )
+
+        text = tk.Text(about, wrap=tk.WORD, width=60, height=25,
+                       font=("TkDefaultFont", 9))
+        scroll = ttk.Scrollbar(about, orient=tk.VERTICAL,
+                               command=text.yview)
+        text.configure(yscrollcommand=scroll.set)
+        text.insert("1.0", content)
+        text.configure(state="disabled")
+        scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        ttk.Button(about, text="Close",
+                   command=about.destroy).pack(pady=(0, 8))
+
+        # Center on parent
+        about.update_idletasks()
+        pw, ph = self.winfo_width(), self.winfo_height()
+        px, py = self.winfo_x(), self.winfo_y()
+        w, h = about.winfo_width(), about.winfo_height()
+        about.geometry(f"+{px + (pw - w) // 2}+{py + (ph - h) // 2}")
 
     def _reset_label_positions(self):
         """Reset all dragged label positions to defaults."""

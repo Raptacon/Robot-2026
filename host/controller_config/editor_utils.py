@@ -35,8 +35,10 @@ _BORDER_OUTLINE = "#808080"
 # ---------------------------------------------------------------------------
 
 def draw_editor_grid(canvas, d2c_fn, margin, plot_w, plot_h,
-                     canvas_w, canvas_h):
-    """Draw the standard -1..1 grid with axis labels for a dialog editor.
+                     canvas_w, canvas_h,
+                     x_min=-1.0, x_max=1.0,
+                     y_min=-1.0, y_max=1.0):
+    """Draw the grid with axis labels for a dialog editor.
 
     Args:
         canvas: tk.Canvas to draw on.
@@ -46,28 +48,55 @@ def draw_editor_grid(canvas, d2c_fn, margin, plot_w, plot_h,
         plot_h: plot area height in pixels.
         canvas_w: total canvas width in pixels.
         canvas_h: total canvas height in pixels.
+        x_min: minimum X data value (default -1.0).
+        x_max: maximum X data value (default 1.0).
+        y_min: minimum Y data value (default -1.0).
+        y_max: maximum Y data value (default 1.0).
     """
-    for v in [i / 4 for i in range(-4, 5)]:
+    x_step = nice_grid_step(x_max - x_min)
+    y_step = nice_grid_step(y_max - y_min)
+
+    # Vertical grid lines (X axis)
+    v = math.ceil(x_min / (x_step / 2)) * (x_step / 2)
+    while v <= x_max + 1e-9:
         cx, _ = d2c_fn(v, 0)
-        _, cy = d2c_fn(0, v)
-        is_axis = abs(v) < 0.01
-        is_major = abs(v * 2) % 1 < 0.01
+        is_axis = abs(v) < 1e-9
+        is_major = abs(round(v / x_step) * x_step - v) < 1e-9
         color = GRID_AXIS if is_axis else (GRID_MAJOR if is_major else GRID_MINOR)
         w = 2 if is_axis else 1
         canvas.create_line(cx, margin, cx, margin + plot_h,
                            fill=color, width=w)
+        v += x_step / 2
+
+    # Horizontal grid lines (Y axis)
+    v = math.ceil(y_min / (y_step / 2)) * (y_step / 2)
+    while v <= y_max + 1e-9:
+        _, cy = d2c_fn(0, v)
+        is_axis = abs(v) < 1e-9
+        is_major = abs(round(v / y_step) * y_step - v) < 1e-9
+        color = GRID_AXIS if is_axis else (GRID_MAJOR if is_major else GRID_MINOR)
+        w = 2 if is_axis else 1
         canvas.create_line(margin, cy, margin + plot_w, cy,
                            fill=color, width=w)
+        v += y_step / 2
 
-    for v in [-1.0, -0.5, 0.0, 0.5, 1.0]:
+    # X-axis labels (at major steps)
+    v = math.ceil(x_min / x_step) * x_step
+    while v <= x_max + 1e-9:
         cx, _ = d2c_fn(v, 0)
         canvas.create_text(cx, margin + plot_h + 15,
                            text=f"{v:g}", fill=LABEL_COLOR,
                            font=("TkDefaultFont", 8))
+        v += x_step
+
+    # Y-axis labels (at major steps)
+    v = math.ceil(y_min / y_step) * y_step
+    while v <= y_max + 1e-9:
         _, cy = d2c_fn(0, v)
         canvas.create_text(margin - 22, cy,
                            text=f"{v:g}", fill=LABEL_COLOR,
                            font=("TkDefaultFont", 8))
+        v += y_step
 
     canvas.create_text(canvas_w / 2, canvas_h - 5,
                        text="Input", fill=LABEL_COLOR,

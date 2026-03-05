@@ -95,12 +95,15 @@ class SplineEditorDialog(tk.Toplevel):
     """
 
     def __init__(self, parent, points: list[dict],
-                 other_curves: dict[str, list[dict]] | None = None):
+                 other_curves: dict[str, list[dict]] | None = None,
+                 scale: float = 1.0, inversion: bool = False):
         """
         Args:
             parent: parent window
             points: initial control points
             other_curves: optional {action_name: points} for "Copy from..."
+            scale: action scale factor for processed display
+            inversion: action inversion flag for processed display
         """
         super().__init__(parent)
         self.title("Spline Response Curve Editor")
@@ -112,6 +115,8 @@ class SplineEditorDialog(tk.Toplevel):
         self._result = None
         self._symmetric = False
         self._other_curves = other_curves or {}
+        self._scale = scale
+        self._inversion = inversion
 
         # Drag state
         self._drag_type = None   # "point" or "handle"
@@ -121,6 +126,8 @@ class SplineEditorDialog(tk.Toplevel):
         # Undo stack
         self._undo = UndoStack()
         self._drag_undo_pushed = False
+
+        self._show_processed = False
 
         self._build_ui()
         self._draw()
@@ -145,6 +152,20 @@ class SplineEditorDialog(tk.Toplevel):
         """Block until dialog closes. Returns points list or None."""
         self.wait_window()
         return self._result
+
+    # ------------------------------------------------------------------
+    # Display scale
+    # ------------------------------------------------------------------
+
+    @property
+    def _display_scale(self) -> float:
+        """Scale factor for displayed Y values when processed view is on."""
+        if self._show_processed:
+            s = self._scale
+            if self._inversion:
+                s = -s
+            return s
+        return 1.0
 
     # ------------------------------------------------------------------
     # Undo
@@ -327,6 +348,12 @@ class SplineEditorDialog(tk.Toplevel):
         ttk.Checkbutton(btn, text="Symmetry", variable=self._sym_var,
                         command=self._on_symmetry_toggle
                         ).pack(side=tk.LEFT, padx=5)
+        self._proc_var = tk.BooleanVar(value=False)
+        self._proc_cb = ttk.Checkbutton(
+            btn, text="Show Processed",
+            variable=self._proc_var,
+            command=self._on_processed_toggle)
+        self._proc_cb.pack(side=tk.LEFT, padx=5)
         ttk.Button(btn, text="Cancel",
                    command=self._on_cancel).pack(side=tk.RIGHT, padx=5)
         ttk.Button(btn, text="OK",
@@ -338,24 +365,33 @@ class SplineEditorDialog(tk.Toplevel):
     # Coordinate conversion
     # ------------------------------------------------------------------
 
+    @property
+    def _y_extent(self) -> float:
+        """Half-range for Y axis, expanded to fit scaled values."""
+        return max(1.0, abs(self._display_scale))
+
     def _d2c(self, x: float, y: float) -> tuple[float, float]:
-        """Data (-1..1) to canvas pixels."""
+        """Data to canvas pixels."""
+        ext = self._y_extent
         cx = DIALOG_MARGIN + (x + 1) / 2 * DIALOG_PLOT_W
-        cy = DIALOG_MARGIN + (1 - y) / 2 * DIALOG_PLOT_H
+        cy = DIALOG_MARGIN + (ext - y) / (2 * ext) * DIALOG_PLOT_H
         return cx, cy
 
     def _c2d(self, cx: float, cy: float) -> tuple[float, float]:
-        """Canvas pixels to data (-1..1)."""
+        """Canvas pixels to data."""
+        ext = self._y_extent
         x = (cx - DIALOG_MARGIN) / DIALOG_PLOT_W * 2 - 1
-        y = 1 - (cy - DIALOG_MARGIN) / DIALOG_PLOT_H * 2
+        y = ext - (cy - DIALOG_MARGIN) / DIALOG_PLOT_H * (2 * ext)
         return x, y
 
     def _tangent_offset(self, tangent: float) -> tuple[float, float]:
         """Tangent slope to canvas-pixel offset for handle drawing."""
-        ppx = DIALOG_PLOT_W / 2   # pixels per data unit, X
-        ppy = DIALOG_PLOT_H / 2   # pixels per data unit, Y
+        ext = self._y_extent
+        ppx = DIALOG_PLOT_W / 2       # pixels per data unit, X
+        ppy = DIALOG_PLOT_H / (2 * ext)  # pixels per data unit, Y
+        vis_tangent = tangent * self._display_scale
         dx = 1.0 * ppx
-        dy = -tangent * ppy  # canvas Y inverted
+        dy = -vis_tangent * ppy  # canvas Y inverted
         length = math.hypot(dx, dy)
         if length < 1e-6:
             return float(_HANDLE_LENGTH), 0.0
@@ -363,14 +399,19 @@ class SplineEditorDialog(tk.Toplevel):
         return dx * s, dy * s
 
     def _offset_to_tangent(self, dx: float, dy: float) -> float:
-        """Canvas-pixel offset back to tangent slope."""
+        """Canvas-pixel offset back to raw tangent slope (un-scaled)."""
+        ext = self._y_extent
         ppx = DIALOG_PLOT_W / 2
-        ppy = DIALOG_PLOT_H / 2
+        ppy = DIALOG_PLOT_H / (2 * ext)
         data_dx = dx / ppx
         data_dy = -dy / ppy
         if abs(data_dx) < 1e-6:
             return 10.0 if data_dy > 0 else -10.0
-        return data_dy / data_dx
+        vis_tangent = data_dy / data_dx
+        s = self._display_scale
+        if abs(s) < 1e-6:
+            return vis_tangent
+        return vis_tangent / s
 
     # ------------------------------------------------------------------
     # Drawing
@@ -385,20 +426,23 @@ class SplineEditorDialog(tk.Toplevel):
         self._draw_points()
 
     def _draw_grid(self):
+        ext = self._y_extent
         draw_editor_grid(self._canvas, self._d2c,
                          DIALOG_MARGIN, DIALOG_PLOT_W, DIALOG_PLOT_H,
-                         DIALOG_W, DIALOG_H)
+                         DIALOG_W, DIALOG_H,
+                         y_min=-ext, y_max=ext)
 
     def _draw_curve(self):
         pts = self._points
         if len(pts) < 2:
             return
+        s = self._display_scale
         n = _CURVE_SAMPLES_PER_SEG * (len(pts) - 1)
         x_min, x_max = pts[0]["x"], pts[-1]["x"]
         coords = []
         for i in range(n + 1):
             x = x_min + (x_max - x_min) * i / n
-            y = max(-1.5, min(1.5, evaluate_spline(pts, x)))
+            y = max(-1.5, min(1.5, evaluate_spline(pts, x) * s))
             cx, cy = self._d2c(x, y)
             coords.extend([cx, cy])
         if len(coords) >= 4:
@@ -407,8 +451,9 @@ class SplineEditorDialog(tk.Toplevel):
 
     def _draw_handles(self):
         c = self._canvas
+        s = self._display_scale
         for i, pt in enumerate(self._points):
-            cx, cy = self._d2c(pt["x"], pt["y"])
+            cx, cy = self._d2c(pt["x"], pt["y"] * s)
             hdx, hdy = self._tangent_offset(pt["tangent"])
             c.create_line(cx - hdx, cy - hdy, cx + hdx, cy + hdy,
                           fill=HANDLE_LINE, width=1, dash=(4, 4))
@@ -425,8 +470,9 @@ class SplineEditorDialog(tk.Toplevel):
 
     def _draw_points(self):
         c = self._canvas
+        s = self._display_scale
         for i, pt in enumerate(self._points):
-            cx, cy = self._d2c(pt["x"], pt["y"])
+            cx, cy = self._d2c(pt["x"], pt["y"] * s)
             is_endpoint = (i == 0 or i == len(self._points) - 1)
             is_mirror = (self._symmetric
                          and pt["x"] < -_MIN_X_GAP / 2)
@@ -450,11 +496,12 @@ class SplineEditorDialog(tk.Toplevel):
         Returns (type, index, side) or None.
         When symmetry is on, negative-side mirrors are not interactive.
         """
+        s = self._display_scale
         # Check handles first (smaller targets, higher priority)
         for i, pt in enumerate(self._points):
             if self._symmetric and pt["x"] < -_MIN_X_GAP / 2:
                 continue
-            px, py = self._d2c(pt["x"], pt["y"])
+            px, py = self._d2c(pt["x"], pt["y"] * s)
             hdx, hdy = self._tangent_offset(pt["tangent"])
             if i < len(self._points) - 1:
                 if math.hypot(cx - (px + hdx),
@@ -468,7 +515,7 @@ class SplineEditorDialog(tk.Toplevel):
         for i, pt in enumerate(self._points):
             if self._symmetric and pt["x"] < -_MIN_X_GAP / 2:
                 continue
-            px, py = self._d2c(pt["x"], pt["y"])
+            px, py = self._d2c(pt["x"], pt["y"] * s)
             if math.hypot(cx - px, cy - py) <= _POINT_RADIUS + 3:
                 return ("point", i, None)
         return None
@@ -479,7 +526,7 @@ class SplineEditorDialog(tk.Toplevel):
 
     def _add_point_at(self, cx, cy):
         """Add a new control point at canvas position."""
-        x, y = self._c2d(cx, cy)
+        x, vis_y = self._c2d(cx, cy)
 
         # When symmetric, only allow adding on the positive side
         if self._symmetric and x < -_MIN_X_GAP / 2:
@@ -491,6 +538,9 @@ class SplineEditorDialog(tk.Toplevel):
         x_max = self._points[-1]["x"]
         if x <= x_min + _MIN_X_GAP or x >= x_max - _MIN_X_GAP:
             return
+        # Un-scale the visual Y to get the raw point value
+        s = self._display_scale
+        y = vis_y / s if abs(s) > 1e-6 else vis_y
         y = max(-1.0, min(1.0, y))
 
         # Don't add if too close to an existing point
@@ -545,12 +595,14 @@ class SplineEditorDialog(tk.Toplevel):
         pt = self._points[i]
 
         if self._drag_type == "point":
-            _, y = self._c2d(event.x, event.y)
+            _, vis_y = self._c2d(event.x, event.y)
+            s = self._display_scale
+            raw_y = vis_y / s if abs(s) > 1e-6 else vis_y
             # Center point with symmetry: y locked to 0
             if self._symmetric and abs(pt["x"]) < _MIN_X_GAP / 2:
                 pt["y"] = 0.0
             else:
-                pt["y"] = round(max(-1.0, min(1.0, y)), 3)
+                pt["y"] = round(max(-1.0, min(1.0, raw_y)), 3)
             # Intermediate points: also move X
             if not self._is_endpoint(i):
                 x, _ = self._c2d(event.x, event.y)
@@ -648,6 +700,25 @@ class SplineEditorDialog(tk.Toplevel):
         new_points.append(center)
         new_points.extend(positive)
         self._points = new_points
+
+    # ------------------------------------------------------------------
+    # Processed view toggle
+    # ------------------------------------------------------------------
+
+    def _on_processed_toggle(self):
+        """Toggle display of scale and inversion on the curve."""
+        self._show_processed = self._proc_var.get()
+        self._draw()
+        if self._show_processed:
+            parts = []
+            if self._inversion:
+                parts.append("inverted")
+            if self._scale != 1.0:
+                parts.append(f"scale={self._scale}")
+            detail = ", ".join(parts) if parts else "no change"
+            self._status_var.set(f"Processed view ({detail})")
+        else:
+            self._status_var.set("Raw view")
 
     # ------------------------------------------------------------------
     # Buttons

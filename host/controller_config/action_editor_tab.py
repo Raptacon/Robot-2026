@@ -82,7 +82,8 @@ class ActionEditorTab(ttk.Frame):
                  get_compatible_inputs=None,
                  is_action_bound=None,
                  get_all_actions=None,
-                 get_group_names=None):
+                 get_group_names=None,
+                 get_advanced_flags=None):
         super().__init__(parent)
         _configure_styles()
 
@@ -90,6 +91,8 @@ class ActionEditorTab(ttk.Frame):
         self._on_field_changed = on_field_changed
         self._get_all_actions = get_all_actions
         self._get_group_names = get_group_names
+        self._get_advanced_flags = get_advanced_flags or (
+            lambda: {"splines": True, "nonmono": True})
         self._get_binding_info = get_binding_info
         self._on_assign_action = on_assign_action
         self._on_unassign_action = on_unassign_action
@@ -410,6 +413,8 @@ class ActionEditorTab(ttk.Frame):
             row=row, column=1, sticky=tk.EW, pady=2)
         self._analog_trigger_var.trace_add(
             "write", self._on_field_changed_trace)
+        self._analog_trigger_var.trace_add(
+            "write", self._check_spline_gate)
 
         row += 1
         self._deadband_label = ttk.Label(
@@ -503,6 +508,7 @@ class ActionEditorTab(ttk.Frame):
             on_before_change=self._on_before_change,
             on_curve_changed=self._on_curve_changed,
             get_other_curves=self._get_other_curves,
+            get_advanced_flags=self._get_advanced_flags,
         )
         self._curve_editor.pack(fill=tk.BOTH, expand=True)
 
@@ -517,6 +523,13 @@ class ActionEditorTab(ttk.Frame):
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
+
+    def on_advanced_changed(self):
+        """Refresh UI elements affected by Advanced menu toggles."""
+        if self._action and self._action.input_type == InputType.ANALOG:
+            self._update_analog_trigger_values()
+        # Refresh curve editor toolbar (monotonic gate)
+        self._curve_editor.on_advanced_changed()
 
     def load_action(self, action: ActionDefinition, qname: str):
         """Populate all panes from the selected action."""
@@ -696,6 +709,7 @@ class ActionEditorTab(ttk.Frame):
             self._btn_info_label.config(text="")
         elif is_analog:
             self._show_options_pane("analog")
+            self._update_analog_trigger_values()
             self._update_raw_mode_disable()
             self._on_neg_slew_toggled()
         else:
@@ -705,6 +719,36 @@ class ActionEditorTab(ttk.Frame):
             self._button_frame.configure(style="Inactive.TLabelframe")
             self._btn_info_label.config(
                 text="No type-specific options\nfor this input type.")
+
+    _SPLINE_ADV_SUFFIX = "  (Advanced)"
+
+    def _update_analog_trigger_values(self):
+        """Refresh analog trigger combo values based on advanced flags."""
+        flags = self._get_advanced_flags()
+        current = self._analog_trigger_var.get()
+        values = []
+        for m in ANALOG_EVENT_TRIGGER_MODES:
+            label = m.value
+            if (m == EventTriggerMode.SPLINE and not flags["splines"]
+                    and current != EventTriggerMode.SPLINE.value):
+                label += self._SPLINE_ADV_SUFFIX
+            values.append(label)
+        self._analog_trigger_combo['values'] = values
+
+    def _check_spline_gate(self, *args):
+        """Revert spline selection if splines are disabled."""
+        if self._updating_form:
+            return
+        val = self._analog_trigger_var.get()
+        if val.endswith(self._SPLINE_ADV_SUFFIX):
+            self._updating_form = True
+            self._analog_trigger_var.set(
+                self._action.trigger_mode.value
+                if self._action else EventTriggerMode.SCALED.value)
+            self._updating_form = False
+            messagebox.showinfo(
+                "Advanced Feature",
+                "Enable splines in Advanced menu to use this mode.")
 
     def _update_raw_mode_disable(self):
         """Disable axis fields when trigger mode is RAW."""
@@ -863,6 +907,9 @@ class ActionEditorTab(ttk.Frame):
         if self._updating_form or not self._action:
             return
         self._save_to_action()
+        # Refresh spline gate after trigger mode change
+        if self._action and self._action.input_type == InputType.ANALOG:
+            self._update_analog_trigger_values()
         self._update_curve_editor()
         self._preview.refresh()
         if self._on_field_changed:
@@ -1037,6 +1084,10 @@ class ActionEditorTab(ttk.Frame):
             trigger_str = self._btn_trigger_var.get()
         else:
             trigger_str = self._analog_trigger_var.get()
+        # Strip the "(Advanced)" suffix if present (user should not be able
+        # to select it, but guard against it).
+        if trigger_str and trigger_str.endswith(self._SPLINE_ADV_SUFFIX):
+            trigger_str = ""
         if trigger_str:
             try:
                 action.trigger_mode = EventTriggerMode(trigger_str)
