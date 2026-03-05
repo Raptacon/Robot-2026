@@ -60,7 +60,7 @@ def _get_font(size: int, bold: bool = False):
         try:
             return ImageFont.truetype(name, size)
         except (OSError, IOError):
-            pass
+            pass  # Font not found at this path; try next candidate
     # Fallback
     return ImageFont.load_default()
 
@@ -86,7 +86,7 @@ def _load_gear_icon() -> Image.Image | None:
         try:
             return Image.open(str(path)).convert("RGBA")
         except Exception:
-            pass
+            pass  # Non-fatal: gear logo is optional decoration
     return None
 
 
