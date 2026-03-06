@@ -232,7 +232,7 @@ class ActionEditorTab(ttk.Frame):
                     pw.sash_place(i, pos, 0)
                 return
             except Exception:
-                pass
+                pass  # Saved sash positions invalid; fall through to defaults
         third = fallback_w // 3
         pw.sash_place(0, third, 0)
         pw.sash_place(1, third * 2, 0)
@@ -1460,7 +1460,7 @@ class ActionEditorTab(ttk.Frame):
                 action.scale = float(
                     self._va_scale_var.get() or 1.0)
             except ValueError:
-                pass
+                pass  # Non-numeric entry; keep previous values
 
         if not self._type_switch_active:
             action._has_custom = True
