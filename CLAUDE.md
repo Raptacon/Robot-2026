@@ -175,39 +175,14 @@ See `examples/inputFactory/` for a complete working example.
 
 Portable curve math lives in `utils/math/curves.py` (shared by both robot code and host GUI).
 
-## Future: Controller Config GUI Updates
-
-- [x] Add BOOLEAN_TRIGGER input type to action panel dropdown
-  - Show threshold field when BOOLEAN_TRIGGER selected
-  - Restrict trigger_mode dropdown to button modes
-  - Validation: warn if bound to non-axis input
-- [ ] Add VIRTUAL_ANALOG input type to action panel dropdown
-  - Show on_value/off_value fields
-  - Show ramp_time field
-  - Allow spline/segment editor for ramp shape (x=time, y=output)
-  - Restrict trigger_mode dropdown to analog modes
-- [x] Add slew_rate field to action panel for ANALOG inputs
-  - Numeric input with 0 = disabled
-  - Optional negative_slew_rate in extra (enable checkbox + spinbox)
-- [x] Add threshold field to action panel for BOOLEAN_TRIGGER inputs
-- [x] Disable deadband/inversion/scale/slew fields when trigger_mode is RAW
-  - RAW bypasses all shaping — fields greyed out to avoid confusion
-- [ ] Refactor: spline_editor.py and segment_editor.py already import
-  curve math from utils/math/curves.py (done) — no further changes needed
-
 ## Future: NetworkTables Enhancements
 
-- [ ] Eager action creation: pre-create all ManagedButton/ManagedAnalog/ManagedRumble
-  objects at factory init (instead of lazily on first `get*()` call). This publishes
-  all NT entries immediately so the dashboard can inspect and tune every action's
-  parameters before robot code requests them. Also enables future NT-driven
-  reconfiguration (changing deadband, scale, threshold, etc. from the dashboard
-  before autonomous/teleop starts). Requires iterating `self._config.actions` at
-  init and calling the appropriate internal builder for each action based on its
-  `input_type`.
-- [ ] NT persistence: per-action `persist` flag to survive reboots
-- [ ] Dashboard clear-persist button per action (reset to config defaults)
-- [ ] NT override priority: option for NT-persisted values to override config on load
+- [x] Eager action creation: all managed objects are pre-created at factory init
+  so NT entries are published immediately (see end of `InputFactory.__init__`).
+- [ ] Dynamic NT persistence: per-action `persist` flag to survive reboots.
+  Currently intentionally non-persistent — dashboard tweaks reset on reboot
+  so permanent changes go through the config file (avoids confusion from
+  stale persisted values). See comment in `_factory_helpers.py`.
 - [ ] Dynamic remapping via NT: change input->action bindings from dashboard
 
 ## Future: Config Cleanup
@@ -228,7 +203,6 @@ Portable curve math lives in `utils/math/curves.py` (shared by both robot code a
   - Integrates with GitHub Actions — adds a signing step after build
   - Prerequisites: create a GitHub Release with the unsigned EXE first, then apply
 - [ ] macOS code signing — evaluate Apple Developer Program ($99/yr) for notarization
-- [ ] Add `controller_config_mac.spec` and `controller_config_linux.spec` for cross-platform builds
 
 ### CAN ID Convention
 

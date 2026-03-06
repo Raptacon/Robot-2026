@@ -115,6 +115,13 @@ def make_analog_nt_class(nt_path: str, action: ActionDefinition) -> type:
     except ImportError:
         return ManagedAnalog
 
+    # NT properties use writeDefault=True so config values are always
+    # published on startup. persistent=False (the default) ensures
+    # dashboard tweaks are temporary — they reset on reboot. This is
+    # intentional: permanent changes should go through the config file
+    # to avoid confusion or unexpected behavior from stale persisted
+    # values. To make these persistent in the future, switch to
+    # writeDefault=False, persistent=True on a per-action basis.
     attrs = {
         'nt_deadband': ntproperty(
             f'{nt_path}/deadband', action.deadband, writeDefault=True),

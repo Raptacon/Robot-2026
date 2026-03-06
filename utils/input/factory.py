@@ -207,6 +207,28 @@ class InputFactory:
                 len(scheduler._subsystems))
         self._updater = _FactoryUpdater(self)
 
+        # Eager action creation — pre-create all managed objects so their
+        # NT entries are published immediately.  This lets the dashboard
+        # inspect and tune every action's parameters before robot code
+        # requests them.  Uses required=False so unbound actions get
+        # graceful defaults instead of raising.
+        for qn, action in self._config.actions.items():
+            try:
+                if action.input_type in (
+                    InputType.BUTTON, InputType.BOOLEAN_TRIGGER
+                ):
+                    self.getButton(qn, required=False)
+                elif action.input_type in (
+                    InputType.ANALOG, InputType.VIRTUAL_ANALOG
+                ):
+                    self.getAnalog(qn, required=False)
+                elif action.input_type == InputType.OUTPUT:
+                    self.getRumbleControl(qn, required=False)
+            except Exception:
+                log.warning(
+                    "Eager creation failed for '%s', will retry on "
+                    "first get*() call", qn, exc_info=True)
+
     @property
     def config(self) -> FullConfig:
         """The loaded configuration."""
