@@ -5,6 +5,7 @@ import inspect
 import commands2
 
 from robotswerve import RobotSwerve
+from utils.log_uploader import LogUploader
 import wpilib
 import logging
 
@@ -27,6 +28,18 @@ class MyRobot(commands2.TimedCommandRobot):
 
         # setup our scheduling period. Defaulting to 20 Hz (50 ms)
         super().__init__(period=MyRobot.kDefaultPeriod / 1000)
+        
+        #Init telem files
+        self.telemInit()
+
+        # Log uploader for match monitor — skip first disabledInit (startup)
+        self.__hasBeenEnabled = False
+        try:
+            self.log_uploader = LogUploader()
+        except Exception:
+            self.log_uploader = None
+            wpilib.reportError("Unable to create LogUploader", printTrace=True)
+
         # Instantiate our RobotContainer. This will perform all our button bindings, and put our
         # autonomous chooser on the dashboard.
         if not hasattr(self, "container"):
@@ -39,22 +52,61 @@ class MyRobot(commands2.TimedCommandRobot):
         This function is run when the robot is first started up and should be used for any
         initialization code.
         """
+        
+
+    def telemInit(self) -> None:
+        """Initialize data logging: NT logging, console, DS, and vendor loggers.
+
+        WPILib DataLogManager auto-detects USB and falls back to
+        /home/lvuser/logs.  Phoenix 6 and REV also auto-detect USB.
+        Logging is disabled in simulation to avoid junk files.
+        """
+        if self.isSimulation():
+            return
+
+        # WPILib data log (.wpilog) — auto-uses USB if present
+        wpilib.DataLogManager.start()
+        wpilib.DataLogManager.logNetworkTables(True)
+        wpilib.DataLogManager.logConsoleOutput(True)
+        wpilib.DriverStation.startDataLog(wpilib.DataLogManager.getLog())
+
+        # Phoenix 6 signal logging (.hoot files)
+        from phoenix6 import SignalLogger
+        SignalLogger.enable_auto_logging(True)
+        SignalLogger.start()
+
+        # REV status logging (.revlog files)
+        from rev import StatusLogger
+        StatusLogger.start()
 
     def robotPeriodic(self) -> None:
         self.__callAndCatch(self.container.robotPeriodic)
+
+        # Track if the robot has ever been enabled so log upload
+        # only triggers on disable after a real match/test cycle
+        if not self.__hasBeenEnabled and wpilib.DriverStation.isEnabled():
+            self.__hasBeenEnabled = True
 
         wpilib.SmartDashboard.putNumber("Code Crash Count", self.__errorCatchedCount)
 
     def disabledInit(self) -> None:
         """This function is called once each time the robot enters Disabled mode."""
         self.container.disabledInit()
+        if self.__hasBeenEnabled and self.log_uploader is not None:
+            self.log_uploader.start_upload()
 
     def disabledPeriodic(self) -> None:
         """This function is called periodically when disabled"""
         self.container.disabledPeriodic()
 
+    def _stopLogUpload(self) -> None:
+        """Stop any in-progress log upload to free bandwidth."""
+        if self.log_uploader is not None:
+            self.log_uploader.stop_upload()
+
     def autonomousInit(self) -> None:
         """This autonomous runs the autonomous command selected by your RobotContainer class."""
+        self._stopLogUpload()
         self.container.autonomousInit()
 
     def autonomousPeriodic(self) -> None:
@@ -62,6 +114,7 @@ class MyRobot(commands2.TimedCommandRobot):
         self.__callAndCatch(self.container.autonomousPeriodic)
 
     def teleopInit(self) -> None:
+        self._stopLogUpload()
         self.container.teleopInit()
 
     def teleopPeriodic(self) -> None:
@@ -69,6 +122,7 @@ class MyRobot(commands2.TimedCommandRobot):
         self.__callAndCatch(self.container.teleopPeriodic)
 
     def testInit(self) -> None:
+        self._stopLogUpload()
         self.container.testInit()
 
     def testPeriodic(self) -> None:
