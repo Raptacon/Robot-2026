@@ -47,6 +47,7 @@ from utils.input._factory_helpers import (
     make_output_setter,
     make_rumble_nt_class,
     publish_bindings_nt,
+    publish_config_metadata,
     sync_analog_nt,
     sync_button_nt,
 )
@@ -142,9 +143,11 @@ class InputFactory:
         if config is not None:
             self._config = config
             self._config_source = "<FullConfig object>"
+            self._config_files: list[Path] = []
         elif config_path is not None:
             self._config = load_config(config_path)
             self._config_source = str(config_path)
+            self._config_files = [Path(config_path).resolve()]
         elif actions_path is not None and assignments_path is not None:
             actions = load_actions_from_file(actions_path)
             controllers = load_assignments_from_file(assignments_path)
@@ -152,6 +155,9 @@ class InputFactory:
                 actions=actions, controllers=controllers)
             self._config_source = (
                 f"{actions_path} + {assignments_path}")
+            self._config_files = [
+                Path(actions_path).resolve(),
+                Path(assignments_path).resolve()]
         else:
             raise ValueError(
                 "Must provide config, config_path, or "
@@ -171,8 +177,9 @@ class InputFactory:
                     f"{_NT_BASE}/controllers/raw/{port}",
                     state.controller)
 
-        # Publish bindings info to NT
+        # Publish bindings info and config metadata to NT
         publish_bindings_nt(_NT_BASE, self._controllers)
+        publish_config_metadata(_NT_BASE, self._config_files)
 
         # Caches — all factory methods return the same object for a name
         self._buttons: dict[str, ManagedButton] = {}
@@ -212,6 +219,7 @@ class InputFactory:
         # inspect and tune every action's parameters before robot code
         # requests them.  Uses required=False so unbound actions get
         # graceful defaults instead of raising.
+        self._eager_init_active = True
         for qn, action in self._config.actions.items():
             try:
                 if action.input_type in (
@@ -228,6 +236,7 @@ class InputFactory:
                 log.warning(
                     "Eager creation failed for '%s', will retry on "
                     "first get*() call", qn, exc_info=True)
+        self._eager_init_active = False
 
     @property
     def config(self) -> FullConfig:
@@ -259,6 +268,11 @@ class InputFactory:
                 return state, state.action_to_input[qualified_name]
         return None
 
+    def _mark_in_use(self, obj) -> None:
+        """Mark a managed object as in-use (called outside eager init)."""
+        if not self._eager_init_active and hasattr(obj, 'nt_in_use'):
+            obj.nt_in_use = True
+
     # --- Factory methods ---
 
     def getButton(
@@ -287,6 +301,7 @@ class InputFactory:
 
         # Return cached if exists
         if qn in self._buttons:
+            self._mark_in_use(self._buttons[qn])
             return self._buttons[qn]
 
         action = self._config.actions.get(qn)
@@ -331,6 +346,7 @@ class InputFactory:
         if threshold_ref is not None:
             btn._threshold_ref = threshold_ref
         self._buttons[qn] = btn
+        self._mark_in_use(btn)
         return btn
 
     def getRawButton(
@@ -400,6 +416,7 @@ class InputFactory:
         qn = self._resolve_name(name, group)
 
         if qn in self._analogs:
+            self._mark_in_use(self._analogs[qn])
             return self._analogs[qn]
 
         action = self._config.actions.get(qn)
@@ -437,6 +454,7 @@ class InputFactory:
             klass = make_analog_nt_class(nt_path, action)
             analog = klass(action, generator.get_value, default_value)
             self._analogs[qn] = analog
+            self._mark_in_use(analog)
             return analog
 
         if binding is None:
@@ -458,6 +476,7 @@ class InputFactory:
         klass = make_analog_nt_class(nt_path, action)
         analog = klass(action, accessor, default_value)
         self._analogs[qn] = analog
+        self._mark_in_use(analog)
         return analog
 
     def getAnalogRaw(
@@ -545,6 +564,7 @@ class InputFactory:
         qn = self._resolve_name(name, group)
 
         if qn in self._rumbles:
+            self._mark_in_use(self._rumbles[qn])
             return self._rumbles[qn]
 
         action = self._config.actions.get(qn)
@@ -578,6 +598,7 @@ class InputFactory:
         klass = make_rumble_nt_class(nt_path, action)
         rumble = klass(action, setter)
         self._rumbles[qn] = rumble
+        self._mark_in_use(rumble)
         return rumble
 
     # --- Controller access ---

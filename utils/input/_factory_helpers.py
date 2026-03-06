@@ -139,6 +139,8 @@ def make_analog_nt_class(nt_path: str, action: ActionDefinition) -> type:
         'nt_input_type': ntproperty(
             f'{nt_path}/input_type', action.input_type.value,
             writeDefault=True),
+        'nt_in_use': ntproperty(
+            f'{nt_path}/in_use', False, writeDefault=True),
     }
     return type('ManagedAnalog_' + action.qualified_name.replace('.', '_'),
                 (ManagedAnalog,), attrs)
@@ -167,6 +169,8 @@ def make_button_nt_class(nt_path: str, action: ActionDefinition) -> type:
         'nt_input_type': ntproperty(
             f'{nt_path}/input_type', action.input_type.value,
             writeDefault=True),
+        'nt_in_use': ntproperty(
+            f'{nt_path}/in_use', False, writeDefault=True),
     }
     if action.input_type == InputType.BOOLEAN_TRIGGER:
         attrs['nt_threshold'] = ntproperty(
@@ -193,6 +197,8 @@ def make_rumble_nt_class(nt_path: str, action: ActionDefinition) -> type:
         'nt_input_type': ntproperty(
             f'{nt_path}/input_type', action.input_type.value,
             writeDefault=True),
+        'nt_in_use': ntproperty(
+            f'{nt_path}/in_use', False, writeDefault=True),
     }
     return type('ManagedRumble_' + action.qualified_name.replace('.', '_'),
                 (ManagedRumble,), attrs)
@@ -388,5 +394,34 @@ def publish_bindings_nt(
                 for action_name in actions:
                     table.getSubTable(ctrl_name).getSubTable(
                         input_name).putString("action", action_name)
+    except ImportError:
+        pass  # ntcore unavailable outside robot environment
+
+
+def publish_config_metadata(
+    nt_base: str,
+    config_files: "list[pathlib.Path]",
+) -> None:
+    """Publish config file paths and SHA-256 checksums to NT."""
+    import hashlib
+    import pathlib  # noqa: F811 — needed for type hint above
+
+    try:
+        import ntcore
+        inst = ntcore.NetworkTableInstance.getDefault()
+        table = inst.getTable(f"{nt_base}/config")
+
+        paths: list[str] = []
+        hashes: list[str] = []
+        for f in config_files:
+            paths.append(str(f))
+            try:
+                hashes.append(
+                    hashlib.sha256(f.read_bytes()).hexdigest())
+            except OSError:
+                hashes.append("error")
+
+        table.putStringArray("files", paths)
+        table.putStringArray("sha256", hashes)
     except ImportError:
         pass  # ntcore unavailable outside robot environment
