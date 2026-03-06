@@ -17,6 +17,16 @@ EXTRA_SPLINE_POINTS = "spline_points"
 EXTRA_SEGMENT_POINTS = "segment_points"
 EXTRA_NEGATIVE_SLEW_RATE = "negative_slew_rate"
 
+# Virtual analog (button -> ramped analog) parameters
+EXTRA_VA_RAMP_RATE = "va_ramp_rate"
+EXTRA_VA_ACCELERATION = "va_acceleration"
+EXTRA_VA_NEGATIVE_RAMP_RATE = "va_negative_ramp_rate"
+EXTRA_VA_NEGATIVE_ACCELERATION = "va_negative_acceleration"
+EXTRA_VA_ZERO_VEL_ON_RELEASE = "va_zero_vel_on_release"
+EXTRA_VA_TARGET_VALUE = "va_target_value"
+EXTRA_VA_REST_VALUE = "va_rest_value"
+EXTRA_VA_BUTTON_MODE = "va_button_mode"  # "held" (default) or "toggle"
+
 # Stick axis natural pairs (wpilib input names)
 STICK_PAIRS = {
     "left_stick_x": "left_stick_y",
@@ -187,3 +197,4 @@ class FullConfig:
     actions: dict[str, ActionDefinition] = field(default_factory=dict)
     controllers: dict[int, ControllerConfig] = field(default_factory=dict)
     empty_groups: set[str] = field(default_factory=set)
+    version: str = ""

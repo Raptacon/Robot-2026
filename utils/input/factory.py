@@ -37,6 +37,7 @@ from utils.input.managed_button import ManagedButton
 from utils.input.managed_analog import ManagedAnalog
 from utils.input.managed_rumble import ManagedRumble
 from utils.input.shaping import build_shaping_pipeline
+from utils.input.virtual_analog import VirtualAnalogGenerator
 from utils.input._factory_helpers import (
     ControllerState,
     make_analog_nt_class,
@@ -179,6 +180,7 @@ class InputFactory:
         self._rumbles: dict[str, ManagedRumble] = {}
         self._raw_buttons: dict[str, Callable[[], bool]] = {}
         self._raw_analogs: dict[tuple, Callable[[], float]] = {}
+        self._va_generators: list[VirtualAnalogGenerator] = []
 
         # Register as the active factory for get_factory().
         # register_global=None (default): register only if no factory exists yet.
@@ -393,17 +395,27 @@ class InputFactory:
             return analog
 
         if action.input_type == InputType.VIRTUAL_ANALOG:
-            if not required:
-                log.warning(
-                    "Action '%s' is VIRTUAL_ANALOG (not yet implemented), "
-                    "returning default", qn)
-                analog = ManagedAnalog(
-                    action, lambda: default_value, default_value)
-                self._analogs[qn] = analog
-                return analog
-            raise NotImplementedError(
-                f"VIRTUAL_ANALOG is reserved for future use "
-                f"(action '{qn}') ({self._config_source})")
+            if binding is None:
+                if not required:
+                    log.warning(
+                        "Action '%s' is VIRTUAL_ANALOG but not bound, "
+                        "returning default", qn)
+                    analog = ManagedAnalog(
+                        action, lambda: default_value, default_value)
+                    self._analogs[qn] = analog
+                    return analog
+                raise KeyError(
+                    f"VIRTUAL_ANALOG action '{qn}' exists but is not "
+                    f"bound to any input ({self._config_source})")
+            state, input_name = binding
+            button_fn = make_button_condition(state, input_name, action)
+            generator = VirtualAnalogGenerator(action, button_fn)
+            self._va_generators.append(generator)
+            nt_path = f"{_NT_BASE}/actions/{action.group}/{action.name}"
+            klass = make_analog_nt_class(nt_path, action)
+            analog = klass(action, generator.get_value, default_value)
+            self._analogs[qn] = analog
+            return analog
 
         if binding is None:
             if required:
@@ -596,6 +608,10 @@ class InputFactory:
         # Update rumble timeouts
         for rumble in self._rumbles.values():
             rumble.update()
+        
+        # Update virtual analog generators
+        for gen in self._va_generators:
+            gen.update()
 
     # --- Future: dynamic remapping ---
 

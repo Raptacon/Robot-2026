@@ -18,6 +18,14 @@ from utils.controller.model import (
     EXTRA_NEGATIVE_SLEW_RATE,
     EXTRA_SEGMENT_POINTS,
     EXTRA_SPLINE_POINTS,
+    EXTRA_VA_RAMP_RATE,
+    EXTRA_VA_ACCELERATION,
+    EXTRA_VA_NEGATIVE_RAMP_RATE,
+    EXTRA_VA_NEGATIVE_ACCELERATION,
+    EXTRA_VA_ZERO_VEL_ON_RELEASE,
+    EXTRA_VA_TARGET_VALUE,
+    EXTRA_VA_REST_VALUE,
+    EXTRA_VA_BUTTON_MODE,
     InputType,
     EventTriggerMode,
     validate_action_name,
@@ -29,6 +37,10 @@ from .tooltips import (
     TIP_SLEW, TIP_NEG_SLEW,
     TIP_EDIT_SPLINE, TIP_EDIT_SEGMENTS,
     TIP_FILTER, TIP_FILTER_UNASSIGNED, TIP_FILTER_MULTI,
+    TIP_VA_BUTTON_MODE,
+    TIP_VA_RAMP_RATE, TIP_VA_ACCELERATION,
+    TIP_VA_TARGET, TIP_VA_REST,
+    TIP_VA_ZERO_VEL, TIP_VA_NEG_RAMP, TIP_VA_NEG_ACCEL,
 )
 
 # Tooltip delay in milliseconds (500ms balances responsiveness vs flicker)
@@ -501,6 +513,122 @@ class ActionPanel(tk.Frame):
         self._edit_segments_btn.grid(row=row, column=0, columnspan=2,
                                      sticky=tk.EW, pady=2)
 
+        # --- Virtual Analog fields (visible only for VIRTUAL_ANALOG) ---
+        # Compact 4-column grid inside a single frame to save vertical space.
+
+        row += 1
+        self._va_outer_frame = ttk.Frame(self._detail_frame)
+        self._va_outer_frame.grid(row=row, column=0, columnspan=2,
+                                  sticky=tk.EW, pady=2)
+        vr = 0  # row counter inside VA frame
+
+        # Row 0: Button Mode
+        ttk.Label(self._va_outer_frame, text="Mode:").grid(
+            row=vr, column=0, sticky=tk.W, padx=(0, 2))
+        self._va_mode_var = tk.StringVar(value="held")
+        self._va_mode_combo = ttk.Combobox(
+            self._va_outer_frame, textvariable=self._va_mode_var,
+            values=["held", "toggle"], state="readonly", width=7,
+        )
+        self._va_mode_combo.grid(row=vr, column=1, sticky=tk.EW, padx=(0, 6))
+        self._va_mode_var.trace_add("write", self._on_field_changed)
+
+        # Row 1: Ramp Rate | Acceleration (mutually exclusive)
+        vr += 1
+        ttk.Label(self._va_outer_frame, text="Ramp Rate:").grid(
+            row=vr, column=0, sticky=tk.W, padx=(0, 2))
+        self._va_ramp_var = tk.StringVar(value="1.0")
+        self._va_ramp_spin = ttk.Spinbox(
+            self._va_outer_frame, textvariable=self._va_ramp_var,
+            from_=0.0, to=100.0, increment=0.1, width=7,
+        )
+        self._va_ramp_spin.grid(row=vr, column=1, sticky=tk.EW, padx=(0, 6))
+        self._va_ramp_var.trace_add("write", self._on_field_changed)
+
+        ttk.Label(self._va_outer_frame, text="Accel:").grid(
+            row=vr, column=2, sticky=tk.W, padx=(0, 2))
+        self._va_accel_var = tk.StringVar(value="0.0")
+        self._va_accel_spin = ttk.Spinbox(
+            self._va_outer_frame, textvariable=self._va_accel_var,
+            from_=0.0, to=100.0, increment=0.1, width=7,
+        )
+        self._va_accel_spin.grid(row=vr, column=3, sticky=tk.EW)
+        self._va_accel_var.trace_add("write", self._on_field_changed)
+
+        # Row 1: Target | Rest
+        vr += 1
+        ttk.Label(self._va_outer_frame, text="Target:").grid(
+            row=vr, column=0, sticky=tk.W, padx=(0, 2))
+        self._va_target_var = tk.StringVar(value="1.0")
+        self._va_target_spin = ttk.Spinbox(
+            self._va_outer_frame, textvariable=self._va_target_var,
+            from_=-10.0, to=10.0, increment=0.1, width=7,
+        )
+        self._va_target_spin.grid(row=vr, column=1, sticky=tk.EW, padx=(0, 6))
+        self._va_target_var.trace_add("write", self._on_field_changed)
+
+        ttk.Label(self._va_outer_frame, text="Rest:").grid(
+            row=vr, column=2, sticky=tk.W, padx=(0, 2))
+        self._va_rest_var = tk.StringVar(value="0.0")
+        self._va_rest_spin = ttk.Spinbox(
+            self._va_outer_frame, textvariable=self._va_rest_var,
+            from_=-10.0, to=10.0, increment=0.1, width=7,
+        )
+        self._va_rest_spin.grid(row=vr, column=3, sticky=tk.EW)
+        self._va_rest_var.trace_add("write", self._on_field_changed)
+
+        # Row 2: Zero Vel on Release checkbox
+        vr += 1
+        self._va_zero_vel_var = tk.BooleanVar(value=False)
+        self._va_zero_vel_check = ttk.Checkbutton(
+            self._va_outer_frame, text="Zero vel on release",
+            variable=self._va_zero_vel_var,
+        )
+        self._va_zero_vel_check.grid(
+            row=vr, column=0, columnspan=4, sticky=tk.W, pady=2)
+        self._va_zero_vel_var.trace_add("write", self._on_field_changed)
+
+        # Row 3: Neg Ramp Rate | Neg Acceleration (optional overrides)
+        vr += 1
+        self._va_neg_ramp_enable_var = tk.BooleanVar(value=False)
+        self._va_neg_ramp_check = ttk.Checkbutton(
+            self._va_outer_frame, text="Neg Ramp:",
+            variable=self._va_neg_ramp_enable_var,
+        )
+        self._va_neg_ramp_check.grid(row=vr, column=0, sticky=tk.W)
+        self._va_neg_ramp_var = tk.StringVar(value="0.0")
+        self._va_neg_ramp_spin = ttk.Spinbox(
+            self._va_outer_frame, textvariable=self._va_neg_ramp_var,
+            from_=0.0, to=100.0, increment=0.1, width=7,
+        )
+        self._va_neg_ramp_spin.grid(
+            row=vr, column=1, sticky=tk.EW, padx=(0, 6))
+        self._va_neg_ramp_spin.config(state="disabled")
+        self._va_neg_ramp_enable_var.trace_add(
+            "write", self._on_va_neg_ramp_toggled)
+        self._va_neg_ramp_var.trace_add("write", self._on_field_changed)
+
+        self._va_neg_accel_enable_var = tk.BooleanVar(value=False)
+        self._va_neg_accel_check = ttk.Checkbutton(
+            self._va_outer_frame, text="Neg Accel:",
+            variable=self._va_neg_accel_enable_var,
+        )
+        self._va_neg_accel_check.grid(row=vr, column=2, sticky=tk.W)
+        self._va_neg_accel_var = tk.StringVar(value="0.0")
+        self._va_neg_accel_spin = ttk.Spinbox(
+            self._va_outer_frame, textvariable=self._va_neg_accel_var,
+            from_=0.0, to=100.0, increment=0.1, width=7,
+        )
+        self._va_neg_accel_spin.grid(row=vr, column=3, sticky=tk.EW)
+        self._va_neg_accel_spin.config(state="disabled")
+        self._va_neg_accel_enable_var.trace_add(
+            "write", self._on_va_neg_accel_toggled)
+        self._va_neg_accel_var.trace_add("write", self._on_field_changed)
+
+        # Let spinbox columns stretch
+        self._va_outer_frame.columnconfigure(1, weight=1)
+        self._va_outer_frame.columnconfigure(3, weight=1)
+
         self._detail_frame.columnconfigure(1, weight=1)
 
         # Analog-only widgets for show/hide
@@ -520,6 +648,9 @@ class ActionPanel(tk.Frame):
         # Segment-only widgets for show/hide
         self._segment_widgets = [self._edit_segments_btn]
         self._edit_segments_btn.grid_remove()
+
+        # Initially hide VA frame
+        self._va_outer_frame.grid_remove()
 
         # Tooltips for detail form fields
         _WidgetTooltip(self._name_label, TIP_NAME)
@@ -547,6 +678,17 @@ class ActionPanel(tk.Frame):
         _WidgetTooltip(self._neg_slew_spin, TIP_NEG_SLEW)
         _WidgetTooltip(self._edit_spline_btn, TIP_EDIT_SPLINE)
         _WidgetTooltip(self._edit_segments_btn, TIP_EDIT_SEGMENTS)
+        # VA field tooltips
+        _WidgetTooltip(self._va_mode_combo, TIP_VA_BUTTON_MODE)
+        _WidgetTooltip(self._va_ramp_spin, TIP_VA_RAMP_RATE)
+        _WidgetTooltip(self._va_accel_spin, TIP_VA_ACCELERATION)
+        _WidgetTooltip(self._va_target_spin, TIP_VA_TARGET)
+        _WidgetTooltip(self._va_rest_spin, TIP_VA_REST)
+        _WidgetTooltip(self._va_zero_vel_check, TIP_VA_ZERO_VEL)
+        _WidgetTooltip(self._va_neg_ramp_check, TIP_VA_NEG_RAMP)
+        _WidgetTooltip(self._va_neg_ramp_spin, TIP_VA_NEG_RAMP)
+        _WidgetTooltip(self._va_neg_accel_check, TIP_VA_NEG_ACCEL)
+        _WidgetTooltip(self._va_neg_accel_spin, TIP_VA_NEG_ACCEL)
         # Filter bar tooltips
         _WidgetTooltip(self._filter_entry, TIP_FILTER)
         _WidgetTooltip(self._filter_unassigned_cb, TIP_FILTER_UNASSIGNED)
@@ -958,6 +1100,33 @@ class ActionPanel(tk.Frame):
             else:
                 self._neg_slew_enable_var.set(False)
                 self._neg_slew_var.set("0.0")
+            # Virtual Analog fields
+            self._va_mode_var.set(
+                action.extra.get(EXTRA_VA_BUTTON_MODE, "held"))
+            self._va_ramp_var.set(
+                str(action.extra.get(EXTRA_VA_RAMP_RATE, 0.0)))
+            self._va_accel_var.set(
+                str(action.extra.get(EXTRA_VA_ACCELERATION, 0.0)))
+            self._va_target_var.set(
+                str(action.extra.get(EXTRA_VA_TARGET_VALUE, 1.0)))
+            self._va_rest_var.set(
+                str(action.extra.get(EXTRA_VA_REST_VALUE, 0.0)))
+            self._va_zero_vel_var.set(
+                bool(action.extra.get(EXTRA_VA_ZERO_VEL_ON_RELEASE, False)))
+            neg_ramp = action.extra.get(EXTRA_VA_NEGATIVE_RAMP_RATE)
+            if neg_ramp is not None:
+                self._va_neg_ramp_enable_var.set(True)
+                self._va_neg_ramp_var.set(str(float(neg_ramp)))
+            else:
+                self._va_neg_ramp_enable_var.set(False)
+                self._va_neg_ramp_var.set("0.0")
+            neg_accel = action.extra.get(EXTRA_VA_NEGATIVE_ACCELERATION)
+            if neg_accel is not None:
+                self._va_neg_accel_enable_var.set(True)
+                self._va_neg_accel_var.set(str(float(neg_accel)))
+            else:
+                self._va_neg_accel_enable_var.set(False)
+                self._va_neg_accel_var.set("0.0")
         finally:
             self._updating_form = False
 
@@ -983,10 +1152,12 @@ class ActionPanel(tk.Frame):
                 child.config(state=readonly_state)
             elif isinstance(child, (ttk.Checkbutton, ttk.Button)):
                 child.config(state=state)
-        # Handle children inside the neg slew frame (nested in a sub-frame)
-        for child in self._neg_slew_frame.winfo_children():
-            if isinstance(child, (ttk.Spinbox, ttk.Checkbutton)):
-                child.config(state=state)
+        # Handle children inside nested sub-frames
+        for frame in (self._neg_slew_frame,
+                      self._va_outer_frame):
+            for child in frame.winfo_children():
+                if isinstance(child, (ttk.Spinbox, ttk.Checkbutton)):
+                    child.config(state=state)
         # The group combo is editable (not readonly) so users can type new names
         if effective:
             self._group_combo.config(state=state)
@@ -1009,7 +1180,7 @@ class ActionPanel(tk.Frame):
         self._trigger_label.grid()
         self._trigger_combo.grid()
 
-        if input_type == InputType.ANALOG:
+        if input_type in (InputType.ANALOG, InputType.VIRTUAL_ANALOG):
             modes = ANALOG_EVENT_TRIGGER_MODES
             default = EventTriggerMode.SCALED
         else:
@@ -1073,8 +1244,11 @@ class ActionPanel(tk.Frame):
         """
         input_type_str = self._input_type_var.get()
         is_analog = input_type_str == InputType.ANALOG.value
+        is_va = input_type_str == InputType.VIRTUAL_ANALOG.value
         is_bool_trigger = input_type_str == InputType.BOOLEAN_TRIGGER.value
         is_button = input_type_str == InputType.BUTTON.value
+        # VA output goes through the analog shaping pipeline
+        show_axis = is_analog or is_va
 
         # Threshold: visible for BUTTON (disabled) and BOOLEAN_TRIGGER (enabled)
         if is_button or is_bool_trigger:
@@ -1087,7 +1261,7 @@ class ActionPanel(tk.Frame):
             self._threshold_spin.grid_remove()
 
         for label, widget in self._axis_widgets:
-            if is_analog:
+            if show_axis:
                 label.grid()
                 widget.grid()
             else:
@@ -1096,13 +1270,19 @@ class ActionPanel(tk.Frame):
 
         # Neg slew frame: show/hide with other axis widgets
         for w in self._neg_slew_widgets:
-            if is_analog:
+            if show_axis:
                 w.grid()
             else:
                 w.grid_remove()
 
+        # VA-specific frame
+        if is_va:
+            self._va_outer_frame.grid()
+        else:
+            self._va_outer_frame.grid_remove()
+
         # Refresh combo values to re-gate SPLINE based on current trigger
-        if is_analog:
+        if show_axis:
             self._refresh_spline_gate()
 
         # Spline controls: visible only for ANALOG + SPLINE
@@ -1125,7 +1305,7 @@ class ActionPanel(tk.Frame):
                 w.grid_remove()
 
         # Disable axis fields when trigger mode is RAW (bypasses all shaping)
-        if is_analog:
+        if show_axis:
             is_raw = trigger_str == EventTriggerMode.RAW.value
             raw_state = "disabled" if is_raw else "normal"
             self._deadband_spin.config(state=raw_state)
@@ -1175,6 +1355,30 @@ class ActionPanel(tk.Frame):
                 action.extra[EXTRA_NEGATIVE_SLEW_RATE] = min(val, 0.0)
             else:
                 action.extra.pop(EXTRA_NEGATIVE_SLEW_RATE, None)
+            # Virtual Analog extra fields
+            if action.input_type == InputType.VIRTUAL_ANALOG:
+                action.extra[EXTRA_VA_BUTTON_MODE] = (
+                    self._va_mode_var.get() or "held")
+                action.extra[EXTRA_VA_RAMP_RATE] = float(
+                    self._va_ramp_var.get() or 0.0)
+                action.extra[EXTRA_VA_ACCELERATION] = float(
+                    self._va_accel_var.get() or 0.0)
+                action.extra[EXTRA_VA_TARGET_VALUE] = float(
+                    self._va_target_var.get() or 1.0)
+                action.extra[EXTRA_VA_REST_VALUE] = float(
+                    self._va_rest_var.get() or 0.0)
+                action.extra[EXTRA_VA_ZERO_VEL_ON_RELEASE] = bool(
+                    self._va_zero_vel_var.get())
+                if self._va_neg_ramp_enable_var.get():
+                    action.extra[EXTRA_VA_NEGATIVE_RAMP_RATE] = float(
+                        self._va_neg_ramp_var.get() or 0.0)
+                else:
+                    action.extra.pop(EXTRA_VA_NEGATIVE_RAMP_RATE, None)
+                if self._va_neg_accel_enable_var.get():
+                    action.extra[EXTRA_VA_NEGATIVE_ACCELERATION] = float(
+                        self._va_neg_accel_var.get() or 0.0)
+                else:
+                    action.extra.pop(EXTRA_VA_NEGATIVE_ACCELERATION, None)
         except (ValueError, KeyError):
             return False
 
@@ -1209,6 +1413,22 @@ class ActionPanel(tk.Frame):
         """Enable/disable the negative slew rate spinbox."""
         enabled = self._neg_slew_enable_var.get()
         self._neg_slew_spin.config(state="normal" if enabled else "disabled")
+        if not self._updating_form:
+            self._on_field_changed()
+
+    def _on_va_neg_ramp_toggled(self, *args):
+        """Enable/disable the VA negative ramp rate spinbox."""
+        enabled = self._va_neg_ramp_enable_var.get()
+        self._va_neg_ramp_spin.config(
+            state="normal" if enabled else "disabled")
+        if not self._updating_form:
+            self._on_field_changed()
+
+    def _on_va_neg_accel_toggled(self, *args):
+        """Enable/disable the VA negative acceleration spinbox."""
+        enabled = self._va_neg_accel_enable_var.get()
+        self._va_neg_accel_spin.config(
+            state="normal" if enabled else "disabled")
         if not self._updating_form:
             self._on_field_changed()
 
@@ -1251,6 +1471,18 @@ class ActionPanel(tk.Frame):
                         current_db = 0.0
                     if current_db == 0.0:
                         self._deadband_var.set("0.05")
+                elif input_type == InputType.VIRTUAL_ANALOG:
+                    # VA defaults: no deadband (no physical axis)
+                    self._deadband_var.set("0.0")
+                    self._va_ramp_var.set("1.0")
+                    self._va_accel_var.set("0.0")
+                    self._va_target_var.set("1.0")
+                    self._va_rest_var.set("0.0")
+                    self._va_zero_vel_var.set(False)
+                    self._va_neg_ramp_enable_var.set(False)
+                    self._va_neg_ramp_var.set("0.0")
+                    self._va_neg_accel_enable_var.set(False)
+                    self._va_neg_accel_var.set("0.0")
                 else:
                     # Reset analog-specific fields to defaults
                     self._deadband_var.set("0.0")
@@ -1264,6 +1496,19 @@ class ActionPanel(tk.Frame):
                         action.extra.pop(EXTRA_SPLINE_POINTS, None)
                         action.extra.pop(EXTRA_SEGMENT_POINTS, None)
                         action.extra.pop(EXTRA_NEGATIVE_SLEW_RATE, None)
+                # Clean up VA extra keys when switching away from VA
+                if input_type != InputType.VIRTUAL_ANALOG:
+                    action = self._actions.get(self._selected_name)
+                    if action:
+                        for key in (EXTRA_VA_BUTTON_MODE,
+                                    EXTRA_VA_RAMP_RATE,
+                                    EXTRA_VA_ACCELERATION,
+                                    EXTRA_VA_NEGATIVE_RAMP_RATE,
+                                    EXTRA_VA_NEGATIVE_ACCELERATION,
+                                    EXTRA_VA_ZERO_VEL_ON_RELEASE,
+                                    EXTRA_VA_TARGET_VALUE,
+                                    EXTRA_VA_REST_VALUE):
+                            action.extra.pop(key, None)
                 # Update trigger mode options and default
                 self._update_trigger_mode_options(input_type)
             finally:

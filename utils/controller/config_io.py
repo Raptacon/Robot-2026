@@ -17,6 +17,7 @@ Actions are stored in a nested format grouped by their ``group`` field::
 No wpilib dependencies - pure Python + PyYAML.
 """
 
+import logging
 from pathlib import Path
 
 import yaml
@@ -31,6 +32,10 @@ from .model import (
     InputType,
     EventTriggerMode,
 )
+
+log = logging.getLogger("config_io")
+
+CONFIG_VERSION = "1.0.0"
 
 # Defaults used to decide which fields to omit from YAML output
 _ACTION_DEFAULTS = ActionDefinition(name="")
@@ -198,6 +203,8 @@ def save_config(config: FullConfig, path: str | Path) -> None:
     """Save a FullConfig to a YAML file (nested action format)."""
     data = {}
 
+    data["version"] = config.version or CONFIG_VERSION
+
     if config.actions or config.empty_groups:
         data["actions"] = _actions_to_nested_dict(
             config.actions, config.empty_groups)
@@ -220,6 +227,17 @@ def load_config(path: str | Path) -> FullConfig:
     if not data:
         return FullConfig()
 
+    version = data.get("version", "")
+    if not version:
+        log.warning(
+            "Config file '%s' has no version field — assuming %s",
+            path, CONFIG_VERSION)
+        version = CONFIG_VERSION
+    elif version != CONFIG_VERSION:
+        log.warning(
+            "Config file '%s' version '%s' does not match "
+            "expected '%s'", path, version, CONFIG_VERSION)
+
     actions, empty_groups = _load_actions_dict(data.get("actions") or {})
 
     controllers = {}
@@ -228,7 +246,7 @@ def load_config(path: str | Path) -> FullConfig:
         controllers[port] = _dict_to_controller(port, ctrl_dict)
 
     return FullConfig(actions=actions, controllers=controllers,
-                      empty_groups=empty_groups)
+                      empty_groups=empty_groups, version=version)
 
 
 def load_actions_from_file(path: str | Path) -> dict[str, ActionDefinition]:
@@ -241,6 +259,17 @@ def load_actions_from_file(path: str | Path) -> dict[str, ActionDefinition]:
         data = yaml.safe_load(f)
     if not data:
         return {}
+
+    version = data.get("version", "")
+    if not version:
+        log.warning(
+            "Config file '%s' has no version field — assuming %s",
+            path, CONFIG_VERSION)
+    elif version != CONFIG_VERSION:
+        log.warning(
+            "Config file '%s' version '%s' does not match "
+            "expected '%s'", path, version, CONFIG_VERSION)
+
     actions, _empty = _load_actions_dict(data.get("actions") or {})
     return actions
 

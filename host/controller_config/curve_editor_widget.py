@@ -1,13 +1,14 @@
 """Embeddable, resizable curve editor widget for the Action Editor tab.
 
-Supports six modes:
-  - "spline"     — interactive cubic hermite spline editing
-  - "segment"    — interactive piecewise-linear editing
-  - "raw"        — read-only visualization of y = x
-  - "scaled"     — visualization with draggable scale handle
-  - "squared"    — visualization with draggable scale handle (quadratic)
-  - "threshold"  — step function with draggable threshold for BOOLEAN_TRIGGER
-  - None         — inactive (button input type or no action selected)
+Supports seven modes:
+  - "spline"         — interactive cubic hermite spline editing
+  - "segment"        — interactive piecewise-linear editing
+  - "raw"            — read-only visualization of y = x
+  - "scaled"         — visualization with draggable scale handle
+  - "squared"        — visualization with draggable scale handle (quadratic)
+  - "threshold"      — step function with draggable threshold for BOOLEAN_TRIGGER
+  - "virtual_analog" — ramp preview with draggable target/rest handles
+  - None             — inactive (button input type or no action selected)
 """
 
 import math
@@ -38,6 +39,14 @@ from utils.controller.model import (
     EventTriggerMode,
     EXTRA_SEGMENT_POINTS,
     EXTRA_SPLINE_POINTS,
+    EXTRA_VA_ACCELERATION,
+    EXTRA_VA_NEGATIVE_ACCELERATION,
+    EXTRA_VA_NEGATIVE_RAMP_RATE,
+    EXTRA_VA_RAMP_RATE,
+    EXTRA_VA_REST_VALUE,
+    EXTRA_VA_TARGET_VALUE,
+    EXTRA_VA_ZERO_VEL_ON_RELEASE,
+    EXTRA_VA_BUTTON_MODE,
     InputType,
     TRIGGER_INPUTS,
 )
@@ -112,6 +121,21 @@ class CurveEditorWidget(ttk.Frame):
         self._symmetric = False
         self._monotonic = True
 
+        # Virtual Analog state
+        self._va_press_duration = 1.5
+        self._va_total_duration = 3.0
+
+        # VA live simulation state
+        self._va_sim_active = False
+        self._va_sim_pressed = False
+        self._va_sim_position = 0.0
+        self._va_sim_velocity = 0.0
+        self._va_sim_time = 0.0
+        self._va_sim_trail = []
+        self._va_sim_after_id = None
+        self._va_sim_was_pressed = False
+        self._va_sim_release_time = None
+
         # Undo stack (max 30)
         self._undo_stack = UndoStack()
 
@@ -121,8 +145,9 @@ class CurveEditorWidget(ttk.Frame):
         self._plot_w = 0
         self._plot_h = 0
 
-        # X-axis range: -1..1 for sticks, 0..1 for triggers
+        # X-axis range: -1..1 for sticks, 0..1 for triggers, 0..N for VA
         self._x_min = -1.0
+        self._x_max = 1.0
 
         # Y-axis range: defaults to (-1, 1), auto-scaled for visualization
         self._y_min = -1.0
@@ -190,6 +215,15 @@ class CurveEditorWidget(ttk.Frame):
             command=self._on_wide_range_toggle)
         self._wide_range_cb.pack(side=tk.LEFT, padx=3)
 
+        # VA simulate button (hold to simulate press, release to simulate release)
+        self._va_sim_btn = ttk.Button(
+            self._vis_toolbar, text="Hold to Simulate")
+        self._va_sim_btn.bind("<ButtonPress-1>", self._on_va_sim_press)
+        self._va_sim_btn.bind("<ButtonRelease-1>", self._on_va_sim_release)
+        self._va_reset_btn = ttk.Button(
+            self._vis_toolbar, text="Reset",
+            command=self._on_va_sim_reset)
+
         # Canvas (fills remaining space)
         self._canvas = tk.Canvas(self, bg=BG_INACTIVE,
                                  highlightthickness=0)
@@ -246,8 +280,8 @@ class CurveEditorWidget(ttk.Frame):
     # ------------------------------------------------------------------
 
     def _d2c(self, x: float, y: float) -> tuple[float, float]:
-        """Data coords to canvas pixels. X uses _x_min..1, Y uses _y_min/_y_max."""
-        x_range = 1.0 - self._x_min
+        """Data coords to canvas pixels. X uses _x_min.._x_max, Y uses _y_min/_y_max."""
+        x_range = self._x_max - self._x_min
         if x_range == 0:
             x_range = 2.0
         cx = self._margin_x + (x - self._x_min) / x_range * self._plot_w
@@ -261,7 +295,7 @@ class CurveEditorWidget(ttk.Frame):
         """Canvas pixels to data coords."""
         if self._plot_w == 0 or self._plot_h == 0:
             return 0.0, 0.0
-        x_range = 1.0 - self._x_min
+        x_range = self._x_max - self._x_min
         if x_range == 0:
             x_range = 2.0
         x = (cx - self._margin_x) / self._plot_w * x_range + self._x_min
@@ -365,7 +399,7 @@ class CurveEditorWidget(ttk.Frame):
                 If all are trigger inputs (0..1 range), the X axis
                 adjusts from -1..1 to 0..1.
         """
-        self._update_x_range(bound_inputs)
+        self._va_sim_stop()
         self._action = action
         self._qname = qname
         self._undo_stack.clear()
@@ -376,7 +410,9 @@ class CurveEditorWidget(ttk.Frame):
         self._mono_var.set(True)
 
         # Determine mode from input_type + trigger_mode
-        if action.input_type == InputType.BOOLEAN_TRIGGER:
+        if action.input_type == InputType.VIRTUAL_ANALOG:
+            self._mode = "virtual_analog"
+        elif action.input_type == InputType.BOOLEAN_TRIGGER:
             self._mode = "threshold"
         elif action.input_type != InputType.ANALOG:
             self._mode = None
@@ -392,6 +428,9 @@ class CurveEditorWidget(ttk.Frame):
             self._mode = "squared"
         else:
             self._mode = None
+
+        # Set X range (must be after mode is determined)
+        self._update_x_range(bound_inputs)
 
         # Load points for editable modes
         if self._mode == "spline":
@@ -417,6 +456,7 @@ class CurveEditorWidget(ttk.Frame):
 
     def clear(self):
         """Clear to inactive state."""
+        self._va_sim_stop()
         self._action = None
         self._qname = None
         self._mode = None
@@ -454,8 +494,14 @@ class CurveEditorWidget(ttk.Frame):
 
         If ALL bound inputs are triggers (0..1), use 0..1.
         Otherwise use -1..1 (sticks, or no bindings).
+        VA mode uses 0..total_duration (time axis).
         None means 'keep current' (e.g. refresh without rebinding).
         """
+        if self._mode == "virtual_analog":
+            self._x_min = 0.0
+            self._x_max = self._va_total_duration
+            return
+        self._x_max = 1.0
         if bound_inputs is None:
             return
         if bound_inputs and all(
@@ -472,6 +518,7 @@ class CurveEditorWidget(ttk.Frame):
         """Show/hide toolbar rows and mode-specific controls."""
         is_editable = self._mode in ("spline", "segment")
         is_vis_draggable = self._mode in ("scaled", "squared")
+        is_va = self._mode == "virtual_analog"
         if is_editable:
             self._vis_toolbar.pack_forget()
             self._toolbar.pack(fill=tk.X, padx=2, pady=(2, 0))
@@ -495,11 +542,18 @@ class CurveEditorWidget(ttk.Frame):
                 self._mono_cb.pack_forget()
                 self._proc_cb.pack(side=tk.LEFT, padx=3,
                                    after=self._sym_cb)
-        elif is_vis_draggable:
+        elif is_vis_draggable or is_va:
             self._toolbar.pack_forget()
             self._toolbar2.pack_forget()
             self._proc_cb.pack_forget()
             self._vis_toolbar.pack(fill=tk.X, padx=2, pady=(2, 0))
+            # Show/hide VA sim buttons
+            if is_va:
+                self._va_sim_btn.pack(side=tk.LEFT, padx=3)
+                self._va_reset_btn.pack(side=tk.LEFT, padx=3)
+            else:
+                self._va_sim_btn.pack_forget()
+                self._va_reset_btn.pack_forget()
             # Repack canvas after vis toolbar
             self._canvas.pack_forget()
             self._canvas.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
@@ -507,6 +561,8 @@ class CurveEditorWidget(ttk.Frame):
             self._toolbar.pack_forget()
             self._toolbar2.pack_forget()
             self._proc_cb.pack_forget()
+            self._va_sim_btn.pack_forget()
+            self._va_reset_btn.pack_forget()
             self._vis_toolbar.pack_forget()
 
     def _update_canvas_bg(self):
@@ -516,6 +572,8 @@ class CurveEditorWidget(ttk.Frame):
             cursor = "crosshair"
         elif self._mode == "threshold":
             cursor = "sb_h_double_arrow"
+        elif self._mode == "virtual_analog":
+            cursor = "sb_v_double_arrow"
         else:
             cursor = ""
         self._canvas.configure(cursor=cursor)
@@ -533,6 +591,9 @@ class CurveEditorWidget(ttk.Frame):
                 "Click to add | Right-click to remove | Drag to adjust")
         elif self._mode == "threshold":
             self._status_var.set("Drag handle to adjust threshold")
+        elif self._mode == "virtual_analog":
+            self._status_var.set(
+                "Drag handles to adjust target/rest values")
 
     # ------------------------------------------------------------------
     # Drawing
@@ -585,6 +646,14 @@ class CurveEditorWidget(ttk.Frame):
         elif self._mode == "threshold":
             self._y_min = -0.1
             self._y_max = 1.1
+        elif self._mode == "virtual_analog" and self._action:
+            target = float(self._action.extra.get(EXTRA_VA_TARGET_VALUE, 1.0))
+            rest = float(self._action.extra.get(EXTRA_VA_REST_VALUE, 0.0))
+            lo = min(target, rest)
+            hi = max(target, rest)
+            pad = max((hi - lo) * 0.15, 0.1)
+            self._y_min = lo - pad
+            self._y_max = hi + pad
         else:
             self._y_min = -1.0
             self._y_max = 1.0
@@ -603,7 +672,13 @@ class CurveEditorWidget(ttk.Frame):
         self._compute_y_range()
         self._draw_grid()
 
-        if self._mode in ("raw", "scaled", "squared"):
+        if self._mode == "virtual_analog":
+            if self._va_sim_active or self._va_sim_trail:
+                self._draw_va_sim_trail()
+            else:
+                self._draw_va_ramp()
+            self._draw_va_handles()
+        elif self._mode in ("raw", "scaled", "squared"):
             self._draw_deadband_band()
             self._draw_computed_curve()
             if self._mode in ("scaled", "squared"):
@@ -624,7 +699,7 @@ class CurveEditorWidget(ttk.Frame):
         cw = int(c.cget("width")) if c.winfo_width() < 2 else c.winfo_width()
         ch = int(c.cget("height")) if c.winfo_height() < 2 else c.winfo_height()
         c.create_text(cw // 2, ch // 2,
-                      text="Select an analog action to view curve",
+                      text="Select an analog or virtual analog\naction to view curve",
                       fill="#999999", font=("TkDefaultFont", 10))
 
     def _nice_grid_step(self, span: float) -> float:
@@ -635,8 +710,15 @@ class CurveEditorWidget(ttk.Frame):
         c = self._canvas
         small = self._plot_w < 200
 
-        # X gridlines (dynamic based on x_min)
-        if self._x_min >= 0:
+        # X gridlines (dynamic based on x range)
+        if self._mode == "virtual_analog":
+            x_step = self._nice_grid_step(self._x_max - self._x_min)
+            x_grid = []
+            v = 0.0
+            while v <= self._x_max + x_step * 0.01:
+                x_grid.append(v)
+                v += x_step
+        elif self._x_min >= 0:
             x_grid = [i / 4 for i in range(0, 5)]  # 0, 0.25, 0.5, 0.75, 1
         else:
             x_grid = [i / 4 for i in range(-4, 5)]  # -1..1 by 0.25
@@ -671,14 +753,17 @@ class CurveEditorWidget(ttk.Frame):
         if self._plot_w >= 100:
             font_size = 7 if self._plot_w < 250 else 8
             # X labels
-            if self._x_min >= 0:
+            if self._mode == "virtual_analog":
+                x_labels = x_grid
+            elif self._x_min >= 0:
                 x_labels = [0.0, 0.25, 0.5, 0.75, 1.0]
             else:
                 x_labels = [-1.0, -0.5, 0.0, 0.5, 1.0]
             for v in x_labels:
                 cx, _ = self._d2c(v, 0)
+                label = f"{v:g}s" if self._mode == "virtual_analog" else f"{v:g}"
                 c.create_text(cx, self._margin_y + self._plot_h + 12,
-                              text=f"{v:g}", fill=LABEL_COLOR,
+                              text=label, fill=LABEL_COLOR,
                               font=("TkDefaultFont", font_size))
             # Y labels
             v = y_start
@@ -819,6 +904,160 @@ class CurveEditorWidget(ttk.Frame):
             xtc, yh - r, xtc + r, yh, xtc, yh + r, xtc - r, yh,
             fill=_THRESHOLD_HANDLE, outline=_THRESHOLD_HANDLE_OUTLINE,
             width=2)
+
+    # --- Virtual Analog Mode ---
+
+    _VA_PRESS_COLOR = "#2060c0"    # Blue for press phase
+    _VA_RELEASE_COLOR = "#c04020"  # Red-orange for release phase
+    _VA_HANDLE_COLOR = "#40a040"   # Green for target/rest handles
+    _VA_HANDLE_OUTLINE = "#207020"
+    _VA_DIVIDER_COLOR = "#808080"
+
+    def _draw_va_ramp(self):
+        """Draw the VA ramp simulation curve."""
+        if not self._action:
+            return
+        from utils.input.virtual_analog import simulate_va_ramp
+
+        extra = self._action.extra
+        neg_ramp = extra.get(EXTRA_VA_NEGATIVE_RAMP_RATE)
+        neg_accel = extra.get(EXTRA_VA_NEGATIVE_ACCELERATION)
+        points = simulate_va_ramp(
+            ramp_rate=float(extra.get(EXTRA_VA_RAMP_RATE, 0.0)),
+            acceleration=float(extra.get(EXTRA_VA_ACCELERATION, 0.0)),
+            negative_ramp_rate=float(neg_ramp) if neg_ramp is not None
+            else None,
+            negative_acceleration=float(neg_accel) if neg_accel is not None
+            else None,
+            zero_vel_on_release=bool(extra.get(
+                EXTRA_VA_ZERO_VEL_ON_RELEASE, False)),
+            target_value=float(extra.get(EXTRA_VA_TARGET_VALUE, 1.0)),
+            rest_value=float(extra.get(EXTRA_VA_REST_VALUE, 0.0)),
+            total_duration=self._va_total_duration,
+            press_duration=self._va_press_duration,
+        )
+
+        c = self._canvas
+        press_dur = self._va_press_duration
+
+        # Draw press/release divider
+        dx, dy_top = self._d2c(press_dur, self._y_max)
+        _, dy_bot = self._d2c(press_dur, self._y_min)
+        c.create_line(dx, dy_top, dx, dy_bot,
+                      fill=self._VA_DIVIDER_COLOR, width=1, dash=(6, 3))
+
+        # Labels for release/press regions (release drawn first)
+        font_size = 7 if self._plot_w < 250 else 8
+        mid_release = press_dur / 2
+        mid_press = (press_dur + self._va_total_duration) / 2
+        rx, _ = self._d2c(mid_release, self._y_max)
+        px, _ = self._d2c(mid_press, self._y_max)
+        c.create_text(rx, self._margin_y - 8, text="Release",
+                      fill=self._VA_RELEASE_COLOR,
+                      font=("TkDefaultFont", font_size))
+        c.create_text(px, self._margin_y - 8, text="Press",
+                      fill=self._VA_PRESS_COLOR,
+                      font=("TkDefaultFont", font_size))
+
+        # Draw curve in two colors (release first, then press)
+        release_coords = []
+        press_coords = []
+        for t, pos in points:
+            cx, cy = self._d2c(t, pos)
+            if t <= press_dur:
+                release_coords.extend([cx, cy])
+            else:
+                if not press_coords and release_coords:
+                    # Bridge point: add last release point to press
+                    press_coords.extend(release_coords[-2:])
+                press_coords.extend([cx, cy])
+
+        if len(release_coords) >= 4:
+            c.create_line(*release_coords, fill=self._VA_RELEASE_COLOR,
+                          width=2, smooth=False)
+        if len(press_coords) >= 4:
+            c.create_line(*press_coords, fill=self._VA_PRESS_COLOR,
+                          width=2, smooth=False)
+
+    def _draw_va_handles(self):
+        """Draw draggable horizontal handles for target and rest values."""
+        if not self._action:
+            return
+        c = self._canvas
+        extra = self._action.extra
+        target = float(extra.get(EXTRA_VA_TARGET_VALUE, 1.0))
+        rest = float(extra.get(EXTRA_VA_REST_VALUE, 0.0))
+
+        # Target handle: horizontal dashed line + diamond
+        _, ty = self._d2c(0, target)
+        c.create_line(self._margin_x, ty,
+                      self._margin_x + self._plot_w, ty,
+                      fill=self._VA_HANDLE_COLOR, width=1, dash=(4, 4))
+        # Diamond at right edge
+        hx = self._margin_x + self._plot_w - 15
+        r = _POINT_RADIUS
+        c.create_polygon(
+            hx, ty - r, hx + r, ty, hx, ty + r, hx - r, ty,
+            fill=self._VA_HANDLE_COLOR, outline=self._VA_HANDLE_OUTLINE,
+            width=2)
+        c.create_text(hx - r - 4, ty - r - 2, text="target",
+                      fill=self._VA_HANDLE_COLOR, anchor=tk.E,
+                      font=("TkDefaultFont", 7))
+
+        # Rest handle: horizontal dashed line + diamond
+        _, ry = self._d2c(0, rest)
+        c.create_line(self._margin_x, ry,
+                      self._margin_x + self._plot_w, ry,
+                      fill=self._VA_RELEASE_COLOR, width=1, dash=(4, 4))
+        hx2 = self._margin_x + 15
+        c.create_polygon(
+            hx2, ry - r, hx2 + r, ry, hx2, ry + r, hx2 - r, ry,
+            fill=self._VA_RELEASE_COLOR, outline="#901010",
+            width=2)
+        c.create_text(hx2 + r + 4, ry - r - 2, text="rest",
+                      fill=self._VA_RELEASE_COLOR, anchor=tk.W,
+                      font=("TkDefaultFont", 7))
+
+    def _draw_va_sim_trail(self):
+        """Draw the live simulation trail with a dot at current position."""
+        if not self._va_sim_trail:
+            return
+        c = self._canvas
+        release_t = self._va_sim_release_time
+
+        # Build press and release coordinate lists
+        press_coords = []
+        release_coords = []
+        for t, pos in self._va_sim_trail:
+            cx, cy = self._d2c(t, pos)
+            if release_t is None or t <= release_t:
+                press_coords.extend([cx, cy])
+            else:
+                if not release_coords and press_coords:
+                    release_coords.extend(press_coords[-2:])
+                release_coords.extend([cx, cy])
+
+        if len(press_coords) >= 4:
+            c.create_line(*press_coords, fill=self._VA_PRESS_COLOR,
+                          width=2, smooth=False)
+        if len(release_coords) >= 4:
+            c.create_line(*release_coords, fill=self._VA_RELEASE_COLOR,
+                          width=2, smooth=False)
+
+        # Draw dot at current position
+        last_t, last_pos = self._va_sim_trail[-1]
+        dx, dy = self._d2c(last_t, last_pos)
+        r = self._VA_DOT_RADIUS
+        color = (self._VA_PRESS_COLOR if self._va_sim_pressed
+                 else self._VA_RELEASE_COLOR)
+        c.create_oval(dx - r, dy - r, dx + r, dy + r,
+                      fill=color, outline="white", width=1)
+
+        # Status text
+        if self._va_sim_active:
+            phase = "Press" if self._va_sim_pressed else "Release"
+            self._status_var.set(
+                f"{phase}  t={last_t:.2f}s  value={last_pos:.3f}")
 
     # --- Spline Mode ---
 
@@ -987,6 +1226,21 @@ class CurveEditorWidget(ttk.Frame):
             if math.hypot(cx - hcx, cy - hcy) <= _POINT_RADIUS + 5:
                 return ("threshold_handle", 0, None)
 
+        if self._mode == "virtual_analog" and self._action:
+            extra = self._action.extra
+            target = extra.get(EXTRA_VA_TARGET_VALUE, 1.0)
+            rest = extra.get(EXTRA_VA_REST_VALUE, 0.0)
+            # Target handle (right side diamond)
+            hx = self._margin_x + self._plot_w - 15
+            _, ty = self._d2c(0, target)
+            if math.hypot(cx - hx, cy - ty) <= _POINT_RADIUS + 5:
+                return ("va_target_handle", 0, None)
+            # Rest handle (left side diamond)
+            hx2 = self._margin_x + 15
+            _, ry = self._d2c(0, rest)
+            if math.hypot(cx - hx2, cy - ry) <= _POINT_RADIUS + 5:
+                return ("va_rest_handle", 0, None)
+
         return None
 
     # ------------------------------------------------------------------
@@ -1016,6 +1270,10 @@ class CurveEditorWidget(ttk.Frame):
 
         if self._drag_type == "threshold_handle":
             self._drag_threshold_handle(event)
+            return
+
+        if self._drag_type in ("va_target_handle", "va_rest_handle"):
+            self._drag_va_handle(event)
             return
 
         if self._mode not in ("spline", "segment"):
@@ -1150,6 +1408,183 @@ class CurveEditorWidget(ttk.Frame):
         if self._on_curve_changed:
             self._on_curve_changed()
 
+    def _drag_va_handle(self, event):
+        """Drag VA target or rest handle to adjust values."""
+        if not self._action:
+            return
+        if not self._drag_undo_pushed:
+            if self._on_before_change:
+                self._on_before_change(200)
+            self._drag_undo_pushed = True
+
+        _, y = self._c2d(event.x, event.y)
+        y = round(max(-10.0, min(10.0, y)), 2)
+
+        if self._drag_type == "va_target_handle":
+            self._action.extra[EXTRA_VA_TARGET_VALUE] = y
+            self._status_var.set(f"Target: {y:.2f}")
+        else:
+            self._action.extra[EXTRA_VA_REST_VALUE] = y
+            self._status_var.set(f"Rest: {y:.2f}")
+        self._draw()
+
+        if self._on_curve_changed:
+            self._on_curve_changed()
+
+    # ------------------------------------------------------------------
+    # VA Live Simulation
+    # ------------------------------------------------------------------
+
+    _VA_SIM_DT = 0.02       # 50 Hz physics step
+    _VA_SIM_INTERVAL = 20   # ms between animation frames
+    _VA_SIM_TIMEOUT = 10.0  # Max sim duration (seconds)
+    _VA_DOT_RADIUS = 5
+
+    def _on_va_sim_press(self, event):
+        """Start or continue live simulation when button is pressed."""
+        if not self._action or self._mode != "virtual_analog":
+            return
+        is_toggle = (self._action.extra.get(
+            EXTRA_VA_BUTTON_MODE, "held") == "toggle")
+        if is_toggle:
+            self._va_sim_pressed = not self._va_sim_pressed
+        else:
+            self._va_sim_pressed = True
+        if self._va_sim_active:
+            # Sim already running — continue trail
+            return
+        if self._va_sim_trail:
+            # Previous sim finished — continue from where it left off
+            self._va_sim_active = True
+            self._va_sim_tick()
+            return
+        # Fresh start
+        extra = self._action.extra
+        rest = float(extra.get(EXTRA_VA_REST_VALUE, 0.0))
+        self._va_sim_position = rest
+        self._va_sim_velocity = 0.0
+        self._va_sim_time = 0.0
+        self._va_sim_trail = [(0.0, rest)]
+        self._va_sim_active = True
+        self._va_sim_was_pressed = False
+        self._va_sim_release_time = None
+        self._va_sim_tick()
+
+    def _on_va_sim_release(self, event):
+        """Mark button released — sim continues for release phase.
+
+        In toggle mode, release is a no-op (state toggled on press).
+        """
+        if (self._action and self._action.extra.get(
+                EXTRA_VA_BUTTON_MODE, "held") == "toggle"):
+            return
+        self._va_sim_pressed = False
+
+    def _va_sim_tick(self):
+        """Run one physics step and schedule the next frame."""
+        if not self._va_sim_active or not self._action:
+            return
+
+        extra = self._action.extra
+        dt = self._VA_SIM_DT
+        pressed = self._va_sim_pressed
+
+        ramp_rate = float(extra.get(EXTRA_VA_RAMP_RATE, 0.0))
+        acceleration = float(extra.get(EXTRA_VA_ACCELERATION, 0.0))
+        neg_ramp = extra.get(EXTRA_VA_NEGATIVE_RAMP_RATE)
+        neg_ramp = float(neg_ramp) if neg_ramp is not None else ramp_rate
+        neg_accel = extra.get(EXTRA_VA_NEGATIVE_ACCELERATION)
+        neg_accel = float(neg_accel) if neg_accel is not None else acceleration
+        zero_vel = bool(extra.get(EXTRA_VA_ZERO_VEL_ON_RELEASE, False))
+        target = float(extra.get(EXTRA_VA_TARGET_VALUE, 1.0))
+        rest = float(extra.get(EXTRA_VA_REST_VALUE, 0.0))
+        min_val = min(rest, target)
+        max_val = max(rest, target)
+
+        # Release edge detection
+        if self._va_sim_was_pressed and not pressed:
+            if zero_vel:
+                self._va_sim_velocity = 0.0
+            if self._va_sim_release_time is None:
+                self._va_sim_release_time = self._va_sim_time
+        self._va_sim_was_pressed = pressed
+
+        self._va_sim_time += dt
+
+        # Physics step
+        if pressed:
+            goal = target
+            max_spd = ramp_rate
+            acc = acceleration
+        else:
+            goal = rest
+            max_spd = neg_ramp
+            acc = neg_accel
+
+        # Physics step — modes are mutually exclusive:
+        #   max_spd > 0: constant velocity (triangle wave)
+        #   acc > 0:     v = u + a*t, no cap (hyperbolic curve)
+        #   both 0:      instant jump
+        diff = goal - self._va_sim_position
+        if abs(diff) < 1e-9:
+            self._va_sim_position = goal
+            self._va_sim_velocity = 0.0
+        elif max_spd == 0.0 and acc == 0.0:
+            self._va_sim_position = goal
+            self._va_sim_velocity = 0.0
+        else:
+            direction = 1.0 if diff > 0 else -1.0
+            if max_spd > 0.0:
+                self._va_sim_velocity = direction * max_spd
+            else:
+                self._va_sim_velocity += direction * acc * dt
+            self._va_sim_position += self._va_sim_velocity * dt
+            new_diff = goal - self._va_sim_position
+            if (direction > 0 and new_diff < 0) or \
+               (direction < 0 and new_diff > 0):
+                self._va_sim_position = goal
+                self._va_sim_velocity = 0.0
+
+        clamped = max(min_val, min(max_val, self._va_sim_position))
+        if clamped != self._va_sim_position:
+            self._va_sim_velocity = 0.0
+            self._va_sim_position = clamped
+        self._va_sim_trail.append(
+            (self._va_sim_time, self._va_sim_position))
+
+        # Auto-extend X axis
+        if self._va_sim_time > self._x_max - 0.2:
+            self._x_max = self._va_sim_time + 1.0
+
+        self._draw()
+
+        # Stop condition: timeout only (sim keeps running to show off-time)
+        if self._va_sim_time >= self._VA_SIM_TIMEOUT:
+            self._va_sim_active = False
+            self._status_var.set(
+                "Simulation timed out — click Reset to start over")
+            return
+
+        self._va_sim_after_id = self.after(
+            self._VA_SIM_INTERVAL, self._va_sim_tick)
+
+    def _on_va_sim_reset(self):
+        """Reset the simulation — clear trail and restore default view."""
+        self._va_sim_stop()
+        self._draw()
+
+    def _va_sim_stop(self):
+        """Cancel any running VA simulation."""
+        if self._va_sim_after_id is not None:
+            self.after_cancel(self._va_sim_after_id)
+            self._va_sim_after_id = None
+        self._va_sim_active = False
+        self._va_sim_pressed = False
+        self._va_sim_trail = []
+        self._va_sim_release_time = None
+        if self._mode == "virtual_analog":
+            self._x_max = self._va_total_duration
+
     def _on_release(self, event):
         if self._drag_type in ("point", "handle") and self._drag_undo_pushed:
             self._save_to_action()
@@ -1161,6 +1596,9 @@ class CurveEditorWidget(ttk.Frame):
             self._status_var.set("Drag handle to adjust scale")
         elif self._mode == "threshold":
             self._status_var.set("Drag handle to adjust threshold")
+        elif self._mode == "virtual_analog":
+            self._status_var.set(
+                "Drag handles to adjust target/rest values")
         elif self._mode == "raw":
             self._status_var.set("Read-only: raw input (no shaping)")
 

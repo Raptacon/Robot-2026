@@ -65,14 +65,14 @@ def load_settings() -> dict:
 # InputType values.  POV directions use "button" type since the factory
 # converts the raw POV angle to individual booleans at runtime.
 _COMPAT_ACTION_TYPES: dict[str, set[InputType]] = {
-    "button": {InputType.BUTTON},
+    "button": {InputType.BUTTON, InputType.VIRTUAL_ANALOG},
     "axis":   {InputType.ANALOG, InputType.BOOLEAN_TRIGGER},
     "output": {InputType.OUTPUT},
 }
 
 # Human-readable descriptions of what each input type accepts
 _INPUT_TYPE_DESCRIPTION: dict[str, str] = {
-    "button": "Button inputs accept Button actions",
+    "button": "Button inputs accept Button and Virtual Analog actions",
     "axis":   "Axis inputs accept Analog and Boolean Trigger actions",
     "output": "Output inputs accept Output actions",
 }
@@ -447,6 +447,15 @@ class ControllerConfigApp(tk.Tk):
             self._status_var.set(f"Opened: {path.name}")
             self._settings["last_file"] = str(self._current_file)
             self._save_settings()
+            # Warn if config version doesn't match expected version
+            from utils.controller.config_io import CONFIG_VERSION
+            if self._config.version and self._config.version != CONFIG_VERSION:
+                messagebox.showwarning(
+                    "Version Mismatch",
+                    f"Config file version '{self._config.version}' does not "
+                    f"match expected version '{CONFIG_VERSION}'.\n\n"
+                    "The file may have been created with a different "
+                    "version of the tool.")
         except Exception as e:
             messagebox.showerror("Error", f"Failed to open file:\n{e}")
 

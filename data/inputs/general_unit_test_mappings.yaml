@@ -1,3 +1,4 @@
+version: 1.0.0
 actions:
   general:
     general_button_onpress:
@@ -136,6 +137,15 @@ actions:
       description: boolean trigger test (axis > threshold = true)
       input_type: boolean_trigger
       trigger_mode: toggle_on_true
+    general_virtual_speed:
+      description: virtual analog test (button -> ramped analog)
+      input_type: virtual_analog
+      trigger_mode: scaled
+      extra:
+        va_ramp_rate: 2.0
+        va_acceleration: 5.0
+        va_target_value: 1.0
+        va_rest_value: 0.0
     general_duplidcate_press: {}
   test_group:
     button_onpress:
@@ -157,6 +167,16 @@ actions:
       trigger_mode: scaled
       deadband: 0.05
     duplidcate_press: {}
+    virtual_analog_button:
+      input_type: virtual_analog
+      trigger_mode: scaled
+      extra:
+        va_button_mode: toggle
+        va_ramp_rate: 0.0
+        va_acceleration: 1.0
+        va_target_value: 1.0
+        va_rest_value: 0.0
+        va_zero_vel_on_release: false
 controllers:
   0:
     name: Driver
@@ -204,6 +224,8 @@ controllers:
       right_trigger:
       - general.general_analog_scaled_trigger
       - general.general_bool_trigger
+      back_button:
+      - general.general_virtual_speed
   1:
     name: Operator
     bindings:

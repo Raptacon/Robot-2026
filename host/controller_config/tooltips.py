@@ -121,3 +121,34 @@ TIP_FILTER_UNASSIGNED = ("Show only actions not assigned\n"
 
 TIP_FILTER_MULTI = ("Show only actions bound to\n"
                     "more than one input.")
+
+# ---------------------------------------------------------------------------
+#   Virtual Analog fields
+# ---------------------------------------------------------------------------
+
+TIP_VA_BUTTON_MODE = ("How the button drives the ramp:\n"
+                      "  held — ramp while held, return on release\n"
+                      "  toggle — each press toggles active/inactive")
+
+TIP_VA_RAMP_RATE = ("Constant velocity (units/sec) — triangle wave.\n"
+                    "Mutually exclusive with acceleration.\n"
+                    "0 = use acceleration mode (or instant jump).")
+
+TIP_VA_ACCELERATION = ("Rate of velocity change (units/s²) — hyperbolic curve.\n"
+                       "Mutually exclusive with ramp rate.\n"
+                       "0 = use ramp rate mode (or instant jump).")
+
+TIP_VA_TARGET = ("Value to ramp toward when pressed.\n"
+                 "Default: 1.0")
+
+TIP_VA_REST = ("Value to ramp toward when released.\n"
+               "Default: 0.0")
+
+TIP_VA_ZERO_VEL = ("Zero velocity immediately on release.\n"
+                   "Without this, release inherits press velocity.")
+
+TIP_VA_NEG_RAMP = ("Max velocity when ramping back to rest.\n"
+                   "Falls back to ramp rate if not set.")
+
+TIP_VA_NEG_ACCEL = ("Acceleration when ramping back to rest.\n"
+                    "Falls back to acceleration if not set.")
