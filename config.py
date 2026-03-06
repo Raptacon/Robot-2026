@@ -51,11 +51,11 @@ class OperatorRobotConfig:
 
     # Configs for shooter
     shooterFeedMotorPIDF = (0, 0, 0, 1 / 473)
-    shooterLeadMotorPIDF = (0, 0, 0, 1 / 560)
-    shooterFollowerMotorPIDF = (0, 0, 0, 1 / 560)
+    shooterFlywheelMotorPIDF = (0, 0, 0, 1 / 560)
     # Feed, Lead, Follower
     shooterInverted = (False, False, False)
     shooterRangeInterval = 0.2
     shooterOffsetIncrement = 100
     shooterOffsetDecrement = -100
+    shooterFeedPercentOfFlywheel = 0.9
     # intake_roller_pid: Tuple[float] = [0, 0, 0, 1 / 565]

@@ -31,6 +31,12 @@ class zShooter(Subsystem):
         self.feedMotor = rev.SparkFlex(30, rev.SparkLowLevel.MotorType.kBrushless)
         self.leadFlywheelMotor = rev.SparkFlex(32, rev.SparkLowLevel.MotorType.kBrushless)
         self.followerFlywheelMotor = rev.SparkMax(33, rev.SparkLowLevel.MotorType.kBrushless)
+
+        # Set up configs for each motor
+        self.configureMotor(self.feedMotor, self.robotConfigs.shooterFeedMotorPIDF, self.robotConfigs.shooterInverted[0])
+        self.configureMotor(self.leadFlywheelMotor, self.robotConfigs.shooterFlywheelMotorPIDF, self.robotConfigs.shooterInverted[1])
+        self.configureMotor(self.followerFlywheelMotor, self.robotConfigs.shooterFlywheelMotorPIDF, self.robotConfigs.shooterInverted[2], self.leadFlywheelMotor)
+
         self.motors: Dict[str, rev.SparkFlex | rev.SparkMax] = {
             ShooterMotorNames.FEED: self.feedMotor,
             ShooterMotorNames.LEAD_FLYWHEEL: self.leadFlywheelMotor,
@@ -50,19 +56,19 @@ class zShooter(Subsystem):
         # Create closed loop controllers to be able to set a reference/goal for pid
         self.feedPID = self.feedMotor.getClosedLoopController()
         self.leadFlywheelPID = self.leadFlywheelMotor.getClosedLoopController()
-        self.followerFlywheelPID = self.followerFlywheelMotor.getClosedLoopController()
         self.PIDs = {
             ShooterMotorNames.FEED: self.feedPID,
             ShooterMotorNames.LEAD_FLYWHEEL: self.leadFlywheelPID,
-            ShooterMotorNames.FOLLOWER_FLYWHEEL: self.followerFlywheelPID
+            # Avoid key errors
+            ShooterMotorNames.FOLLOWER_FLYWHEEL: self.leadFlywheelPID,
         }
 
-        # Set up configs for each motor
-        self.configureMotor(self.feedMotor, self.robotConfigs.shooterFeedMotorPIDF, self.robotConfigs.shooterInverted[0])
-        self.configureMotor(self.leadFlywheelMotor, self.robotConfigs.shooterLeadMotorPIDF, self.robotConfigs.shooterInverted[1])
-        self.configureMotor(self.followerFlywheelMotor, self.robotConfigs.shooterFollowerMotorPIDF, self.robotConfigs.shooterInverted[2], self.leadFlywheelMotor)
-
-    def configureMotor(self, motor: rev.SparkFlex | rev.SparkMax, pidf: tuple, invert: bool, leader: rev.SparkFlex | rev.SparkMax = None):
+    def configureMotor(
+        self, motor: rev.SparkFlex | rev.SparkMax,
+        pidf: tuple,
+        invert: bool,
+        leader: rev.SparkFlex | rev.SparkMax = None
+    ):
         """
         Configure the PIDF constants and inversion for the given motor.
         
@@ -76,12 +82,14 @@ class zShooter(Subsystem):
             None
         """
         configs = rev.SparkBaseConfig()
-        configs.closedLoop.pidf(*pidf, rev.ClosedLoopSlot.kSlot0)
-        configs.inverted(invert)
-        if leader is not None:
-            configs.follow(leader=leader)
 
-        motor.configure(configs, rev.ResetMode.kNoResetSafeParameters, rev.PersistMode.kPersistParameters)
+        if leader is not None:
+            configs.follow(leader=leader, invert=invert)
+        else:
+            configs.inverted(invert)
+            configs.closedLoop.pidf(*pidf, rev.ClosedLoopSlot.kSlot0)
+
+        motor.configure(configs, rev.ResetMode.kResetSafeParameters, rev.PersistMode.kPersistParameters)
 
     def setMotorVoltage(self, motorName: str, voltage: float):
         """
@@ -238,9 +246,11 @@ class zShooter(Subsystem):
 
     def periodic(self):
         newRPM = self.RPM + self.offsetAmount
-        self.setMotorReference(ShooterMotorNames.FEED, newRPM)
-        self.setMotorReference(ShooterMotorNames.LEAD_FLYWHEEL, newRPM)
-        self.setMotorReference(ShooterMotorNames.FOLLOWER_FLYWHEEL, newRPM)
+        feedRPM = int(newRPM * self.robotConfigs.shooterFeedPercentOfFlywheel)
 
-        wpilib.SmartDashboard.putNumber("Shooter_RPM", self.RPM)
+        self.setMotorReference(ShooterMotorNames.FEED, feedRPM)
+        self.setMotorReference(ShooterMotorNames.LEAD_FLYWHEEL, newRPM)
+
+        wpilib.SmartDashboard.putNumber("Shooter_RPM", newRPM)
+        wpilib.SmartDashboard.putNumber("Shooter_Feed_RPM", feedRPM)
         wpilib.SmartDashboard.putNumber("Shooter_Offset", self.offsetAmount)
