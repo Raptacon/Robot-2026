@@ -117,92 +117,22 @@ This directory contains examples and allows a location to develop new robots.py 
 - **`robotpy`** : Contains a set of wpilib examples that show how to do certain tasks with the wpilib library.
 - **`flywheel-sysid`** : Contains a example of how to collect data to run sysid on various mechanical components.
 
-### Telemetry (`data/telemetry.py`)
-
-Logs controller inputs, odometry, swerve module states, and driver station data via NetworkTables and WPILib DataLog. Per-subsystem telemetry is handled by each subsystem's own `updateTelemetry()` method, called automatically by the registry.
-
-### PathPlanner Integration
-
-Autonomous routines are defined as `.auto` and `.path` files in `deploy/pathplanner/`. PathPlanner is configured in `SwerveDrivetrain.configure_path_planner()` via `AutoBuilder`. The auto chooser is exposed on SmartDashboard.
 
 ### Controller Config (`utils/controller/` and `host/controller_config/`)
 
-Shared data model (`utils/controller/model.py`) defines `ActionDefinition`, `ControllerConfig`, and `FullConfig`. Actions use qualified names: `group.name` (e.g. `intake.run`). Input types: BUTTON, ANALOG, OUTPUT, BOOLEAN_TRIGGER, VIRTUAL_ANALOG. D-pad directions are treated as buttons (factory converts POV angle to booleans at runtime). Config stored in `data/controller.yaml`. YAML I/O in `config_io.py`.
+Shared data model (`utils/controller/model.py`) defines `ActionDefinition`, `ControllerConfig`, and `FullConfig`. Actions use qualified names: `group.name` (e.g. `intake.run`). Input types: BUTTON, ANALOG, OUTPUT, BOOLEAN_TRIGGER, VIRTUAL_ANALOG. D-pad directions are treated as buttons (factory converts POV angle to booleans at runtime). Config stored in `data/controller.yaml`. YAML I/O in `config_io.py`. Portable curve math in `utils/math/curves.py` (shared by robot code and host GUI).
 
-GUI tool (`host/controller_config/`): tkinter app for visual controller mapping. Run with `python -m host.controller_config [config.yaml]`. CLI export: `--export out.pdf --orientation landscape`.
-
-See `host/controller_config/ARCHITECTURE.md` for detailed model, GUI architecture, and design patterns.
+See `host/controller_config/ARCHITECTURE.md` for detailed GUI architecture and design patterns.
 
 ### Input Factory (`utils/input/`)
 
-Config-driven controller input management. `InputFactory` loads YAML config, creates `wpilib.XboxController` instances, and provides factory methods returning managed input objects:
-
-- `getButton(name, group, required, default_value)` -> `ManagedButton` (wraps `commands2.button.Trigger`)
-- `getRawButton(name, group, required)` -> `Callable[[], bool]`
-- `getAnalog(name, group, required, default_value)` -> `ManagedAnalog` (shaped axis, callable)
-- `getAnalogRaw(name, group, required, apply_invert, apply_deadband, apply_scale)` -> `Callable[[], float]`
-- `getRumbleControl(name, group, required)` -> `ManagedRumble`
-
-Analog shaping pipeline order: inversion -> deadband -> curve -> scale -> slew rate limit. All action parameters published to NT under `/inputs/actions/<group>/<action>/` via `ntproperty` for runtime dashboard tuning. NT sync is handled automatically each scheduler cycle.
-
-Input types: BUTTON, ANALOG, OUTPUT, BOOLEAN_TRIGGER (analog->bool via threshold), VIRTUAL_ANALOG (reserved). D-pad directions are buttons (factory handles POV angle conversion).
-
-**Usage pattern in robot code:**
-1. Create the factory in `robotInit` **before** any subsystems that use `get_factory()`:
-   ```python
-   from utils.input import InputFactory
-   self.factory = InputFactory(config_path="data/controller.yaml")
-   ```
-2. Get managed inputs and pass analogs as callables to subsystems:
-   ```python
-   forward = self.factory.getAnalog("drivetrain.forward")
-   self.swerve = Drivetrain(forward, strafe, rotate)
-   ```
-3. Bind buttons using `.bind()` (auto-selects trigger mode from YAML):
-   ```python
-   self.factory.getButton("intake.run").bind(intake.runCommand())
-   ```
-4. NT sync is automatic — the factory registers an internal subsystem with the CommandScheduler that handles it each cycle.
-5. Subsystems that need their own inputs can use `utils.input.get_factory()` instead of constructor injection:
-   ```python
-   import utils.input
-   self._rumble = utils.input.get_factory().getRumbleControl("feedback.rumble", required=False)
-   ```
-
-The `register_global` constructor arg controls singleton registration: `None` (default) registers only if no factory exists yet, `True` always overrides, `False` never registers.
+Config-driven controller input management. `InputFactory` loads YAML config, creates `wpilib.XboxController` instances, and provides `getButton()`, `getAnalog()`, `getRumbleControl()` and raw variants. All managed objects are eagerly created at init so NT entries publish immediately. Analog shaping pipeline: inversion -> deadband -> curve -> scale -> slew rate limit. Parameters published to NT under `/inputs/actions/<group>/<action>/` for runtime tuning; NT sync is automatic each scheduler cycle. Create the factory in `robotInit` **before** subsystems; use `get_factory()` for subsystem-local access.
 
 See `examples/inputFactory/` for a complete working example.
 
-Portable curve math lives in `utils/math/curves.py` (shared by both robot code and host GUI).
+## Future
 
-## Future: NetworkTables Enhancements
-
-- [x] Eager action creation: all managed objects are pre-created at factory init
-  so NT entries are published immediately (see end of `InputFactory.__init__`).
-- [ ] Dynamic NT persistence: per-action `persist` flag to survive reboots.
-  Currently intentionally non-persistent — dashboard tweaks reset on reboot
-  so permanent changes go through the config file (avoids confusion from
-  stale persisted values). See comment in `_factory_helpers.py`.
-- [ ] Dynamic remapping via NT: change input->action bindings from dashboard
-
-## Future: Config Cleanup
-
-- [ ] Explore adding JSON Schema for controller config YAML validation
-  - A `.schema.json` file would give IDE autocompletion + red squiggles in YAML editors
-  - JSON Schema validates YAML after parsing (YAML is a superset of JSON)
-  - Could also evaluate alternative formats (TOML, StrictYAML) or support multiple
-  - Current `config_io.py` abstraction makes format swaps straightforward — loaders
-    return the same `FullConfig` regardless of source format
-
-## Future: GUI EXE Code Signing
-
-- [ ] Apply to [SignPath Foundation](https://signpath.org/foundation) for free EV code signing
-  - Project qualifies (MIT license, public GitHub repo)
-  - Requires software to be in a released state (at least one GitHub Release with the EXE artifact)
-  - EV certificate provides immediate Windows SmartScreen trust (no "unknown publisher" warning)
-  - Integrates with GitHub Actions — adds a signing step after build
-  - Prerequisites: create a GitHub Release with the unsigned EXE first, then apply
-- [ ] macOS code signing — evaluate Apple Developer Program ($99/yr) for notarization
+- [ ] JSON Schema for controller config YAML validation — IDE autocompletion + red squiggles. `config_io.py` abstraction makes format swaps straightforward.
 
 ### CAN ID Convention
 
@@ -226,7 +156,6 @@ GitHub Actions (`.github/workflows/robot_ci.yml`) runs on Windows:
 - Lint (critical): flake8 with select rules for syntax errors and undefined names
 - Lint (extra): flake8 with complexity and line-length checks (non-blocking)
 - Docstring verification (non-blocking)
-
 
 ## Unit Tests
  - Unit tests should be encouraged and written
@@ -253,4 +182,3 @@ See `examples/nt-persistence-test/` for a comparison of persistence approaches.
 
 ## Claude.md updates
 If Claude sees an area that would benifit for remembering or having instructions in the future Claude should suggest adding it to CLAUDE.md
-
