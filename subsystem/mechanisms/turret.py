@@ -377,9 +377,9 @@ class Turret(Subsystem):
             else:
                 self.motor.setVoltage(pidOutput)
 
-        self.updateTelemetry()
+        self._updateTelemetry()
 
-    def updateTelemetry(self) -> None:
+    def _updateTelemetry(self) -> None:
         """
         Publish telemetry to NT and read back tunable parameters
         (voltage limits) for live tuning.
@@ -392,7 +392,9 @@ class Turret(Subsystem):
         self._nt_temperature.set(self.motor.getMotorTemperature())
         target = self._target_position if self._target_position is not None else 0.0
         self._nt_target_position.set(target)
-        self._nt_at_target.set(self._target_position is not None)
+        self._nt_at_target.set(
+            self._target_position is not None and self.controller.atSetpoint()
+        )
         # Soft limits
         sl = self.motor.configAccessor.softLimit
         self._nt_min_soft_limit.set(sl.getReverseSoftLimit())
@@ -489,7 +491,8 @@ from utils.subsystem_factory import SubsystemState, register_subsystem
 
 
 def _create_turret(subs):
-    motor = rev.SparkMax(20, rev.SparkLowLevel.MotorType.kBrushless)
+    from constants import TurretConsts
+    motor = rev.SparkMax(TurretConsts.kTurretMotorCanId, rev.SparkLowLevel.MotorType.kBrushless)
     return Turret(
         motor=motor,
         position_conversion_factor=360.0 / 100.0,

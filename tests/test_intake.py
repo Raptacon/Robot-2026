@@ -64,10 +64,11 @@ def test_default_construction(intake):
     assert intake.jamDetected is False
 
 
-def test_can_ids_are_placeholders():
-    """CAN IDs should be the placeholder values (40, 41)."""
-    assert intakeConsts.kIntakeMotorCanId == 40
-    assert intakeConsts.kRollerMotorCanId == 41
+def test_can_ids_are_defined():
+    """Intake and roller CAN IDs should be defined and distinct."""
+    assert hasattr(intakeConsts, 'kIntakeMotorCanId')
+    assert hasattr(intakeConsts, 'kRollerMotorCanId')
+    assert intakeConsts.kIntakeMotorCanId != intakeConsts.kRollerMotorCanId
 
 
 # ---- Roller activation ----
@@ -152,6 +153,25 @@ def test_jam_detection_starts_timer_on_low_velocity(intake, roller_enc_sim):
     assert intake.jamDetected is False
 
 
+def test_jam_detected_after_sustained_low_velocity(intake, roller_enc_sim):
+    """jamDetected becomes True after velocity stays below threshold for jamTime."""
+    from unittest.mock import patch
+    intake.rollerCondition = 1
+    roller_enc_sim.setVelocity(0)
+
+    # First call: starts the jam timer
+    with patch("subsystem.intakeactions.time") as mock_time:
+        mock_time.perf_counter.return_value = 100.0
+        intake.jamDetection()
+        assert intake.jamOccurence == 1
+        assert intake.jamDetected is False
+
+        # Second call: jamTime (1s) has elapsed
+        mock_time.perf_counter.return_value = 100.0 + intake.jamTime + 0.1
+        intake.jamDetection()
+        assert intake.jamDetected is True
+
+
 def test_jam_not_detected_above_threshold(intake, roller_enc_sim):
     """No jam when roller velocity is above jamThreshold."""
     intake.rollerCondition = 1
@@ -174,14 +194,28 @@ def test_update_telemetry_publishes_position(intake, roller_enc_sim):
     """updateTelemetry() writes encoder position to ntproperty."""
     roller_enc_sim.setPosition(42.0)
     intake.updateTelemetry()
-    assert intake.rollerPosition == pytest.approx(42.0)
+    assert intake._nt_rollerPosition == pytest.approx(42.0)
 
 
 def test_update_telemetry_publishes_velocity(intake, roller_enc_sim):
     """updateTelemetry() writes encoder velocity to ntproperty."""
     roller_enc_sim.setVelocity(500.0)
     intake.updateTelemetry()
-    assert intake.rollerEncoderVelocity == pytest.approx(500.0)
+    assert intake._nt_rollerEncoderVelocity == pytest.approx(500.0)
+
+
+def test_update_telemetry_publishes_condition(intake):
+    """updateTelemetry() writes rollerCondition to NT."""
+    intake.rollerCondition = 1
+    intake.updateTelemetry()
+    assert intake._nt_rollerCondition == 1
+
+
+def test_update_telemetry_publishes_jam_status(intake):
+    """updateTelemetry() writes jamDetected to NT."""
+    intake.jamDetected = True
+    intake.updateTelemetry()
+    assert intake._nt_jamDetected is True
 
 
 # ---- Registry ----

@@ -17,11 +17,11 @@ class IntakeSubsystem(commands2.SubsystemBase):
     rollerVelocity = ntproperty("/subsystem/intake/rollerVelocity", 0.3,
                                 writeDefault=False, persistent=True)
 
-    # Telemetry published every cycle via updateTelemetry()
-    rollerPosition = ntproperty("/subsystem/intake/rollerPosition", 0.0)
-    rollerEncoderVelocity = ntproperty("/subsystem/intake/rollerEncoderVelocity", 0.0)
-    rollerCondition = ntproperty("/subsystem/intake/rollerCondition", 0)
-    jamDetected = ntproperty("/subsystem/intake/jamDetected", False)
+    # Read-only telemetry published every cycle via updateTelemetry()
+    _nt_rollerPosition = ntproperty("/subsystem/intake/rollerPosition", 0.0)
+    _nt_rollerEncoderVelocity = ntproperty("/subsystem/intake/rollerEncoderVelocity", 0.0)
+    _nt_rollerCondition = ntproperty("/subsystem/intake/rollerCondition", 0)
+    _nt_jamDetected = ntproperty("/subsystem/intake/jamDetected", False)
 
     def __init__(self, alternateConfiguration=False):
         logger.warning(
@@ -55,6 +55,8 @@ class IntakeSubsystem(commands2.SubsystemBase):
         self.jamOccurence = 0
         self.baselineDetectedJam = 0
         self.rollerSensor = 0
+        self.rollerCondition = 0
+        self.jamDetected = False
 
     def activateRoller(self):
         if self.rollerCondition != 1:
@@ -104,8 +106,10 @@ class IntakeSubsystem(commands2.SubsystemBase):
 
     def updateTelemetry(self):
         """Publish intake state to NT (called by SubsystemRegistry)."""
-        self.rollerPosition = self.rollerMotorEncoder.getPosition()
-        self.rollerEncoderVelocity = self.rollerMotorEncoder.getVelocity()
+        self._nt_rollerPosition = self.rollerMotorEncoder.getPosition()
+        self._nt_rollerEncoderVelocity = self.rollerMotorEncoder.getVelocity()
+        self._nt_rollerCondition = self.rollerCondition
+        self._nt_jamDetected = self.jamDetected
 
 
 # ---------------------------------------------------------------------------

@@ -19,10 +19,10 @@ Background:
 """
 
 # Native imports
-import unittest
 from unittest.mock import patch
 
 # Third-party imports
+import pytest
 import rev
 import wpilib
 import wpilib.simulation
@@ -53,287 +53,230 @@ _CALIBRATIONS = OperatorRobotConfig.swerve_abs_encoder_calibrations
 _TEST_CHANNELS = (1, 4, 7, 10)
 
 
-class TestSwerveMechanism(unittest.TestCase):
+@pytest.fixture(scope="module")
+def swerve_hw():
+    """Create all 4 swerve modules with sim objects and Mechanism2d once."""
+    wpilib.simulation.pauseTiming()
+
+    modules = []
+    drive_sims = []
+    steer_sims = []
+
+    for i in range(4):
+        module = SwerveModuleMk4iSparkMaxNeoCanCoder(
+            _MODULE_NAMES[i],
+            _MODULE_LOCATIONS[i],
+            _TEST_CHANNELS[i],
+            invert_drive=True,
+            invert_steer=True,
+            encoder_calibration=_CALIBRATIONS[i],
+        )
+        modules.append(module)
+        drive_sims.append(rev.SparkSim(module.drive_motor, DCMotor.NEO()))
+        steer_sims.append(rev.SparkSim(module.steer_motor, DCMotor.NEO()))
+
+    # Create a shared Mechanism2d canvas and configure every module once.
+    mech2d = wpilib.Mechanism2d(300, 300)
+    for i, module in enumerate(modules):
+        root = mech2d.getRoot(module.name, 50 + i * 50, 150)
+        module.configure_mechanism2d(
+            root,
+            _MAX_SPEED,
+            f"test/{module.name}/threshold",
+        )
+
+    yield modules, drive_sims, steer_sims
+
+
+@pytest.fixture(autouse=True)
+def _reset_modules(swerve_hw):
+    """Reset all modules to steer=0° (forward) before each test."""
+    modules, drive_sims, steer_sims = swerve_hw
+    wpilib.simulation.restartTiming()
+    wpilib.simulation.pauseTiming()
+
+    for i, module in enumerate(modules):
+        module.absolute_encoder.sim_state.set_raw_position(-_CALIBRATIONS[i])
+        module.absolute_encoder.sim_state.set_supply_voltage(12.0)
+
+        steer_enc = steer_sims[i].getRelativeEncoderSim()
+        steer_enc.setPosition(0.0)
+        steer_enc.setVelocity(0.0)
+
+        drive_enc = drive_sims[i].getRelativeEncoderSim()
+        drive_enc.setPosition(0.0)
+        drive_enc.setVelocity(0.0)
+
+        module._last_commanded_state = SwerveModuleState(0, Rotation2d())
+
+    wpilib.simulation.stepTiming(0.02)
+
+
+# -----------------------------------------------------------------------
+# set_state() behaviour tests
+# These verify that optimize() works as expected from the forward position.
+# -----------------------------------------------------------------------
+
+@pytest.mark.parametrize("idx", range(4), ids=[n.value for n in SwerveModuleName])
+def test_set_state_forward_stores_positive_speed(swerve_hw, idx):
+    """set_state with angle=0° at max speed must store positive speed (no flip)."""
+    modules = swerve_hw[0]
+    with patch.object(modules[idx], 'current_raw_absolute_steer_position',
+                      return_value=0.0):
+        modules[idx].set_state(
+            SwerveModuleState(_MAX_SPEED, Rotation2d.fromDegrees(0))
+        )
+    speed = modules[idx]._last_commanded_state.speed
+    assert speed > 0, f"forward should give +speed, got {speed}"
+
+
+@pytest.mark.parametrize("idx", range(4), ids=[n.value for n in SwerveModuleName])
+def test_set_state_forward_stores_zero_angle(swerve_hw, idx):
+    """set_state with angle=0° must store 0° in the commanded state."""
+    modules = swerve_hw[0]
+    with patch.object(modules[idx], 'current_raw_absolute_steer_position',
+                      return_value=0.0):
+        modules[idx].set_state(
+            SwerveModuleState(_MAX_SPEED, Rotation2d.fromDegrees(0))
+        )
+    wrapped = modules[idx]._last_commanded_state.angle.degrees() % 360
+    distance_from_zero = min(wrapped, 360.0 - wrapped)
+    assert distance_from_zero < 0.5, f"forward should give ≈0° angle, got {wrapped}°"
+
+
+@pytest.mark.parametrize("idx", range(4), ids=[n.value for n in SwerveModuleName])
+def test_set_state_backward_optimize_flips_to_negative_speed(swerve_hw, idx):
+    """set_state with angle=180° from steer=0° must flip to negative speed (optimize)."""
+    modules = swerve_hw[0]
+    with patch.object(modules[idx], 'current_raw_absolute_steer_position',
+                      return_value=0.0):
+        modules[idx].set_state(
+            SwerveModuleState(_MAX_SPEED, Rotation2d.fromDegrees(180))
+        )
+    speed = modules[idx]._last_commanded_state.speed
+    assert speed < 0, (
+        f"backward from 0° should optimize to negative speed, got {speed}"
+    )
+
+
+@pytest.mark.parametrize("idx", range(4), ids=[n.value for n in SwerveModuleName])
+def test_set_state_backward_optimize_flips_angle_to_zero(swerve_hw, idx):
+    """set_state with angle=180° from steer=0° must flip angle to 0° (optimize).
+
+    Uses a wrap-aware comparison because Rotation2d arithmetic can produce
+    values like -1e-14°, which after float modulo gives 360.0 instead of 0.0.
     """
-    Test suite for swerve module Mechanism2d visualization.
-    Generated by Claude.
+    modules = swerve_hw[0]
+    with patch.object(modules[idx], 'current_raw_absolute_steer_position',
+                      return_value=0.0):
+        modules[idx].set_state(
+            SwerveModuleState(_MAX_SPEED, Rotation2d.fromDegrees(180))
+        )
+    raw_angle = modules[idx]._last_commanded_state.angle.degrees()
+    wrapped = raw_angle % 360
+    distance_from_zero = min(wrapped, 360.0 - wrapped)
+    assert distance_from_zero < 0.5, (
+        f"backward from 0° should optimize angle to ≈0°, got {raw_angle:.6f}° "
+        f"(wrapped={wrapped:.6f}°)"
+    )
 
-    Uses setUpClass/tearDownClass so that each SparkMax CAN ID is only ever
-    instantiated once (REV enforces one instance per ID).
+
+# -----------------------------------------------------------------------
+# Mechanism2d arm tests
+# _last_commanded_state is set directly so these tests are independent of
+# encoder sim accuracy.
+# -----------------------------------------------------------------------
+
+@pytest.mark.parametrize("idx", range(4), ids=[n.value for n in SwerveModuleName])
+def test_mechanism_forward_arm_angle(swerve_hw, idx):
+    """Forward motion: commanded arm must point in the forward direction.
+
+    Canvas angle = robot_angle(0°) + 90° + module_offset.
     """
+    modules = swerve_hw[0]
+    modules[idx]._last_commanded_state = SwerveModuleState(
+        _MAX_SPEED, Rotation2d.fromDegrees(0)
+    )
+    modules[idx].update_mechanism2d()
 
-    @classmethod
-    def setUpClass(cls):
-        """Create all 4 swerve modules with sim objects and Mechanism2d once."""
-        wpilib.simulation.pauseTiming()
-
-        cls.modules = []
-        cls.drive_sims = []
-        cls.steer_sims = []
-
-        for i in range(4):
-            module = SwerveModuleMk4iSparkMaxNeoCanCoder(
-                _MODULE_NAMES[i],
-                _MODULE_LOCATIONS[i],
-                _TEST_CHANNELS[i],
-                invert_drive=True,
-                invert_steer=True,
-                encoder_calibration=_CALIBRATIONS[i],
-            )
-            cls.modules.append(module)
-            cls.drive_sims.append(rev.SparkSim(module.drive_motor, DCMotor.NEO()))
-            cls.steer_sims.append(rev.SparkSim(module.steer_motor, DCMotor.NEO()))
-
-        # Create a shared Mechanism2d canvas and configure every module once.
-        cls.mech2d = wpilib.Mechanism2d(300, 300)
-        for i, module in enumerate(cls.modules):
-            root = cls.mech2d.getRoot(module.name, 50 + i * 50, 150)
-            module.configure_mechanism2d(
-                root,
-                _MAX_SPEED,
-                f"test/{module.name}/threshold",
-            )
-
-    def setUp(self):
-        """Reset all modules to steer=0° (forward) before each test."""
-        wpilib.simulation.restartTiming()
-        wpilib.simulation.pauseTiming()
-
-        for i, module in enumerate(self.modules):
-            # Set CANcoder raw = -calibration so absolute position reads 0.0 (forward).
-            # current_raw_absolute_steer_position() uses is-not-None so 0.0 is
-            # accepted directly (0.0 * 360 = 0°), same as the relative encoder below.
-            module.absolute_encoder.sim_state.set_raw_position(-_CALIBRATIONS[i])
-            module.absolute_encoder.sim_state.set_supply_voltage(12.0)
-
-            # Force relative encoders to the forward position (0°) and 0 m/s.
-            steer_enc = self.steer_sims[i].getRelativeEncoderSim()
-            steer_enc.setPosition(0.0)
-            steer_enc.setVelocity(0.0)
-
-            drive_enc = self.drive_sims[i].getRelativeEncoderSim()
-            drive_enc.setPosition(0.0)
-            drive_enc.setVelocity(0.0)
-
-            # Clear any previous commanded state.
-            module._last_commanded_state = SwerveModuleState(0, Rotation2d())
-
-        # Advance one cycle so all sim state changes propagate.
-        wpilib.simulation.stepTiming(0.02)
-
-    # -----------------------------------------------------------------------
-    # set_state() behaviour tests
-    # These verify that optimize() works as expected from the forward position.
-    # -----------------------------------------------------------------------
-
-    def test_set_state_forward_stores_positive_speed(self):
-        """set_state with angle=0° at max speed must store positive speed (no flip).
-
-        Uses mock to guarantee steer reads exactly 0° regardless of Phoenix6 sim state.
-        """
-        for i in range(4):
-            with self.subTest(module=_MODULE_NAMES[i]):
-                with patch.object(
-                    self.modules[i],
-                    'current_raw_absolute_steer_position',
-                    return_value=0.0
-                ):
-                    self.modules[i].set_state(
-                        SwerveModuleState(_MAX_SPEED, Rotation2d.fromDegrees(0))
-                    )
-                speed = self.modules[i]._last_commanded_state.speed
-                self.assertGreater(
-                    speed, 0,
-                    msg=f"{_MODULE_NAMES[i]}: forward should give +speed, got {speed}"
-                )
-
-    def test_set_state_forward_stores_zero_angle(self):
-        """set_state with angle=0° must store 0° in the commanded state.
-
-        Uses mock to guarantee steer reads exactly 0° regardless of Phoenix6 sim state.
-        """
-        for i in range(4):
-            with self.subTest(module=_MODULE_NAMES[i]):
-                with patch.object(
-                    self.modules[i],
-                    'current_raw_absolute_steer_position',
-                    return_value=0.0
-                ):
-                    self.modules[i].set_state(
-                        SwerveModuleState(_MAX_SPEED, Rotation2d.fromDegrees(0))
-                    )
-                wrapped = self.modules[i]._last_commanded_state.angle.degrees() % 360
-                distance_from_zero = min(wrapped, 360.0 - wrapped)
-                self.assertLess(
-                    distance_from_zero, 0.5,
-                    msg=f"{_MODULE_NAMES[i]}: forward should give ≈0° angle, got {wrapped}°"
-                )
-
-    def test_set_state_backward_optimize_flips_to_negative_speed(self):
-        """set_state with angle=180° from steer=0° must flip to negative speed (optimize).
-
-        Uses mock to guarantee steer reads exactly 0° regardless of Phoenix6 sim state.
-        """
-        for i in range(4):
-            with self.subTest(module=_MODULE_NAMES[i]):
-                with patch.object(
-                    self.modules[i],
-                    'current_raw_absolute_steer_position',
-                    return_value=0.0
-                ):
-                    self.modules[i].set_state(
-                        SwerveModuleState(_MAX_SPEED, Rotation2d.fromDegrees(180))
-                    )
-                speed = self.modules[i]._last_commanded_state.speed
-                self.assertLess(
-                    speed, 0,
-                    msg=(
-                        f"{_MODULE_NAMES[i]}: backward from 0° should optimize to "
-                        f"negative speed, got {speed}"
-                    )
-                )
-
-    def test_set_state_backward_optimize_flips_angle_to_zero(self):
-        """set_state with angle=180° from steer=0° must flip angle to 0° (optimize).
-
-        Uses mock to guarantee steer reads exactly 0° regardless of Phoenix6 sim state.
-        Uses a wrap-aware comparison because Rotation2d arithmetic can produce
-        values like -1e-14°, which after float modulo gives 360.0 instead of 0.0.
-        """
-        for i in range(4):
-            with self.subTest(module=_MODULE_NAMES[i]):
-                with patch.object(
-                    self.modules[i],
-                    'current_raw_absolute_steer_position',
-                    return_value=0.0
-                ):
-                    self.modules[i].set_state(
-                        SwerveModuleState(_MAX_SPEED, Rotation2d.fromDegrees(180))
-                    )
-                raw_angle = self.modules[i]._last_commanded_state.angle.degrees()
-                # Normalize to [0, 360) then take the shorter arc to 0°.
-                # Handles the float precision case where 360° - epsilon rounds to 360.0.
-                wrapped = raw_angle % 360
-                distance_from_zero = min(wrapped, 360.0 - wrapped)
-                self.assertLess(
-                    distance_from_zero, 0.5,
-                    msg=(
-                        f"{_MODULE_NAMES[i]}: backward from 0° should optimize "
-                        f"angle to ≈0°, got {raw_angle:.6f}° "
-                        f"(wrapped={wrapped:.6f}°)"
-                    )
-                )
-
-    # -----------------------------------------------------------------------
-    # Mechanism2d arm tests
-    # _last_commanded_state is set directly so these tests are independent of
-    # encoder sim accuracy.
-    # -----------------------------------------------------------------------
-
-    def test_mechanism_forward_arm_angle(self):
-        """
-        Forward motion: commanded arm must point in the forward direction.
-
-        Canvas angle = robot_angle(0°) + 90° + module_offset.
-        """
-        for i, module in enumerate(self.modules):
-            with self.subTest(module=_MODULE_NAMES[i]):
-                module._last_commanded_state = SwerveModuleState(
-                    _MAX_SPEED, Rotation2d.fromDegrees(0)
-                )
-                module.update_mechanism2d()
-
-                expected = 90  # robot 0° + 90° canvas offset = pointing forward (up)
-                actual = module._mech_commanded_arm.getAngle() % 360
-                self.assertAlmostEqual(
-                    actual, expected, places=1,
-                    msg=(
-                        f"{_MODULE_NAMES[i]}: forward arm angle wrong. "
-                        f"Expected {expected}°, got {actual}°"
-                    )
-                )
-
-    def test_mechanism_backward_arm_angle(self):
-        """
-        Backward motion: commanded arm must point in the backward direction (180° robot-frame).
-
-        After optimize(), backward motion is stored as {speed=-max, angle=0°}.
-        update_mechanism2d() must detect the negative speed and add 180° to the
-        display angle so the arm shows the actual direction of wheel travel.
-
-        Canvas angle = (0° + 180°_flip + 90° + module_offset).
-
-        This test FAILS if update_mechanism2d() does not flip the angle for
-        negative speed, because the arm would point the same way as forward.
-        """
-        for i, module in enumerate(self.modules):
-            with self.subTest(module=_MODULE_NAMES[i]):
-                # Simulate the post-optimize state for backward motion from steer=0°.
-                module._last_commanded_state = SwerveModuleState(
-                    -_MAX_SPEED, Rotation2d.fromDegrees(0)
-                )
-                module.update_mechanism2d()
-
-                expected = 270  # (0° + 180° flip + 90° canvas offset) = pointing backward (down)
-                actual = module._mech_commanded_arm.getAngle() % 360
-                self.assertAlmostEqual(
-                    actual, expected, places=1,
-                    msg=(
-                        f"{_MODULE_NAMES[i]}: backward arm angle wrong. "
-                        f"Expected {expected}° (backward), got {actual}°. "
-                        f"update_mechanism2d() must flip angle 180° for negative speed."
-                    )
-                )
-
-    def test_mechanism_forward_arm_max_length(self):
-        """Forward at max speed: commanded arm must have maximum arm length."""
-        for i, module in enumerate(self.modules):
-            with self.subTest(module=_MODULE_NAMES[i]):
-                module._last_commanded_state = SwerveModuleState(
-                    _MAX_SPEED, Rotation2d.fromDegrees(0)
-                )
-                module.update_mechanism2d()
-
-                self.assertAlmostEqual(
-                    module._mech_commanded_arm.getLength(), _MECH_ARM_MAX_LEN, places=1,
-                    msg=(
-                        f"{_MODULE_NAMES[i]}: expected max arm length "
-                        f"{_MECH_ARM_MAX_LEN}, got {module._mech_commanded_arm.getLength()}"
-                    )
-                )
-
-    def test_mechanism_backward_arm_max_length(self):
-        """Backward at max speed: commanded arm must have maximum arm length (|speed| = max)."""
-        for i, module in enumerate(self.modules):
-            with self.subTest(module=_MODULE_NAMES[i]):
-                module._last_commanded_state = SwerveModuleState(
-                    -_MAX_SPEED, Rotation2d.fromDegrees(0)
-                )
-                module.update_mechanism2d()
-
-                self.assertAlmostEqual(
-                    module._mech_commanded_arm.getLength(), _MECH_ARM_MAX_LEN, places=1,
-                    msg=(
-                        f"{_MODULE_NAMES[i]}: expected max arm length "
-                        f"{_MECH_ARM_MAX_LEN}, got {module._mech_commanded_arm.getLength()}"
-                    )
-                )
-
-    def test_mechanism_zero_speed_arm_min_length(self):
-        """At zero speed: commanded arm must fall back to minimum arm length."""
-        for i, module in enumerate(self.modules):
-            with self.subTest(module=_MODULE_NAMES[i]):
-                module._last_commanded_state = SwerveModuleState(0, Rotation2d())
-                module.update_mechanism2d()
-
-                self.assertAlmostEqual(
-                    module._mech_commanded_arm.getLength(), _MECH_ARM_MIN_LEN, places=1,
-                    msg=(
-                        f"{_MODULE_NAMES[i]}: expected min arm length "
-                        f"{_MECH_ARM_MIN_LEN}, got {module._mech_commanded_arm.getLength()}"
-                    )
-                )
+    expected = 90  # robot 0° + 90° canvas offset = pointing forward (up)
+    actual = modules[idx]._mech_commanded_arm.getAngle() % 360
+    assert actual == pytest.approx(expected, abs=0.1), (
+        f"forward arm angle wrong. Expected {expected}°, got {actual}°"
+    )
 
 
-if __name__ == "__main__":
-    unittest.main()
+@pytest.mark.parametrize("idx", range(4), ids=[n.value for n in SwerveModuleName])
+def test_mechanism_backward_arm_angle(swerve_hw, idx):
+    """Backward motion: commanded arm must point in the backward direction (180° robot-frame).
+
+    After optimize(), backward motion is stored as {speed=-max, angle=0°}.
+    update_mechanism2d() must detect the negative speed and add 180° to the
+    display angle so the arm shows the actual direction of wheel travel.
+
+    Canvas angle = (0° + 180°_flip + 90° + module_offset).
+
+    This test FAILS if update_mechanism2d() does not flip the angle for
+    negative speed, because the arm would point the same way as forward.
+    """
+    modules = swerve_hw[0]
+    modules[idx]._last_commanded_state = SwerveModuleState(
+        -_MAX_SPEED, Rotation2d.fromDegrees(0)
+    )
+    modules[idx].update_mechanism2d()
+
+    expected = 270  # (0° + 180° flip + 90° canvas offset) = pointing backward (down)
+    actual = modules[idx]._mech_commanded_arm.getAngle() % 360
+    assert actual == pytest.approx(expected, abs=0.1), (
+        f"backward arm angle wrong. Expected {expected}° (backward), got {actual}°. "
+        f"update_mechanism2d() must flip angle 180° for negative speed."
+    )
+
+
+@pytest.mark.parametrize("idx", range(4), ids=[n.value for n in SwerveModuleName])
+def test_mechanism_forward_arm_max_length(swerve_hw, idx):
+    """Forward at max speed: commanded arm must have maximum arm length."""
+    modules = swerve_hw[0]
+    modules[idx]._last_commanded_state = SwerveModuleState(
+        _MAX_SPEED, Rotation2d.fromDegrees(0)
+    )
+    modules[idx].update_mechanism2d()
+
+    assert modules[idx]._mech_commanded_arm.getLength() == pytest.approx(
+        _MECH_ARM_MAX_LEN, abs=0.1
+    ), (
+        f"expected max arm length {_MECH_ARM_MAX_LEN}, "
+        f"got {modules[idx]._mech_commanded_arm.getLength()}"
+    )
+
+
+@pytest.mark.parametrize("idx", range(4), ids=[n.value for n in SwerveModuleName])
+def test_mechanism_backward_arm_max_length(swerve_hw, idx):
+    """Backward at max speed: commanded arm must have maximum arm length (|speed| = max)."""
+    modules = swerve_hw[0]
+    modules[idx]._last_commanded_state = SwerveModuleState(
+        -_MAX_SPEED, Rotation2d.fromDegrees(0)
+    )
+    modules[idx].update_mechanism2d()
+
+    assert modules[idx]._mech_commanded_arm.getLength() == pytest.approx(
+        _MECH_ARM_MAX_LEN, abs=0.1
+    ), (
+        f"expected max arm length {_MECH_ARM_MAX_LEN}, "
+        f"got {modules[idx]._mech_commanded_arm.getLength()}"
+    )
+
+
+@pytest.mark.parametrize("idx", range(4), ids=[n.value for n in SwerveModuleName])
+def test_mechanism_zero_speed_arm_min_length(swerve_hw, idx):
+    """At zero speed: commanded arm must fall back to minimum arm length."""
+    modules = swerve_hw[0]
+    modules[idx]._last_commanded_state = SwerveModuleState(0, Rotation2d())
+    modules[idx].update_mechanism2d()
+
+    assert modules[idx]._mech_commanded_arm.getLength() == pytest.approx(
+        _MECH_ARM_MIN_LEN, abs=0.1
+    ), (
+        f"expected min arm length {_MECH_ARM_MIN_LEN}, "
+        f"got {modules[idx]._mech_commanded_arm.getLength()}"
+    )

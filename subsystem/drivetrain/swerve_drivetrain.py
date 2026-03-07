@@ -3,7 +3,7 @@ from typing import Dict, Tuple
 
 # Internal imports
 from config import OperatorRobotConfig
-from constants import SwerveDriveConsts, SwerveModuleMk4iL2Consts, SwerveModuleName
+from constants import SwerveDriveConsts, SwerveModuleName
 
 # Third-party imports
 import navx
@@ -39,9 +39,6 @@ class SwerveDrivetrain(Subsystem):
         self.invert_gyro = self.constants.invertGyro
         self.speedMultiplier = 1
         self.flip_to_red_alliance = False
-
-        self.front_right_constants = SwerveModuleMk4iL2Consts()
-        self.front_right_constants.maxTranslationMPS = 4.75
 
         # NT base path for all drivetrain telemetry
         self._nt_base = f"subsystem/{self.getName()}"
