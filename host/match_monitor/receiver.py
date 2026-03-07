@@ -6,18 +6,20 @@ import logging
 import os
 import threading
 import time
+import zlib
 from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 
 from .analyzer import WpilogAnalyzer
 from .callbacks import CallbackRegistry
+from .connector import RobotConnector
 
 logger = logging.getLogger("match_monitor")
 
 
 class LogReceiverHandler(BaseHTTPRequestHandler):
-    """Handles POST /upload, POST /match-complete, and GET /status requests."""
+    """Handles POST /upload, GET /check, and GET /status requests."""
 
     output_dir: Path  # Set by run_server before starting
     callback_registry: CallbackRegistry  # Set by run_server
@@ -59,10 +61,7 @@ class LogReceiverHandler(BaseHTTPRequestHandler):
         })
 
     def do_POST(self):
-        if self.path == '/match-complete':
-            self._handle_match_complete()
-            return
-        elif self.path != '/upload':
+        if self.path != '/upload':
             self._send_json(404, {'error': 'not found'})
             return
 
@@ -98,15 +97,34 @@ class LogReceiverHandler(BaseHTTPRequestHandler):
         part_path = dest.with_suffix(dest.suffix + '.part')
         try:
             start_time = time.monotonic()
-            data = self.rfile.read(content_length)
+            raw_data = self.rfile.read(content_length)
+            compressed_size = len(raw_data)
+
+            # Decompress if client sent compressed data
+            content_encoding = self.headers.get('Content-Encoding', '')
+            if content_encoding == 'deflate':
+                data = zlib.decompress(raw_data)
+                uncompressed_size = len(data)
+            else:
+                data = raw_data
+                uncompressed_size = len(data)
+
             part_path.write_bytes(data)
             part_path.rename(dest)
             elapsed = time.monotonic() - start_time
-            rate_mbps = (len(data) / (1024 * 1024)) / elapsed if elapsed > 0 else 0
+            rate_mbps = (compressed_size / (1024 * 1024)) / elapsed if elapsed > 0 else 0
 
             action = "Updated" if overwrite and dest.exists() else "Received"
-            msg = (f"{action}: {sub_dir}/{filename} "
-                   f"({len(data):,} bytes in {elapsed:.2f}s, {rate_mbps:.1f} MB/s)")
+            if content_encoding == 'deflate':
+                savings = (1 - compressed_size / uncompressed_size) * 100 if uncompressed_size else 0
+                compressed_mb = compressed_size / (1024 * 1024)
+                uncompressed_mb = uncompressed_size / (1024 * 1024)
+                msg = (f"{action}: {sub_dir}/{filename} "
+                       f"({compressed_mb:.1f} MB compressed → {uncompressed_mb:.1f} MB, "
+                       f"{savings:.0f}% savings, {elapsed:.2f}s, {rate_mbps:.1f} MB/s)")
+            else:
+                msg = (f"{action}: {sub_dir}/{filename} "
+                       f"({len(data):,} bytes in {elapsed:.2f}s, {rate_mbps:.1f} MB/s)")
             logger.info(msg)
             print(f"[{datetime.now():%H:%M:%S}] {msg}")
 
@@ -118,63 +136,6 @@ class LogReceiverHandler(BaseHTTPRequestHandler):
             if part_path.exists():
                 part_path.unlink()
             self._send_json(500, {'error': str(e)})
-
-    def _handle_match_complete(self):
-        """Analyze uploaded logs and run callbacks in a background thread."""
-        content_length = int(self.headers.get('Content-Length', 0))
-        if content_length == 0:
-            self._send_json(400, {'error': 'empty body'})
-            return
-
-        try:
-            body = json.loads(self.rfile.read(content_length).decode('utf-8'))
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            self._send_json(400, {'error': 'invalid JSON'})
-            return
-
-        event_name = body.get('event_name', '').strip()
-        match_type = body.get('match_type', '').strip()
-        match_number = body.get('match_number', '').strip()
-
-        if event_name and match_type and match_number:
-            sub_dir = f"{event_name}/{match_type}_{match_number}"
-        elif event_name:
-            sub_dir = event_name
-        else:
-            sub_dir = f"unknown/{datetime.now():%Y-%m-%d}"
-
-        match_dir = self.output_dir / sub_dir
-        if not match_dir.is_dir():
-            self._send_json(404, {'error': 'match directory not found',
-                                  'path': sub_dir})
-            return
-
-        wpilog_files = list(match_dir.glob('*.wpilog'))
-        msg = (f"Match complete: {sub_dir} "
-               f"({len(wpilog_files)} .wpilog files)")
-        logger.info(msg)
-        print(f"[{datetime.now():%H:%M:%S}] {msg}")
-
-        metadata = {
-            'event_name': event_name,
-            'match_type': match_type,
-            'match_number': match_number,
-        }
-
-        # Run analysis in background thread so HTTP response is immediate
-        analyzer = self.analyzer
-        registry = self.callback_registry
-        threading.Thread(
-            target=_run_analysis,
-            args=(analyzer, registry, match_dir, metadata),
-            daemon=True,
-        ).start()
-
-        self._send_json(200, {
-            'status': 'analysis_started',
-            'match_dir': sub_dir,
-            'wpilog_files': len(wpilog_files),
-        })
 
     def _build_match_dir(self) -> str:
         event_name = self.headers.get('X-Event-Name', '').strip()
@@ -234,15 +195,50 @@ def run_server(bind: str, port: int, output_dir: str = None):
         '%(asctime)s %(levelname)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S'
     ))
     logger.addHandler(file_handler)
+
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(logging.Formatter(
+        '[%(asctime)s] %(message)s', datefmt='%H:%M:%S'
+    ))
+    logger.addHandler(console_handler)
     logger.setLevel(logging.INFO)
 
     LogReceiverHandler.output_dir = out_path
-    LogReceiverHandler.analyzer = WpilogAnalyzer()
+    analyzer = WpilogAnalyzer()
+    LogReceiverHandler.analyzer = analyzer
 
     registry = CallbackRegistry()
     from .callbacks import JsonSummaryCallback
     registry.register(JsonSummaryCallback())
     LogReceiverHandler.callback_registry = registry
+
+    # Build match directory path from metadata and trigger analysis
+    def on_upload_complete(metadata: dict) -> None:
+        event_name = metadata.get('event_name', '').strip()
+        match_type = metadata.get('match_type', '').strip()
+        match_number = metadata.get('match_number', '').strip()
+
+        if event_name and match_type and match_number:
+            sub_dir = f"{event_name}/{match_type}_{match_number}"
+        elif event_name:
+            sub_dir = event_name
+        else:
+            sub_dir = f"unknown/{datetime.now():%Y-%m-%d}"
+
+        match_dir = out_path / sub_dir
+        if not match_dir.is_dir():
+            logger.warning(f"Match dir not found for analysis: {sub_dir}")
+            return
+
+        threading.Thread(
+            target=_run_analysis,
+            args=(analyzer, registry, match_dir, metadata),
+            daemon=True,
+        ).start()
+
+    # Start TCP connector to poll for roboRIO
+    connector = RobotConnector(http_port=port, on_upload_complete=on_upload_complete)
+    connector.start()
 
     server = HTTPServer((bind, port), LogReceiverHandler)
     logger.info(f"Match Monitor started on {bind}:{port}, saving to {out_path}")
@@ -250,10 +246,12 @@ def run_server(bind: str, port: int, output_dir: str = None):
     print(f"Listening on {bind}:{port}")
     print(f"Saving files to {out_path}")
     print(f"Server log: {log_file}")
+    print(f"TCP connector polling for roboRIO on port 5805")
     print("Press Ctrl+C to stop")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
+        connector.stop()
         logger.info("Shutting down")
         print("\nShutting down")
         server.shutdown()

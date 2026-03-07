@@ -6,11 +6,14 @@ import json
 import logging
 import threading
 import time
+import zlib
 from pathlib import Path
 from typing import Optional, Set, List
 
 import wpilib
 from ntcore.util import ntproperty
+
+from utils.control_listener import ControlListener
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +22,8 @@ LOG_EXTENSIONS = {'.wpilog', '.hoot', '.revlog'}
 LOG_DIRS = [
     Path('/media/sda1'),
     Path('/home/lvuser/logs'),
+    # Fallback for simulation / Windows dev
+    Path.home() / 'Documents' / 'robotlogs',
 ]
 
 MANIFEST_FILENAME = '.uploaded_manifest'
@@ -27,21 +32,19 @@ MANIFEST_FILENAME = '.uploaded_manifest'
 class LogUploader:
     """Uploads robot log files to a match_monitor receiver via HTTP.
 
+    The host IP and port are discovered via the ControlListener TCP channel.
     Uploads run in a background daemon thread triggered from disabledInit().
     Calling start_upload() when an upload is already running is a safe no-op.
     Call stop_upload() when leaving disabled mode to free bandwidth.
     """
 
-    receiver_ip = ntproperty('/LogUploader/receiver_ip', '10.32.0.5',
-                             writeDefault=True, persistent=True)
-    receiver_port = ntproperty('/LogUploader/receiver_port', 5800,
-                               writeDefault=True, persistent=True)
     upload_enabled = ntproperty('/LogUploader/enabled', True,
                                 writeDefault=True, persistent=True)
     status = ntproperty('/LogUploader/status', 'idle',
                         writeDefault=True, persistent=False)
 
-    def __init__(self) -> None:
+    def __init__(self, control_listener: ControlListener) -> None:
+        self._control = control_listener
         self._thread: Optional[threading.Thread] = None
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
@@ -51,6 +54,15 @@ class LogUploader:
         if not self.upload_enabled:
             self.status = 'disabled'
             return
+        if not self._control.is_connected:
+            self.status = 'no host connected'
+            print("[LogUploader] No host connected, skipping upload")
+            return
+
+        host_ip = self._control.host_ip
+        http_port = self._control.http_port
+        print(f"[LogUploader] start_upload: host={host_ip}:{http_port}")
+
         with self._lock:
             if self._thread is not None and self._thread.is_alive():
                 logger.info("Upload already in progress, skipping")
@@ -70,8 +82,15 @@ class LogUploader:
 
     def _upload_worker(self) -> None:
         try:
+            host_ip = self._control.host_ip
+            http_port = self._control.http_port
+            if not host_ip or not http_port:
+                self.status = 'no host connected'
+                return
+
             self.status = 'scanning'
             log_dirs = self._find_log_dirs()
+            print(f"[LogUploader] Found log dirs: {log_dirs}")
             if not log_dirs:
                 self.status = 'no log directory found'
                 return
@@ -86,16 +105,21 @@ class LogUploader:
             for log_dir in log_dirs:
                 manifest_files.extend(self._find_manifest_files(log_dir))
 
+            print(f"[LogUploader] new={len(new_files)}, manifest={len(manifest_files)}")
             if not new_files and not manifest_files:
                 self.status = 'idle (no files)'
                 return
 
             self.status = 'connecting'
-            if not self._check_receiver():
+            if not self._check_receiver(host_ip, http_port):
                 self.status = 'receiver unreachable'
+                print("[LogUploader] Receiver unreachable!")
                 return
 
             event_name, match_type, match_number = self._get_match_metadata()
+
+            # Notify host that uploads are starting
+            self._control.send_upload_starting(event_name, match_type, match_number)
 
             uploaded_count = 0
             total = len(new_files) + len(manifest_files)
@@ -105,8 +129,13 @@ class LogUploader:
                 if self._stop_event.is_set():
                     self.status = f'stopped ({uploaded_count}/{total} uploaded)'
                     return
+                # Re-check connection in case host disappeared
+                if not self._control.is_connected:
+                    self.status = 'host disconnected during upload'
+                    return
                 self.status = f'uploading {filepath.name}'
-                if self._upload_file(filepath, event_name, match_type, match_number):
+                if self._upload_file(filepath, host_ip, http_port,
+                                     event_name, match_type, match_number):
                     self._add_to_manifest(filepath)
                     uploaded_count += 1
 
@@ -115,18 +144,23 @@ class LogUploader:
                 if self._stop_event.is_set():
                     self.status = f'stopped ({uploaded_count}/{total} uploaded)'
                     return
+                if not self._control.is_connected:
+                    self.status = 'host disconnected during upload'
+                    return
                 self.status = f'checking {filepath.name}'
-                if self._needs_reupload(filepath, event_name, match_type, match_number):
+                if self._needs_reupload(filepath, host_ip, http_port,
+                                        event_name, match_type, match_number):
                     self.status = f're-uploading {filepath.name}'
-                    self._upload_file(filepath, event_name, match_type, match_number,
+                    self._upload_file(filepath, host_ip, http_port,
+                                      event_name, match_type, match_number,
                                       overwrite=True)
                     uploaded_count += 1
 
             self.status = f'done ({uploaded_count}/{total} uploaded)'
 
-            # Notify receiver that uploads are complete so it can analyze logs
+            # Notify host that uploads are complete
             if not self._stop_event.is_set():
-                self._send_match_complete(event_name, match_type, match_number)
+                self._control.send_upload_complete(event_name, match_type, match_number)
         except Exception:
             logger.exception("Upload worker failed")
             self.status = 'error'
@@ -195,11 +229,9 @@ class LogUploader:
             logger.exception("Failed to get match metadata")
             return '', '', ''
 
-    def _check_receiver(self) -> bool:
+    def _check_receiver(self, host_ip: str, http_port: int) -> bool:
         try:
-            conn = http.client.HTTPConnection(
-                self.receiver_ip, int(self.receiver_port), timeout=3
-            )
+            conn = http.client.HTTPConnection(host_ip, http_port, timeout=3)
             conn.request('GET', '/status')
             resp = conn.getresponse()
             conn.close()
@@ -207,15 +239,14 @@ class LogUploader:
         except Exception:
             return False
 
-    def _needs_reupload(self, filepath: Path, event_name: str,
-                        match_type: str, match_number: str) -> bool:
+    def _needs_reupload(self, filepath: Path, host_ip: str, http_port: int,
+                        event_name: str, match_type: str,
+                        match_number: str) -> bool:
         """Check if a previously uploaded file has changed by comparing SHA-256."""
         try:
             local_sha = hashlib.sha256(filepath.read_bytes()).hexdigest()
 
-            conn = http.client.HTTPConnection(
-                self.receiver_ip, int(self.receiver_port), timeout=5
-            )
+            conn = http.client.HTTPConnection(host_ip, http_port, timeout=5)
             headers = {
                 'X-Filename': filepath.name,
                 'X-Event-Name': event_name or '',
@@ -243,37 +274,42 @@ class LogUploader:
             logger.exception(f"Failed to check {filepath.name}")
             return False
 
-    def _upload_file(self, filepath: Path, event_name: str,
-                     match_type: str, match_number: str,
+    def _upload_file(self, filepath: Path, host_ip: str, http_port: int,
+                     event_name: str, match_type: str, match_number: str,
                      overwrite: bool = False) -> bool:
         try:
-            file_data = filepath.read_bytes()
-            conn = http.client.HTTPConnection(
-                self.receiver_ip, int(self.receiver_port), timeout=30
-            )
+            raw_data = filepath.read_bytes()
+            compressed_data = zlib.compress(raw_data)
+
+            conn = http.client.HTTPConnection(host_ip, http_port, timeout=30)
             headers = {
                 'Content-Type': 'application/octet-stream',
+                'Content-Encoding': 'deflate',
                 'X-Filename': filepath.name,
                 'X-Event-Name': event_name or '',
                 'X-Match-Type': match_type or '',
                 'X-Match-Number': match_number or '',
-                'Content-Length': str(len(file_data)),
+                'X-Uncompressed-Size': str(len(raw_data)),
+                'Content-Length': str(len(compressed_data)),
             }
             if overwrite:
                 headers['X-Overwrite'] = 'true'
 
             start_time = time.monotonic()
-            conn.request('POST', '/upload', body=file_data, headers=headers)
+            conn.request('POST', '/upload', body=compressed_data, headers=headers)
             resp = conn.getresponse()
             conn.close()
             elapsed = time.monotonic() - start_time
-            size_mb = len(file_data) / (1024 * 1024)
-            rate_mbps = size_mb / elapsed if elapsed > 0 else 0
+            raw_mb = len(raw_data) / (1024 * 1024)
+            compressed_mb = len(compressed_data) / (1024 * 1024)
+            rate_mbps = compressed_mb / elapsed if elapsed > 0 else 0
+            savings = (1 - len(compressed_data) / len(raw_data)) * 100 if raw_data else 0
 
             if resp.status == 200:
                 action = "Re-uploaded" if overwrite else "Uploaded"
                 logger.info(f"{action} {filepath.name} "
-                            f"({size_mb:.1f} MB in {elapsed:.2f}s, {rate_mbps:.1f} MB/s)")
+                            f"({raw_mb:.1f} MB → {compressed_mb:.1f} MB compressed, "
+                            f"{savings:.0f}% savings, {elapsed:.2f}s, {rate_mbps:.1f} MB/s)")
                 return True
             elif resp.status == 409:
                 logger.info(f"Already exists on receiver: {filepath.name}")
@@ -286,30 +322,3 @@ class LogUploader:
         except Exception:
             logger.exception(f"Upload failed for {filepath.name}")
             return False
-
-    def _send_match_complete(self, event_name: str, match_type: str,
-                             match_number: str) -> None:
-        """Notify the receiver that uploads are done so it can analyze logs."""
-        try:
-            body = json.dumps({
-                'event_name': event_name or '',
-                'match_type': match_type or '',
-                'match_number': match_number or '',
-            }).encode('utf-8')
-            conn = http.client.HTTPConnection(
-                self.receiver_ip, int(self.receiver_port), timeout=10
-            )
-            conn.request('POST', '/match-complete', body=body, headers={
-                'Content-Type': 'application/json',
-                'Content-Length': str(len(body)),
-            })
-            resp = conn.getresponse()
-            conn.close()
-            if resp.status == 200:
-                logger.info("Sent match-complete notification")
-            else:
-                logger.warning(
-                    f"match-complete notification returned HTTP {resp.status}"
-                )
-        except Exception:
-            logger.exception("Failed to send match-complete notification")

@@ -4,43 +4,37 @@ import os
 from pathlib import Path
 from typing import Callable
 
-# Internal imports
-from data.telemetry import Telemetry
-from vision import Vision
-from commands.default_swerve_drive import DefaultDrive
-from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
-
 # Third-party imports
 import commands2
 import wpilib
 import wpimath
-from commands2.button import Trigger
-from pathplannerlib.auto import AutoBuilder
+
+# --- Drivetrain stub for testing log uploader without CAN hardware ---
+class _DrivetrainStub:
+    def update_alliance_flag(self, alliance): pass
+    def current_pose(self): return wpimath.geometry.Pose2d()
+    def set_motor_stop_modes(self, **kwargs): return lambda: None
+    def stop_driving(self): pass
+    def reset_pose_estimator(self, pose): pass
+    def setDefaultCommand(self, cmd): pass
+    def setSpeedMultiplier(self, s): pass
+    def drive(self, *a, **kw): pass
+    def get_default_starting_pose(self): return wpimath.geometry.Pose2d()
+
 
 class RobotSwerve:
     """
     Container to hold the main robot code
     """
-    # forward declare critical types for editors
-    drivetrain: SwerveDrivetrain
 
     def __init__(self, is_disabled: Callable[[], bool]) -> None:
         # networktables setup
         self.field = wpilib.Field2d()
         wpilib.SmartDashboard.putData("Field", self.field)
 
-        # Subsystem instantiation
-        self.drivetrain = SwerveDrivetrain()
-
-        # Alliance instantiation
-        self.updateAlliance()
-
-        # Vision setup
-        try:
-            self.vision = Vision(self.drivetrain)
-        except Exception:
-            self.vision = None
-            wpilib.reportError("Unable to load vision class", printTrace=True)
+        # Subsystem instantiation (stubbed for log uploader testing)
+        self.drivetrain = _DrivetrainStub()
+        self.vision = None
         self.alignmentTagId = None
         self.caughtPeriodicVisionError = False
 
@@ -55,41 +49,11 @@ class RobotSwerve:
 
         # Autonomous setup
         self.auto_command = None
-        self.auto_chooser = AutoBuilder.buildAutoChooser()
-        wpilib.SmartDashboard.putData("Select auto routine", self.auto_chooser)
-
-        # Telemetry setup
-        wpilib.SmartDashboard.putNumber("Drivetrain speed", 1)
-        self.enableTelemetry = wpilib.SmartDashboard.getBoolean("enableTelemetry", True)
-        if self.enableTelemetry:
-            self.telemetry = Telemetry(
-                driveTrain=self.drivetrain, vision=self.vision
-            )
 
         wpilib.SmartDashboard.putString("Robot Version", self.getDeployInfo("git-hash"))
         wpilib.SmartDashboard.putString("Git Branch", self.getDeployInfo("git-branch"))
-        wpilib.SmartDashboard.putString(
-            "Deploy Host", self.getDeployInfo("deploy-host")
-        )
-        wpilib.SmartDashboard.putString(
-            "Deploy User", self.getDeployInfo("deploy-user")
-        )
-
-        # Update drivetrain motor idle modes 3 seconds after the robot has been disabled.
-        # to_break should be False at competitions where the robot is turned off between matches
-        Trigger(is_disabled()).debounce(3).onTrue(
-            commands2.cmd.runOnce(
-                self.drivetrain.set_motor_stop_modes(
-                    to_drive=True, to_break=True, all_motor_override=True, burn_flash=True
-                ),
-                self.drivetrain
-            )
-        )
 
     def robotPeriodic(self):
-        if self.enableTelemetry and self.telemetry:
-            self.telemetry.runDefaultDataCollections()
-
         self.field.setRobotPose(self.drivetrain.current_pose())
 
         if self.vision is not None:
@@ -111,11 +75,6 @@ class RobotSwerve:
 
     def autonomousInit(self):
         self.updateAlliance()
-        self.auto_command = self.auto_chooser.getSelected()
-        if self.auto_command:
-            self.auto_command.schedule()
-        else:
-            self.drivetrain.reset_pose_estimator(self.drivetrain.get_default_starting_pose())
 
     def autonomousPeriodic(self):
         pass
@@ -125,16 +84,6 @@ class RobotSwerve:
         if self.auto_command:
             self.auto_command.cancel()
 
-        self.drivetrain.setDefaultCommand(
-            DefaultDrive(
-                self.drivetrain,
-                lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftY(), 0.06),
-                lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftX(), 0.06),
-                lambda: wpimath.applyDeadband(-1 * self.driver_controller.getRightX(), 0.1),
-                lambda: not self.driver_controller.getRightBumperButton()
-            )
-        )
-
     def teleopPeriodic(self):
         if self.driver_controller.getLeftTriggerAxis() > 0.5:
             commands2.CommandScheduler.getInstance().cancelAll()
@@ -142,19 +91,8 @@ class RobotSwerve:
         self.drivetrain.setSpeedMultiplier(self.speedMultiplier)
 
     def testInit(self):
-        #TODO Move to NT listener on change listener
         self.updateAlliance()
         commands2.CommandScheduler.getInstance().cancelAll()
-        self.drivetrain.setDefaultCommand(
-            DefaultDrive(
-                self.drivetrain,
-                lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftY(), 0.06),
-                lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftX(), 0.06),
-                lambda: wpimath.applyDeadband(-1 * self.driver_controller.getRightX(), 0.1),
-                lambda: not self.driver_controller.getRightBumperButton()
-            )
-        )
-        commands2.cmd.run(lambda: self.drivetrain.drive(2, 0, 0, False), self.drivetrain).withTimeout(5).schedule()
 
     def testPeriodic(self):
         pass
@@ -176,8 +114,6 @@ class RobotSwerve:
             # Read from ~/deploy.json
             with open(releaseFile, "r") as openfile:
                 json_object = json.load(openfile)
-                print(json_object)
-                print(type(json_object))
                 if key in json_object:
                     return json_object[key]
                 else:

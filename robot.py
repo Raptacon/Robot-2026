@@ -5,6 +5,7 @@ import inspect
 import commands2
 
 from robotswerve import RobotSwerve
+from utils.control_listener import ControlListener
 from utils.log_uploader import LogUploader
 import wpilib
 import logging
@@ -32,10 +33,18 @@ class MyRobot(commands2.TimedCommandRobot):
         #Init telem files
         self.telemInit()
 
-        # Log uploader for match monitor — skip first disabledInit (startup)
+        # TCP control listener — host connects to robot to establish link
+        try:
+            self.control_listener = ControlListener()
+            self.control_listener.start()
+        except Exception:
+            self.control_listener = None
+            wpilib.reportError("Unable to create ControlListener", printTrace=True)
+
+        # Log uploader — only uploads after robot has been enabled at least once
         self.__hasBeenEnabled = False
         try:
-            self.log_uploader = LogUploader()
+            self.log_uploader = LogUploader(self.control_listener) if self.control_listener else None
         except Exception:
             self.log_uploader = None
             wpilib.reportError("Unable to create LogUploader", printTrace=True)
@@ -71,9 +80,10 @@ class MyRobot(commands2.TimedCommandRobot):
         wpilib.DriverStation.startDataLog(wpilib.DataLogManager.getLog())
 
         # Phoenix 6 signal logging (.hoot files)
-        from phoenix6 import SignalLogger
-        SignalLogger.enable_auto_logging(True)
-        SignalLogger.start()
+        # Disabled: SignalLogger spams errors about full disks
+        # from phoenix6 import SignalLogger
+        # SignalLogger.enable_auto_logging(True)
+        # SignalLogger.start()
 
         # REV status logging (.revlog files)
         from rev import StatusLogger
@@ -92,6 +102,8 @@ class MyRobot(commands2.TimedCommandRobot):
     def disabledInit(self) -> None:
         """This function is called once each time the robot enters Disabled mode."""
         self.container.disabledInit()
+        print(f"[Robot] disabledInit: hasBeenEnabled={self.__hasBeenEnabled}, "
+              f"uploader={'yes' if self.log_uploader else 'no'}")
         if self.__hasBeenEnabled and self.log_uploader is not None:
             self.log_uploader.start_upload()
 
