@@ -15,7 +15,7 @@ from pathlib import Path
 
 _HAS_TKINTER = True
 try:
-    import tkinter as _tkinter  # noqa: F401
+    import tkinter  # noqa: F401
 except ImportError:
     _HAS_TKINTER = False
 
