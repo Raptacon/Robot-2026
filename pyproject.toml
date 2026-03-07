@@ -42,3 +42,6 @@ pyfrc.isolated = true
 # Exclude example directories from main test collection to avoid
 # module name collisions (multiple pyfrc_test.py files)
 testpaths = ["tests"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]

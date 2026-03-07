@@ -4,12 +4,17 @@ pyflakes
 py2app
 macholib
 modulegraph
+pyyaml
 
-#Package and testing tools
+#Package, testing tools
 flake8
 coverage
 wheel
 pdoc
+
+#host gui tools
+cairosvg
+Pillow
 
 #Raptacon base lib
 # raptacon3200>=2025.0.1

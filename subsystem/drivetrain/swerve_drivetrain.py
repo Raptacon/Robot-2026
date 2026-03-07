@@ -3,7 +3,7 @@ from typing import Tuple
 
 # Internal imports
 from config import OperatorRobotConfig
-from constants import SwerveDriveConsts, SwerveModuleName
+from constants import SwerveDriveConsts, SwerveModuleMk4iL2Consts, SwerveModuleName
 from .swerve_module import SwerveModuleMk4iSparkMaxNeoCanCoder
 
 # Third-party imports
@@ -33,8 +33,12 @@ class SwerveDrivetrain(Subsystem):
         self.constants = SwerveDriveConsts()
         self.invert_gyro = self.constants.invertGyro
         self.speedMultiplier = 1
+        self.flip_to_red_alliance = False
+
+        self.front_right_constants = SwerveModuleMk4iL2Consts()
+        self.front_right_constants.maxTranslationMPS = 4.75
+
         try:
-                
             # must give in front-left, front-right, back-left, back-right order
             self.swerve_modules = [
                 SwerveModuleMk4iSparkMaxNeoCanCoder(
@@ -51,6 +55,7 @@ class SwerveDrivetrain(Subsystem):
                     OperatorRobotConfig.swerve_module_channels[1],
                     invert_drive=self.constants.moduleFrontRightInvertDrive,
                     invert_steer=self.constants.moduleFrontRightInvertSteer,
+                    swerve_level_constants=self.front_right_constants,
                     encoder_calibration=OperatorRobotConfig.swerve_abs_encoder_calibrations[1]
                 ),
                 SwerveModuleMk4iSparkMaxNeoCanCoder(
@@ -72,7 +77,7 @@ class SwerveDrivetrain(Subsystem):
             ]
 
             self.drive_kinematics = SwerveDrive4Kinematics(
-                *[swerve_module.drivetrain_location for swerve_module in self.swerve_modules] # -> Translation2d()
+                *[swerve_module.drivetrain_location for swerve_module in self.swerve_modules]
             )
         except Exception as e:
             wpilib.reportError(f"Error creating swerve modules {e}")
@@ -80,7 +85,6 @@ class SwerveDrivetrain(Subsystem):
             self.drive_kinematics = SwerveDrive4Kinematics(
                 Translation2d(), Translation2d(), Translation2d(), Translation2d()
             )
-
 
         self.gyroscope = navx.AHRS.create_spi()
         self.heading_offset = Rotation3d()
@@ -188,7 +192,7 @@ class SwerveDrivetrain(Subsystem):
 
         if field_relative:
             field_invert = 1
-            if self.flip_to_red_alliance():
+            if self.flip_to_red_alliance:
                 field_invert = -1
 
             chassis_speeds = ChassisSpeeds.fromFieldRelativeSpeeds(
@@ -312,7 +316,7 @@ class SwerveDrivetrain(Subsystem):
             default_starting_pose: the assumed starting pose given no other information
         """
         default_starting_pose = OperatorRobotConfig.blue_default_start_pose
-        if self.flip_to_red_alliance():
+        if self.flip_to_red_alliance:
             default_starting_pose = OperatorRobotConfig.red_default_start_pose
 
         default_starting_pose = Pose2d(
@@ -362,19 +366,20 @@ class SwerveDrivetrain(Subsystem):
                 swerve_module.set_motor_stop_mode(to_drive=not to_drive, to_break=to_break)
                 swerve_module.apply_motor_config(to_drive=not to_drive, burn_flash=burn_flash)
 
-    def flip_to_red_alliance(self) -> bool:
+    def update_alliance_flag(self, alliance: DriverStation.Alliance) -> None:
         """
         Determine whether to flip autonomous routines and field-relative drive for the red alliance.
         Because alliance choice can change, this method should be called as part of code executed on
-        periodic clock ticks.
+        mode change events.
+
+        Args:
+            alliance: the current alliance as read from the driver station
 
         Returns:
-            True if we should make flips for the red alliance, False otherwise
+            None: alliance flip attribute updated in-place
         """
-        alliance = DriverStation.getAlliance()
         if alliance:
-            return alliance == DriverStation.Alliance.kRed
-        return False
+            self.flip_to_red_alliance = alliance == DriverStation.Alliance.kRed
 
     def gen_path_planner_config(self) -> RobotConfig:
         """
@@ -447,7 +452,7 @@ class SwerveDrivetrain(Subsystem):
                 PIDConstants(*OperatorRobotConfig.pathplanner_rotation_pid)
             ),
             config,
-            self.flip_to_red_alliance,
+            lambda: self.flip_to_red_alliance,
             self
         )
 

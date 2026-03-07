@@ -43,6 +43,12 @@ make deploy             # Deploys libraries and code to the robot. (requires rob
 python -m robotpy deploy
 ```
 
+**Run controller config GUI:**
+```bash
+pip install -r host/requirements.txt   # First time only (Pillow, PyYAML)
+python -m host.controller_config       # Launch GUI
+```
+
 **Style:**
 Follow major style guidelines from PEP8 based on what is configured for flake8.
 
@@ -50,7 +56,7 @@ Follow major style guidelines from PEP8 based on what is configured for flake8.
 
 ### Entry Point & Robot Lifecycle
 
-`robot.py` defines `MyRobot(commands2.TimedCommandRobot)` running at 20 Hz (50ms period). It delegates all logic to `RobotSwerve` (in `robotswerve.py`), which acts as the **robot container** - it instantiates all subsystems, configures controls, sets up autonomous, and manages telemetry.
+`robot.py` defines `MyRobot(commands2.TimedCommandRobot)` running at 20 Hz (50ms period). It delegates all logic to `RobotSwerve` (in `robotswerve.py`), which acts as the **robot container** - it builds a manifest, creates a `SubsystemRegistry`, and exposes convenience accessors. Subsystem creation, telemetry, and controls are handled by the registry via convention-based discovery (see Subsystem Registry below).
 
 `MyRobot.__callAndCatch` wraps periodic calls to catch and log exceptions without crashing the robot on hardware (exceptions are re-raised in simulation).
 
@@ -59,17 +65,47 @@ Follow major style guidelines from PEP8 based on what is configured for flake8.
 - **`constants.py`** - Physical hardware constants (robot dimensions, gear ratios, conversion factors, current limits). Uses class inheritance: `RobotConstants` -> `SwerveDriveConsts` -> `SwerveModuleMk4iConsts` -> `SwerveModuleMk4iL2Consts`
 - **`config.py`** - Operator-tunable parameters (`OperatorRobotConfig`): PID gains, encoder calibrations, vision thresholds, CAN channel assignments, PathPlanner constraints, default start poses
 
+### Subsystem Registry (`utils/subsystem_factory.py`)
+
+Subsystems are **self-contained and self-registering**. Each subsystem module calls `register_subsystem()` at the bottom of its file. Importing `subsystem` (via `subsystem/__init__.py`) triggers all registrations.
+
+**Key types:**
+- `SubsystemEntry` — declares name, default state, creator function, and dependencies
+- `SubsystemFactory` — creates a single subsystem with error isolation (required subsystems raise on failure, enabled ones degrade gracefully)
+- `SubsystemRegistry` — processes a manifest of entries: resolves NT-persisted state, checks dependencies, creates subsystems, and provides convention-based lifecycle methods
+
+**Convention-based lifecycle:**
+- **Controls**: auto-discovers `commands/{name}_controls.py` and calls `register_controls(subsystem, container)`
+- **Telemetry**: calls `subsystem.updateTelemetry()` if the method exists
+- **Disabled init**: calls `subsystem.onDisabledInit()` if the method exists
+
+**Robot manifests** (`subsystem/manifest.py`): `ROBOT_MANIFESTS` maps robot name strings to manifest builders. Entries are topologically sorted (Kahn's algorithm) so dependencies are created first. Available manifests:
+- `"competition"` — all registered subsystems
+- `"sparky"` — drivetrain only
+- `None` — fallback, defaults to competition
+
+The active robot name is persisted via `ntproperty` at `/robot/name`.
+
+**Adding a new subsystem:**
+1. Create subsystem class in `subsystem/` with optional `updateTelemetry()` and `onDisabledInit()` methods
+2. Add `register_subsystem()` call at bottom of module
+3. Add one import line in `subsystem/__init__.py`
+4. Optionally create `commands/{name}_controls.py` with `register_controls(subsystem, container)`
+
+No manifest editing or `robotswerve.py` changes needed.
+
 ### Subsystems (`subsystem/`)
 Subsystems contain code to control or logically group mechanisms and software components on the robot. Subsystems directly control hardware through the wpilib library.
-- **`drivertrain` : Contains code for the drivetrain of the robot
-- **`drivetrain/swerve_drivetrain.py`** - `SwerveDrivetrain(Subsystem)`: manages 4 swerve modules, gyroscope (NavX), pose estimation (SwerveDrive4PoseEstimator), PathPlanner integration, field-relative drive. Uses "always blue" coordinate system.
+- **`drivetrain/`** : Contains code for the drivetrain of the robot
+- **`drivetrain/swerve_drivetrain.py`** - `SwerveDrivetrain(Subsystem)`: manages 4 swerve modules, gyroscope (NavX), pose estimation (SwerveDrive4PoseEstimator), PathPlanner integration, field-relative drive. Owns a `Field2d` for dashboard visualization. Uses "always blue" coordinate system.
 - **`drivetrain/swerve_module.py`** - `SwerveModuleMk4iSparkMaxNeoCanCoder`: individual module with drive motor, steer motor (both SparkMax/NEO via REV), and absolute encoder (CANcoder via Phoenix6). CAN IDs use consecutive numbering: base=drive, base+1=steer, base+2=encoder.
-- **`localization` : Contains code pertaining to locating the robot physically on the field of play and determining correct goals based on red or blue alliance teams.
-- **`mechanisms` : Contains robot mechanisms such as flywheel shooters, intakes, hoppers and climbers.
+- **`localization/`** : Contains code pertaining to locating the robot physically on the field of play and determining correct goals based on red or blue alliance teams.
+- **`mechanisms/`** : Contains robot mechanisms such as turrets, flywheel shooters, intakes, hoppers and climbers.
 
 ### Commands (`commands/`)
 The command folder contains the commands which act on subsystems. Groups of commands can be used to accomplish more complex tasks. Default commands run whenever another command
-does not currently require a subsystem and are used for default behaviors or passing driver controls to subsystems. 
+does not currently require a subsystem and are used for default behaviors or passing driver controls to subsystems.
+- **`{name}_controls.py`** - Convention-based control files auto-discovered by the registry. Each exports `register_controls(subsystem, container)` to wire HID bindings and default commands.
 - **`default_swerve_drive.py`** - `DefaultDrive`: teleop Xbox controller driving (left stick translate, right stick rotate)
 - **`autoDrive.py`** - `AutoDrive`: time-based autonomous drive
 - **`auto/pid_to_pose.py`** - `PIDToPose`: profiled PID alignment to target pose
@@ -81,17 +117,22 @@ This directory contains examples and allows a location to develop new robots.py 
 - **`robotpy`** : Contains a set of wpilib examples that show how to do certain tasks with the wpilib library.
 - **`flywheel-sysid`** : Contains a example of how to collect data to run sysid on various mechanical components.
 
-### Vision (`vision.py`)
 
-Uses PhotonVision with two cameras. Filters AprilTag detections by ambiguity and distance thresholds, then feeds pose estimates into the drivetrain's `SwerveDrive4PoseEstimator` with distance-scaled standard deviations.
+### Controller Config (`utils/controller/` and `host/controller_config/`)
 
-### Telemetry (`data/telemetry.py`)
+Shared data model (`utils/controller/model.py`) defines `ActionDefinition`, `ControllerConfig`, and `FullConfig`. Actions use qualified names: `group.name` (e.g. `intake.run`). Input types: BUTTON, ANALOG, OUTPUT, BOOLEAN_TRIGGER, VIRTUAL_ANALOG. D-pad directions are treated as buttons (factory converts POV angle to booleans at runtime). Config stored in `data/controller.yaml`. YAML I/O in `config_io.py`. Portable curve math in `utils/math/curves.py` (shared by robot code and host GUI).
 
-Logs controller inputs, odometry, swerve module states, vision estimates, and driver station data via NetworkTables and WPILib DataLog.
+See `host/controller_config/ARCHITECTURE.md` for detailed GUI architecture and design patterns.
 
-### PathPlanner Integration
+### Input Factory (`utils/input/`)
 
-Autonomous routines are defined as `.auto` and `.path` files in `deploy/pathplanner/`. PathPlanner is configured in `SwerveDrivetrain.configure_path_planner()` via `AutoBuilder`. The auto chooser is exposed on SmartDashboard.
+Config-driven controller input management. `InputFactory` loads YAML config, creates `wpilib.XboxController` instances, and provides `getButton()`, `getAnalog()`, `getRumbleControl()` and raw variants. All managed objects are eagerly created at init so NT entries publish immediately. Analog shaping pipeline: inversion -> deadband -> curve -> scale -> slew rate limit. Parameters published to NT under `/inputs/actions/<group>/<action>/` for runtime tuning; NT sync is automatic each scheduler cycle. Create the factory in `robotInit` **before** subsystems; use `get_factory()` for subsystem-local access.
+
+See `examples/inputFactory/` for a complete working example.
+
+## Future
+
+- [ ] JSON Schema for controller config YAML validation — IDE autocompletion + red squiggles. `config_io.py` abstraction makes format swaps straightforward.
 
 ### CAN ID Convention
 
@@ -116,11 +157,11 @@ GitHub Actions (`.github/workflows/robot_ci.yml`) runs on Windows:
 - Lint (extra): flake8 with complexity and line-length checks (non-blocking)
 - Docstring verification (non-blocking)
 
-
 ## Unit Tests
  - Unit tests should be encouraged and written
  - Unit tests generated by Claude should be commented as such
  - Unit tests should use sim feedback when working with hardware based devices
+ - Prefer pytest style (plain classes + `assert`) over `unittest.TestCase` — pyfrc/robotpy uses pytest as its test runner
 
 ## NetworkTables Persistence
 
@@ -141,4 +182,3 @@ See `examples/nt-persistence-test/` for a comparison of persistence approaches.
 
 ## Claude.md updates
 If Claude sees an area that would benifit for remembering or having instructions in the future Claude should suggest adding it to CLAUDE.md
-

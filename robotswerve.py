@@ -1,26 +1,35 @@
+"""
+Container to hold the main robot code.
+
+## Controller Map
+
+![Driver Controller](./assets/2026bot_controller_map_page1.png)
+
+![Operator Controller](./assets/2026bot_controller_map_page2.png)
+"""
+
 # Native imports
 import json
 import os
 from pathlib import Path
 from typing import Callable
 
+import wpimath
+
 # Internal imports
 from data.telemetry import Telemetry
 from commands.default_swerve_drive import DefaultDrive
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
+from utils.input import InputFactory
 
 # Third-party imports
 import commands2
 import wpilib
-import wpimath
 from commands2.button import Trigger
 from pathplannerlib.auto import AutoBuilder
-from pathplannerlib.path import PathPlannerPath
+
 
 class RobotSwerve:
-    """
-    Container to hold the main robot code
-    """
     # forward declare critical types for editors
     drivetrain: SwerveDrivetrain
 
@@ -31,35 +40,42 @@ class RobotSwerve:
 
         # Subsystem instantiation
         self.drivetrain = SwerveDrivetrain()
-        
-        # Alliance instantiaion
-        self.alliance = "red" if self.drivetrain.flip_to_red_alliance() else "blue"
+
+        # Alliance instantiation
+        self.updateAlliance()
+
 
         # Initialize timer
         self.timer = wpilib.Timer()
         self.timer.start()
 
-        # HID setup
+        # HID setup — config-driven via InputFactory
         wpilib.DriverStation.silenceJoystickConnectionWarning(True)
-        self.driver_controller = wpilib.XboxController(0)
-        self.mech_controller = wpilib.XboxController(1)
+        self.factory = InputFactory(config_path="data/inputs/2026bot.yaml")
+
+        # Speed toggle state
+        self._drive_scale_slow = 0.25
+        self._drive_scale_fast = 1
+        self._drive_is_slow = False
+
+        # TODO: Move input retrieval and binding into commands/{subsystem}_controls.py
+        # files as part of the subsystem registry refactor. Each subsystem's controls
+        # module should own its own factory.get*() calls and command wiring.
+        self._configure_controls()
 
         # Autonomous setup
         self.auto_command = None
         self.auto_chooser = AutoBuilder.buildAutoChooser()
         wpilib.SmartDashboard.putData("Select auto routine", self.auto_chooser)
 
-        self.teleop_stem_paths = {
-            start_location: PathPlannerPath.fromPathFile(start_location)
-            for start_location in [f"Stem_Reef_F{n}" for n in range(1, 7)] + [f"Stem_Reef_N{n}" for n in range(1, 7)]
-        }
-
         # Telemetry setup
-        wpilib.SmartDashboard.putNumber("Drivetrain speed", 1)
+        wpilib.SmartDashboard.putNumber("Drivetrain speed", self._drive_scale_fast)
         self.enableTelemetry = wpilib.SmartDashboard.getBoolean("enableTelemetry", True)
         if self.enableTelemetry:
             self.telemetry = Telemetry(
-                driveTrain=self.drivetrain
+                driveTrain=self.drivetrain,
+                driverController=self.factory.getController(0),
+                mechController=self.factory.getController(1),
             )
 
         wpilib.SmartDashboard.putString("Robot Version", self.getDeployInfo("git-hash"))
@@ -89,6 +105,7 @@ class RobotSwerve:
         self.field.setRobotPose(self.drivetrain.current_pose())
 
     def disabledInit(self):
+        self.updateAlliance()
         self.drivetrain.set_motor_stop_modes(to_drive=True, to_break=True, all_motor_override=True, burn_flash=False)
         self.drivetrain.stop_driving()
 
@@ -96,6 +113,7 @@ class RobotSwerve:
         pass
 
     def autonomousInit(self):
+        self.updateAlliance()
         self.auto_command = self.auto_chooser.getSelected()
         if self.auto_command:
             self.auto_command.schedule()
@@ -106,14 +124,27 @@ class RobotSwerve:
         pass
 
     def teleopInit(self):
+        self.updateAlliance()
         if self.auto_command:
             self.auto_command.cancel()
 
-        self.alliance = "blue"
-        if self.drivetrain.flip_to_red_alliance():
-            self.alliance = "red"
-        self.teleop_auto_command = None
+        self.drivetrain.setDefaultCommand(
+            DefaultDrive(
+                self.drivetrain,
+                self.translate_x,
+                self.translate_y,
+                self.rotate,
+                lambda: not self.robot_relative_btn()
+            )
+        )
 
+    def teleopPeriodic(self):
+        pass
+
+    def testInit(self):
+        #TODO Move to NT listener on change listener
+        self.updateAlliance()
+        commands2.CommandScheduler.getInstance().cancelAll()
         self.drivetrain.setDefaultCommand(
             DefaultDrive(
                 self.drivetrain,
@@ -123,18 +154,53 @@ class RobotSwerve:
                 lambda: not self.driver_controller.getRightBumperButton()
             )
         )
-
-    def teleopPeriodic(self):
-        if self.driver_controller.getLeftTriggerAxis() > 0.5:
-            commands2.CommandScheduler.getInstance().cancelAll()
-        self.speedMultiplier = wpilib.SmartDashboard.getNumber("Drivetrain speed", 1)
-        self.drivetrain.setSpeedMultiplier(self.speedMultiplier)
-
-    def testInit(self):
-        commands2.CommandScheduler.getInstance().cancelAll()
+        commands2.cmd.run(lambda: self.drivetrain.drive(2, 0, 0, False), self.drivetrain).withTimeout(5).schedule()
 
     def testPeriodic(self):
         pass
+
+    def _configure_controls(self) -> None:
+        """Retrieve managed inputs from the factory and wire command bindings.
+
+        TODO: Move into commands/{subsystem}_controls.py files as part of the
+        subsystem registry refactor. Each subsystem's controls module would
+        call register_controls(subsystem, container) and own its own
+        factory.get*() calls and command wiring.
+        """
+        # Managed drive inputs
+        self.translate_x = self.factory.getAnalog("drivetrain.translate_x")
+        self.translate_y = self.factory.getAnalog("drivetrain.translate_y")
+        self.rotate = self.factory.getAnalog("drivetrain.rotate")
+        self.robot_relative_btn = self.factory.getRawButton("drivetrain.robot_relative")
+
+        # Cancel-all: event-driven via Trigger instead of polling
+        self.factory.getButton("drivetrain.cancel_all").onTrue(
+            commands2.cmd.runOnce(
+                lambda: commands2.CommandScheduler.getInstance().cancelAll()
+            )
+        )
+
+        # Speed toggle: Y button switches between slow and fast scale
+        self.factory.getButton("drivetrain.speed_toggle").onTrue(
+            commands2.cmd.runOnce(self._toggle_drive_scale)
+        )
+
+        # Map all drive axes' scale to a shared SmartDashboard entry.
+        # Dashboard changes and Y-button toggles both write to this path;
+        # the factory auto-syncs the value into all three analogs each cycle.
+        _SPEED_NT = "/SmartDashboard/Drivetrain speed"
+        for analog in (self.translate_x, self.translate_y, self.rotate):
+            analog.mapParamToNtPath(_SPEED_NT, "scale")
+
+    def _toggle_drive_scale(self) -> None:
+        """Toggle between slow and fast drive scale presets.
+
+        Writes the new scale to SmartDashboard; the factory auto-syncs
+        it into all three drive analogs via mapParamToNtPath each cycle.
+        """
+        self._drive_is_slow = not self._drive_is_slow
+        scale = self._drive_scale_slow if self._drive_is_slow else self._drive_scale_fast
+        wpilib.SmartDashboard.putNumber("Drivetrain speed", scale)
 
     def getDeployInfo(self, key: str) -> str:
         """Gets the Git SHA of the deployed robot by parsing ~/deploy.json and returning the git-hash from the JSON key OR if deploy.json is unavailable will return "unknown"
@@ -163,4 +229,11 @@ class RobotSwerve:
             return "unknown"
         except json.JSONDecodeError:
             return "bad json in deploy file check for unescaped "
+
+    def updateAlliance(self) -> None:
+        """
+        Update the alliance the robot is on
+        """
+        self.alliance = wpilib.DriverStation.getAlliance()
+        self.drivetrain.update_alliance_flag(self.alliance)
 

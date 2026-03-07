@@ -1,6 +1,8 @@
 # Internal imports
 from config import OperatorRobotConfig
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
+from subsystem.intakeactions import IntakeSubsystem
+
 # Third-party imports
 import wpilib
 from ntcore import NetworkTableInstance
@@ -57,6 +59,11 @@ driverStationEntries = [
     ["enabled", BooleanLogEntry, "enabled"],
 ]
 
+intakeEntries = [
+    # ["intakeSpeed", "intakespeed"],
+    ["rollerSpeed", "rollerspeed"],
+]
+
 class Telemetry:
 
     def __init__(
@@ -64,7 +71,8 @@ class Telemetry:
         driverController: wpilib.XboxController = None,
         mechController: wpilib.XboxController = None,
         driveTrain: SwerveDrivetrain = None,
-        driverStation: wpilib.DriverStation = None
+        driverStation: wpilib.DriverStation = None,
+        intake: IntakeSubsystem = None
     ):
         self.driverController = driverController
         self.mechController = mechController
@@ -72,6 +80,7 @@ class Telemetry:
         self.driveTrain = driveTrain
         self.swerveModules = driveTrain.swerve_modules
         self.driverStation = driverStation
+        self.intake = intake
 
         self.networkTable = NetworkTableInstance.getDefault()
         for entryname, logname in telemetryOdometryEntries:
@@ -104,6 +113,15 @@ class Telemetry:
                         "swervedrivetrain/" + logname, entrytype
                     ).publish(),
                 )
+        for entryname, logname in intakeEntries:
+            setattr(
+                self,
+                entryname,
+                self.networkTable.getStructTopic(
+                    "intake/" + logname, entrytype
+                ).publish(),
+            )
+
         self.datalog = wpilib.DataLogManager.getLog()
         for entryname, entrytype, logname in telemetryButtonEntries:
             setattr(
@@ -255,12 +273,19 @@ class Telemetry:
             self.test.append(self.driverStation.isTest())
             self.enabled.append(self.driverStation.isEnabled())
 
+    def getIntakeInputs(self):
+        if self.intake is not None:
+            # self.intake.intakeVelocity = self.intakeSpeed.getEntry(getattr(self, "intakeSpeed"))
+            self.intake.rollerVelocity = self.rollerSpeed.getEntry(getattr(self, "rollerSpeed"))
+
+
     def runDefaultDataCollections(self):
         self.getDriverControllerInputs()
         self.getMechControllerInputs()
         self.getOdometryInputs()
         self.getFullSwerveState()
         self.getRawSwerveInputs()
+        self.getIntakeInputs()
         self.getDriverStationInputs()
 
     def logAdditionalOdometry(
