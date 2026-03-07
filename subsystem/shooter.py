@@ -1,4 +1,4 @@
-from config import OperatorRobotConfig
+from config import ShooterConfig
 import rev
 import wpilib
 from commands2 import Subsystem
@@ -17,12 +17,11 @@ class ShooterMotorNames(StrEnum):
     FOLLOWER_FLYWHEEL = "follower"
 
 
-class zShooter(Subsystem):
+class Shooter(Subsystem):
     def __init__(self):
         super().__init__()
-        self.robotConfigs = OperatorRobotConfig()
-
         self.offsetAmount = 0
+        self.RPM = 0
 
         # Create lookup table of 100 elements (index 0-99)
         self.lookupTable = ([1000]*25) + ([2000]*25) + ([3000]*25) + ([4000]*25)
@@ -33,9 +32,9 @@ class zShooter(Subsystem):
         self.followerFlywheelMotor = rev.SparkFlex(33, rev.SparkLowLevel.MotorType.kBrushless)
 
         # Set up configs for each motor
-        self.configureMotor(self.feedMotor, self.robotConfigs.shooterFeedMotorPIDF, self.robotConfigs.shooterInverted[0])
-        self.configureMotor(self.leadFlywheelMotor, self.robotConfigs.shooterFlywheelMotorPIDF, self.robotConfigs.shooterInverted[1])
-        self.configureMotor(self.followerFlywheelMotor, self.robotConfigs.shooterFlywheelMotorPIDF, self.robotConfigs.shooterInverted[2], self.leadFlywheelMotor)
+        self.configureMotor(self.feedMotor, ShooterConfig.shooterFeedMotorPIDF, ShooterConfig.shooterInverted[0])
+        self.configureMotor(self.leadFlywheelMotor, ShooterConfig.shooterFlywheelMotorPIDF, ShooterConfig.shooterInverted[1])
+        self.configureMotor(self.followerFlywheelMotor, ShooterConfig.shooterFlywheelMotorPIDF, ShooterConfig.shooterInverted[2], self.leadFlywheelMotor)
 
         self.motors: Dict[str, rev.SparkFlex | rev.SparkMax] = {
             ShooterMotorNames.FEED: self.feedMotor,
@@ -141,52 +140,18 @@ class zShooter(Subsystem):
         """
         return self.encoders[motorName].getVelocity()
 
-    def calculateDistance(self, a, b, c, d, RPM, angle):
+    def setRpmUsingLookup(self, distance: float):
         """
-        Calculate the distance a ball will travel when given RPM and angle of the shooter
-
-        Args:
-            a: Some constant
-            b: Some constant
-            c: Some constant
-            d: Some constant
-            RPM: revolutions per minute of the motor
-            Angle: the angle in degrees(?) that the ball exits at
-
-        Returns:
-            Distance the ball is expected to travel
-        """
-        self.distance = a*RPM + b*RPM**2 + c*angle + d*angle**2
-        return self.distance
-
-    def calculateRpmFromDistance(self, a, b, distance):
-        """
-        Calculate either the rpm needed to travel a certain distance
-
-        Args:
-            a: Some constant
-            b: Some constant
-            distance: the length in meters(?) the ball needs to travel
-
-        Returns:
-            None
-        """
-        discriminant = a**2 - (4*b*distance)
-        if (not (discriminant < 0)) and (b != 0):
-            self.RPM = max([-(a) + sqrt(discriminant) / (2*b), -(a) - sqrt(discriminant) / (2*b)] )
-
-    def getLookupTable(self, distance: float):
-        """
-        Get the RPM needed to shoot the ball at a specified distance
+        Set the RPM needed to shoot the ball at a specified distance
 
         Args:
             distance: distance in meters from a target point
 
         Returns:
-            RPM needed to hit distance target
+            None
         """
         # Get an index number from the distance given
-        lookupIndex = abs(int(floor(distance / self.robotConfigs.shooterRangeInterval)))
+        lookupIndex = abs(int(floor(distance / ShooterConfig.shooterRangeInterval)))
         # Check if index number has exceeded the length of the list, else set RPM as 0
         if lookupIndex < len(self.lookupTable):
             self.RPM = self.lookupTable[lookupIndex]
@@ -196,29 +161,17 @@ class zShooter(Subsystem):
             else:
                 self.RPM = 0
 
-    def increaseOffset(self):
+    def modifyOffset(self, offsetDelta: float):
         """
-        Increase the RPM by a set amount if it is inaccurate
+        Modify the RPM offset 
 
         Args:
-            None
+            offsetDelta: change in offset that is applied
 
         Returns:
             None
         """
-        self.offsetAmount = self.offsetAmount + self.robotConfigs.shooterOffsetIncrement
-
-    def decreaseOffset(self):
-        """
-        Decrease the RPM by a set amount if it is inaccurate
-
-        Args:
-            None
-
-        Returns:
-            None
-        """
-        self.offsetAmount = self.offsetAmount + self.robotConfigs.shooterOffsetDecrement
+        self.offsetAmount = self.offsetAmount + offsetDelta
 
     def resetOffset(self):
         """
@@ -246,7 +199,7 @@ class zShooter(Subsystem):
 
     def periodic(self):
         newRPM = self.RPM + self.offsetAmount
-        feedRPM = int(newRPM * self.robotConfigs.shooterFeedPercentOfFlywheel)
+        feedRPM = int(newRPM * ShooterConfig.shooterFeedPercentOfFlywheel)
 
         self.setMotorReference(ShooterMotorNames.FEED, feedRPM)
         self.setMotorReference(ShooterMotorNames.LEAD_FLYWHEEL, newRPM)

@@ -49,13 +49,12 @@ class OperatorRobotConfig:
     # max angular velocity (dps), max angular acceleration (dps^2).
     teleop_pathplan_constraints: Tuple[float] = (2.5, 2.0, 360.0, 360.0)
 
+class ShooterConfig:
     # Configs for shooter
     shooterFeedMotorPIDF = (0, 0, 0, 1 / 473)
     shooterFlywheelMotorPIDF = (0, 0, 0, 1 / 560)
     # Feed, Lead, Follower
     shooterInverted = (False, False, False)
     shooterRangeInterval = 0.2
-    shooterOffsetIncrement = 100
-    shooterOffsetDecrement = -100
+    shooterOffsetDelta = 100
     shooterFeedPercentOfFlywheel = 0.9
-    # intake_roller_pid: Tuple[float] = [0, 0, 0, 1 / 565]
