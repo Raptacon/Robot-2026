@@ -28,9 +28,9 @@ class zShooter(Subsystem):
         self.lookupTable = ([1000]*25) + ([2000]*25) + ([3000]*25) + ([4000]*25)
 
         # Instantiate motors
-        self.feedMotor = rev.SparkFlex(30, rev.SparkLowLevel.MotorType.kBrushless)
+        self.feedMotor = rev.SparkMax(30, rev.SparkLowLevel.MotorType.kBrushless)
         self.leadFlywheelMotor = rev.SparkFlex(32, rev.SparkLowLevel.MotorType.kBrushless)
-        self.followerFlywheelMotor = rev.SparkMax(33, rev.SparkLowLevel.MotorType.kBrushless)
+        self.followerFlywheelMotor = rev.SparkFlex(33, rev.SparkLowLevel.MotorType.kBrushless)
 
         # Set up configs for each motor
         self.configureMotor(self.feedMotor, self.robotConfigs.shooterFeedMotorPIDF, self.robotConfigs.shooterInverted[0])

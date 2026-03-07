@@ -79,22 +79,18 @@ class RobotShooter:
         )
 
         self.xbox.y().onTrue(
-            commands2.cmd.runOnce(lambda: self.shooter.resetOffset, self.shooter)
+            commands2.cmd.runOnce(self.shooter.resetOffset, self.shooter)
         )
 
     def testPeriodic(self):
         self.feedMotorPIDF: typing.Tuple[float, float, float, float] = wpilib.SmartDashboard.getNumberArray("Feed PIDF", [0, 0, 0, 0])
         self.leadFlywheelMotorPIDF: typing.Tuple[float, float, float, float] = wpilib.SmartDashboard.getNumberArray("Lead Flywheel PIDF", [0, 0, 0, 0])
-        self.followerFlywheelMotorPIDF: typing.Tuple[float, float, float, float] = wpilib.SmartDashboard.getNumberArray("Follower Flywheel PIDF", [0, 0, 0, 0])
 
         self.configs.closedLoop.pidf(*self.feedMotorPIDF, rev.ClosedLoopSlot.kSlot0)
         self.shooter.motors["feed"].configure(self.configs, rev.ResetMode.kNoResetSafeParameters, rev.PersistMode.kNoPersistParameters)
 
         self.configs.closedLoop.pidf(*self.leadFlywheelMotorPIDF, rev.ClosedLoopSlot.kSlot0)
         self.shooter.motors["lead"].configure(self.configs, rev.ResetMode.kNoResetSafeParameters, rev.PersistMode.kNoPersistParameters)
-
-        self.configs.closedLoop.pidf(*self.followerFlywheelMotorPIDF, rev.ClosedLoopSlot.kSlot0)
-        self.shooter.motors["follower"].configure(self.configs, rev.ResetMode.kNoResetSafeParameters, rev.PersistMode.kNoPersistParameters)
 
     def getDeployInfo(self, key: str) -> str:
         """Gets the Git SHA of the deployed robot by parsing ~/deploy.json and returning the git-hash from the JSON key OR if deploy.json is unavailable will return "unknown"
