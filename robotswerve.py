@@ -55,8 +55,8 @@ class RobotSwerve:
 
         # HID setup
         wpilib.DriverStation.silenceJoystickConnectionWarning(True)
-        self.driver_controller = wpilib.XboxController(0)
-        self.mech_controller = wpilib.XboxController(1)
+        self.driver_controller = commands2.button.CommandXboxController(0)
+        self.mech_controller = commands2.button.CommandXboxController(1)
 
         # Autonomous setup
         self.auto_command = None
@@ -110,6 +110,8 @@ class RobotSwerve:
                 if not self.caughtPeriodicVisionError:
                     self.caughtPeriodicVisionError = True
                     wpilib.reportError("Retrieval of vision info failed in periodic", printTrace=True)
+
+        self.mech_controller.x().onTrue(self.hopper.unjamHopper())
 
     def disabledInit(self):
         self.drivetrain.set_motor_stop_modes(to_drive=True, to_break=True, all_motor_override=True, burn_flash=False)

@@ -1,7 +1,7 @@
 import commands2
 import rev
 
-class BallPitHopper(commands2.SubsystemBase):
+class BallPitHopper(commands2.Subsystem):
     def __init__(self) -> None:
         """
         Creates the hopper motor
@@ -22,3 +22,9 @@ class BallPitHopper(commands2.SubsystemBase):
             None - function to be used elsewhere
         """
         self.hopperMotor.set(percent)
+
+    def unjamHopper(self):
+        return commands2.cmd.sequence(
+        commands2.cmd.run(lambda: self.hopperMotor.set(-0.5), self).withTimeout(0.5),
+        commands2.cmd.run(lambda: self.hopperMotor.set(0.5), self).withTimeout(0.5)
+        )
