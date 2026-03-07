@@ -139,18 +139,18 @@ class WpilogAnalyzer:
                 if record.isControl():
                     continue
 
-                entry_info = entries.get(record.entry)
+                entry_info = entries.get(record.getEntry())
                 if entry_info is None:
                     continue
 
-                ts_sec = record.timestamp / 1_000_000.0
+                ts_sec = record.getTimestamp() / 1_000_000.0
                 if first_timestamp is None:
                     first_timestamp = ts_sec
                 last_timestamp = ts_sec
 
                 try:
                     # Voltage
-                    if record.entry in voltage_ids:
+                    if record.getEntry() in voltage_ids:
                         v = self._get_numeric(record, entry_info['type'])
                         if v is not None:
                             if stats.start_voltage is None:
@@ -164,7 +164,7 @@ class WpilogAnalyzer:
                                 stats.max_voltage = v
 
                     # Brownout
-                    if record.entry in brownout_ids:
+                    if record.getEntry() in brownout_ids:
                         val = record.getBoolean()
                         if val and not prev_brownout:
                             stats.brownout_count += 1
@@ -174,7 +174,7 @@ class WpilogAnalyzer:
                         prev_brownout = val
 
                     # DS Connected
-                    if record.entry in ds_connected_ids:
+                    if record.getEntry() in ds_connected_ids:
                         val = record.getBoolean()
                         if not val and prev_ds_connected:
                             stats.disconnect_count += 1
@@ -185,7 +185,7 @@ class WpilogAnalyzer:
 
                     # Mode transitions
                     for mode_name, ids in mode_ids.items():
-                        if record.entry in ids:
+                        if record.getEntry() in ids:
                             val = record.getBoolean()
                             prev = mode_state.get(mode_name)
                             if prev is None or val != prev:
@@ -199,7 +199,7 @@ class WpilogAnalyzer:
                                     })
 
                     # Controller config hash
-                    if record.entry in config_hash_ids:
+                    if record.getEntry() in config_hash_ids:
                         stats.controller_config_hash = record.getString()
 
                 except Exception:

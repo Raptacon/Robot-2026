@@ -177,7 +177,7 @@ def _run_analysis(analyzer: WpilogAnalyzer, registry: CallbackRegistry,
         logger.exception(f"Analysis failed for {match_dir}")
 
 
-def run_server(bind: str, port: int, output_dir: str = None):
+def run_server(bind: str, port: int, output_dir: str = None, debug: bool = False):
     """Start the log receiver HTTP server."""
     if output_dir is None:
         output_dir = os.path.join(Path.home(), 'Documents', 'robotlogs')
@@ -201,7 +201,7 @@ def run_server(bind: str, port: int, output_dir: str = None):
         '[%(asctime)s] %(message)s', datefmt='%H:%M:%S'
     ))
     logger.addHandler(console_handler)
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG if debug else logging.INFO)
 
     LogReceiverHandler.output_dir = out_path
     analyzer = WpilogAnalyzer()

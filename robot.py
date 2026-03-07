@@ -41,8 +41,7 @@ class MyRobot(commands2.TimedCommandRobot):
             self.control_listener = None
             wpilib.reportError("Unable to create ControlListener", printTrace=True)
 
-        # Log uploader — only uploads after robot has been enabled at least once
-        self.__hasBeenEnabled = False
+        # Log uploader for match monitor
         try:
             self.log_uploader = LogUploader(self.control_listener) if self.control_listener else None
         except Exception:
@@ -92,19 +91,12 @@ class MyRobot(commands2.TimedCommandRobot):
     def robotPeriodic(self) -> None:
         self.__callAndCatch(self.container.robotPeriodic)
 
-        # Track if the robot has ever been enabled so log upload
-        # only triggers on disable after a real match/test cycle
-        if not self.__hasBeenEnabled and wpilib.DriverStation.isEnabled():
-            self.__hasBeenEnabled = True
-
         wpilib.SmartDashboard.putNumber("Code Crash Count", self.__errorCatchedCount)
 
     def disabledInit(self) -> None:
         """This function is called once each time the robot enters Disabled mode."""
         self.container.disabledInit()
-        print(f"[Robot] disabledInit: hasBeenEnabled={self.__hasBeenEnabled}, "
-              f"uploader={'yes' if self.log_uploader else 'no'}")
-        if self.__hasBeenEnabled and self.log_uploader is not None:
+        if self.log_uploader is not None:
             self.log_uploader.start_upload()
 
     def disabledPeriodic(self) -> None:

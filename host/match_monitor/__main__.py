@@ -12,8 +12,10 @@ def main():
                         help='Directory to save received logs (default: ~/Documents/robotlogs)')
     parser.add_argument('--bind', type=str, default='0.0.0.0',
                         help='Address to bind to (default: 0.0.0.0)')
+    parser.add_argument('--debug', action='store_true',
+                        help='Enable debug logging (shows connection attempts)')
     args = parser.parse_args()
-    run_server(args.bind, args.port, args.output_dir)
+    run_server(args.bind, args.port, args.output_dir, debug=args.debug)
 
 
 if __name__ == '__main__':

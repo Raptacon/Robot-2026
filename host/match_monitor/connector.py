@@ -57,8 +57,8 @@ class RobotConnector:
                     logger.info(f"Connected to robot at {addr}:{CONTROL_PORT}")
                     self._handle_connection(sock, addr)
                     logger.info(f"Disconnected from robot at {addr}, resuming polling")
-                except (socket.timeout, ConnectionRefusedError, OSError):
-                    pass
+                except (socket.timeout, ConnectionRefusedError, OSError) as e:
+                    logger.debug(f"Cannot reach {addr}:{CONTROL_PORT} — {e}")
                 except Exception:
                     logger.exception(f"Error connecting to {addr}")
 
