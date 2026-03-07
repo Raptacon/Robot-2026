@@ -16,7 +16,6 @@ import wpilib
 import wpimath
 from commands2.button import Trigger
 from pathplannerlib.auto import AutoBuilder
-from pathplannerlib.path import PathPlannerPath
 
 class RobotSwerve:
     """
@@ -32,9 +31,9 @@ class RobotSwerve:
 
         # Subsystem instantiation
         self.drivetrain = SwerveDrivetrain()
-        
-        # Alliance instantiaion
-        self.alliance = "red" if self.drivetrain.flip_to_red_alliance() else "blue"
+
+        # Alliance instantiation
+        self.updateAlliance()
 
         # Vision setup
         try:
@@ -58,11 +57,6 @@ class RobotSwerve:
         self.auto_command = None
         self.auto_chooser = AutoBuilder.buildAutoChooser()
         wpilib.SmartDashboard.putData("Select auto routine", self.auto_chooser)
-
-        self.teleop_stem_paths = {
-            start_location: PathPlannerPath.fromPathFile(start_location)
-            for start_location in [f"Stem_Reef_F{n}" for n in range(1, 7)] + [f"Stem_Reef_N{n}" for n in range(1, 7)]
-        }
 
         # Telemetry setup
         wpilib.SmartDashboard.putNumber("Drivetrain speed", 1)
@@ -108,6 +102,7 @@ class RobotSwerve:
                     wpilib.reportError("Retrieval of vision info failed in periodic", printTrace=True)
 
     def disabledInit(self):
+        self.updateAlliance()
         self.drivetrain.set_motor_stop_modes(to_drive=True, to_break=True, all_motor_override=True, burn_flash=False)
         self.drivetrain.stop_driving()
 
@@ -115,6 +110,7 @@ class RobotSwerve:
         pass
 
     def autonomousInit(self):
+        self.updateAlliance()
         self.auto_command = self.auto_chooser.getSelected()
         if self.auto_command:
             self.auto_command.schedule()
@@ -125,13 +121,9 @@ class RobotSwerve:
         pass
 
     def teleopInit(self):
+        self.updateAlliance()
         if self.auto_command:
             self.auto_command.cancel()
-
-        self.alliance = "blue"
-        if self.drivetrain.flip_to_red_alliance():
-            self.alliance = "red"
-        self.teleop_auto_command = None
 
         self.drivetrain.setDefaultCommand(
             DefaultDrive(
@@ -150,7 +142,19 @@ class RobotSwerve:
         self.drivetrain.setSpeedMultiplier(self.speedMultiplier)
 
     def testInit(self):
+        #TODO Move to NT listener on change listener
+        self.updateAlliance()
         commands2.CommandScheduler.getInstance().cancelAll()
+        self.drivetrain.setDefaultCommand(
+            DefaultDrive(
+                self.drivetrain,
+                lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftY(), 0.06),
+                lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftX(), 0.06),
+                lambda: wpimath.applyDeadband(-1 * self.driver_controller.getRightX(), 0.1),
+                lambda: not self.driver_controller.getRightBumperButton()
+            )
+        )
+        commands2.cmd.run(lambda: self.drivetrain.drive(2, 0, 0, False), self.drivetrain).withTimeout(5).schedule()
 
     def testPeriodic(self):
         pass
@@ -182,6 +186,13 @@ class RobotSwerve:
             return "unknown"
         except json.JSONDecodeError:
             return "bad json in deploy file check for unescaped "
+
+    def updateAlliance(self) -> None:
+        """
+        Update the alliance the robot is on
+        """
+        self.alliance = wpilib.DriverStation.getAlliance()
+        self.drivetrain.update_alliance_flag(self.alliance)
 
     def setAlignmentTag(self, alignmentTagId: int | None) -> None:
         """
