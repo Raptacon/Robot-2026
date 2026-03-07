@@ -11,11 +11,11 @@ pip install -r host/match_monitor/requirements.txt
 ## Running
 
 ```
-python -m host.match_monitor --port 5810
+python -m host.match_monitor
 ```
 
 Options:
-- `--port` — port to listen on (default: 8510; use 5810 on FRC field network)
+- `--port` — port to listen on (default: 5800)
 - `--bind` — address to bind to (default: 0.0.0.0)
 - `--output-dir` — where to save logs (default: `~/Documents/robotlogs`)
 
@@ -24,17 +24,9 @@ Options:
 Port 5810 requires a firewall rule. Run once in an **elevated PowerShell** (Run as Administrator):
 
 ```powershell
-New-NetFirewallRule -DisplayName "FRC Match Monitor In"  -Direction Inbound  -Protocol TCP -LocalPort 5810 -Action Allow
-New-NetFirewallRule -DisplayName "FRC Match Monitor Out" -Direction Outbound -Protocol TCP -LocalPort 5810 -Action Allow
+New-NetFirewallRule -DisplayName "FRC Match Monitor In"  -Direction Inbound  -Protocol TCP -LocalPort 5800 -Action Allow
+New-NetFirewallRule -DisplayName "FRC Match Monitor Out" -Direction Outbound -Protocol TCP -LocalPort 5800 -Action Allow
 ```
-
-If port 5810 is excluded by Windows (Hyper-V/WSL2 reserves ranges), check:
-
-```powershell
-netsh interface ipv4 show excludedportrange protocol=tcp
-```
-
-Use `--port 8510` to avoid the reserved range, or run the server as Administrator.
 
 ## Output
 

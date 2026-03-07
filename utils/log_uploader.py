@@ -34,7 +34,7 @@ class LogUploader:
 
     receiver_ip = ntproperty('/LogUploader/receiver_ip', '10.32.0.5',
                              writeDefault=True, persistent=True)
-    receiver_port = ntproperty('/LogUploader/receiver_port', 5810,
+    receiver_port = ntproperty('/LogUploader/receiver_port', 5800,
                                writeDefault=True, persistent=True)
     upload_enabled = ntproperty('/LogUploader/enabled', True,
                                 writeDefault=True, persistent=True)
