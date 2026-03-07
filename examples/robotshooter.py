@@ -50,7 +50,8 @@ class RobotShooter:
         self.xbox.povDown().onTrue(commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(-ShooterConfig.shooterOffsetDelta), self.shooter))
 
         # TODO: calculate range based on odometry
-        self.shooter.setDefaultCommand(lambda: self.shooter.setRpmUsingLookup(1))
+        # Crashes robotpy sim
+        # self.shooter.setDefaultCommand(self.shooter, lambda: self.shooter.setRpmUsingLookup(1))
 
     def teleopPeriodic(self):
         wpilib.SmartDashboard.putNumber("Feed_Velocity", self.shooter.getVelocity('feed'))
