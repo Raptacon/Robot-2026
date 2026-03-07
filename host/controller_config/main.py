@@ -13,6 +13,18 @@ import argparse
 import sys
 from pathlib import Path
 
+try:
+    import tkinter  # noqa: F401
+except ImportError:
+    print(
+        "Error: tkinter is not installed.\n"
+        "On macOS with Homebrew Python, run:\n"
+        "    brew install python-tk\n"
+        "Then retry.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
 def _get_project_root() -> Path:
     """Return the project root, handling PyInstaller frozen bundles."""
     if getattr(sys, 'frozen', False):
