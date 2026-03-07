@@ -149,6 +149,16 @@ class ControllerCanvas(tk.Frame):
                 if isinstance(pos, (list, tuple)) and len(pos) == 2:
                     self._custom_label_pos[name] = (int(pos[0]), int(pos[1]))
 
+        # DPI-aware font scaling: tkinter font sizes are in points (1/72 inch).
+        # At 96 DPI (Windows), 9pt = 12 physical pixels.
+        # At 72 DPI (macOS), 9pt = 9 physical pixels — 25% smaller.
+        # Correct by scaling fonts up to match the Windows 96 DPI baseline.
+        try:
+            actual_dpi = self.winfo_fpixels('1i')
+            self._dpi_scale = max(96.0 / actual_dpi, 1.0)
+        except Exception:
+            self._dpi_scale = 1.0
+
         # Initialize scaled sizes at reference scale (updated each redraw)
         self._compute_scaled_sizes(1.0)
 
@@ -461,9 +471,10 @@ class ControllerCanvas(tk.Frame):
         # so the controller image fills more space as the window shrinks.
         pad_frac = 0.12  # fraction of canvas width reserved per side
         pad_x = max(50, int(canvas_w * pad_frac))
-        pad_y = max(30, int(canvas_h * 0.06))
+        pad_top = max(20, int(canvas_h * 0.04))
+        pad_bot = max(50, int(canvas_h * 0.10))  # extra bottom room for Mac DPI scaling
         avail_w = canvas_w - 2 * pad_x
-        avail_h = canvas_h - 2 * pad_y
+        avail_h = canvas_h - pad_top - pad_bot
 
         scale = min(avail_w / self._img_width, avail_h / self._img_height)
         scale = max(scale, 0.08)
@@ -478,7 +489,7 @@ class ControllerCanvas(tk.Frame):
         # Center horizontally, shift down slightly to leave room for
         # rumble icons above the controller and reduce bottom whitespace.
         img_x = canvas_w // 2
-        img_y = int(canvas_h * 0.54)
+        img_y = int(canvas_h * 0.51)
         self._bg_image_id = self._canvas.create_image(
             img_x, img_y, image=self._tk_image, anchor=tk.CENTER)
 
@@ -528,7 +539,7 @@ class ControllerCanvas(tk.Frame):
         Reference sizes are defined for scale=1.0 (image at native res).
         Everything scales linearly so labels shrink/grow with the canvas.
         """
-        s = max(img_scale * self._LABEL_SCALE_BOOST, 0.25)
+        s = max(img_scale * self._LABEL_SCALE_BOOST * self._dpi_scale, 0.25)
         self._s = s
         self._box_w = max(100, int(_REF_BOX_WIDTH * s))
         self._box_h = max(22, int(_REF_BOX_HEIGHT * s))
