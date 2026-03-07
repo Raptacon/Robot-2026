@@ -43,6 +43,7 @@ normal ``class Foo:`` statement — Python just calls ``type()`` for you.
 """
 
 import logging
+import pathlib
 from typing import Callable
 
 import wpilib
@@ -400,11 +401,10 @@ def publish_bindings_nt(
 
 def publish_config_metadata(
     nt_base: str,
-    config_files: "list[pathlib.Path]",
+    config_files: list[pathlib.Path],
 ) -> None:
     """Publish config file paths and SHA-256 checksums to NT."""
     import hashlib
-    import pathlib  # noqa: F811 — needed for type hint above
 
     try:
         import ntcore
