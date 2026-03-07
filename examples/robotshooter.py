@@ -51,7 +51,7 @@ class RobotShooter:
 
         # TODO: calculate range based on odometry
         # Crashes robotpy sim
-        # self.shooter.setDefaultCommand(self.shooter, lambda: self.shooter.setRpmUsingLookup(1))
+        self.shooter.setDefaultCommand(commands2.cmd.run(lambda: self.shooter.setRpmUsingLookup(1), self.shooter))
 
     def teleopPeriodic(self):
         wpilib.SmartDashboard.putNumber("Feed_Velocity", self.shooter.getVelocity('feed'))
