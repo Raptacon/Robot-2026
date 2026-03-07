@@ -1,27 +1,22 @@
 import commands2
 import wpilib
-import wpimath
 from commands2.button import Trigger
 
 from commands.default_swerve_drive import DefaultDrive
 
 
 def register_controls(drivetrain, container):
-    """Wire HID controls for the drivetrain subsystem."""
-    driver = container.driver_controller
+    """Wire HID controls for the drivetrain subsystem.
 
-    # Cancel all commands when left trigger is pulled past halfway
-    Trigger(lambda: driver.getLeftTriggerAxis() > 0.5).onTrue(
-        commands2.cmd.runOnce(
-            lambda: commands2.CommandScheduler.getInstance().cancelAll()
-        )
-    )
-
+    Most drive controls (cancel-all, speed toggle, NT sync) are already
+    configured in RobotSwerve._configure_controls() via InputFactory.
+    This method adds drivetrain-specific triggers that need the subsystem.
+    """
     # Update drivetrain motor idle modes 3s after the robot has been disabled.
     # to_break should be False at competitions where the robot is turned off between matches
     Trigger(wpilib.DriverStation.isDisabled).debounce(3).onTrue(
         commands2.cmd.runOnce(
-            drivetrain.set_motor_stop_modes(
+            lambda: drivetrain.set_motor_stop_modes(
                 to_drive=True, to_break=True,
                 all_motor_override=True, burn_flash=True
             ),
@@ -32,15 +27,13 @@ def register_controls(drivetrain, container):
 
 def teleop_init(drivetrain, container):
     """Called from teleopInit — sets the default drive command."""
-    driver = container.driver_controller
-
     drivetrain.setDefaultCommand(
         DefaultDrive(
             drivetrain,
-            lambda: wpimath.applyDeadband(-1 * driver.getLeftY(), 0.06),
-            lambda: wpimath.applyDeadband(-1 * driver.getLeftX(), 0.06),
-            lambda: wpimath.applyDeadband(-1 * driver.getRightX(), 0.1),
-            lambda: not driver.getRightBumperButton()
+            container.translate_x,
+            container.translate_y,
+            container.rotate,
+            lambda: not container.robot_relative_btn()
         )
     )
 

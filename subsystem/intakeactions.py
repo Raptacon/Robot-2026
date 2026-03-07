@@ -1,3 +1,4 @@
+import logging
 import wpilib
 import commands2
 import rev
@@ -6,6 +7,8 @@ import time
 
 from constants import CaptainPlanetConsts as intakeConsts
 # from config import OperatorRobotConfig
+
+logger = logging.getLogger(__name__)
 
 intakeVelocity = 0.3 #Speed (in rpm) in which the intake motor will move upon deployment/stowing
 intakeMotorThreshold = 1 #Used to determine whether or not intake is deployed
@@ -22,6 +25,11 @@ class IntakeSubsystem(commands2.SubsystemBase):
     def __init__(self, alternateConfiguration = False):
         #Initializes all devices
         #Alternate Configuration effectively just switches the motors used for intake deployment and rollers
+        logger.warning(
+            "Intake CAN IDs (intake=%d, roller=%d) are placeholders — "
+            "update CaptainPlanetConsts once hardware is wired",
+            intakeConsts.kIntakeMotorCanId, intakeConsts.kRollerMotorCanId,
+        )
         if alternateConfiguration == True:
             # self.intakeMotor = rev.SparkMax(intakeConsts.kRollerMotorCanId, rev.SparkLowLevel.MotorType.kBrushless)
             # self.intakeMotorEncoder = self.intakeMotor.getEncoder()
@@ -313,3 +321,15 @@ class IntakeSubsystem(commands2.SubsystemBase):
         # self.automaticRollerActivation()
         # self.intakeSlowdown()
         self.jamDetection()
+
+
+# ---------------------------------------------------------------------------
+# Self-registration
+# ---------------------------------------------------------------------------
+from utils.subsystem_factory import SubsystemState, register_subsystem
+
+register_subsystem(
+    name="intake",
+    default_state=SubsystemState.enabled,
+    creator=lambda subs: IntakeSubsystem(),
+)

@@ -129,8 +129,8 @@ class SwerveModuleMk4iL2Consts(SwerveModuleMk4iConsts):
 
 
 class CaptainPlanetConsts:
-    kIntakeMotorCanId = 11
-    kRollerMotorCanId = 56
+    kIntakeMotorCanId = 40
+    kRollerMotorCanId = 41
     kMotorInverted = False
     kCurrentLimitAmps = 30
     # kBreakBeam = 2

@@ -12,6 +12,7 @@ All names are re-exported here so existing imports continue to work:
 
 from .robot_constants import RobotConstants
 from .swerve_constants import (
+    CaptainPlanetConsts,
     SwerveModuleName,
     SwerveDriveConsts,
     SwerveModuleMk4iConsts,
@@ -20,6 +21,7 @@ from .swerve_constants import (
 )
 
 __all__ = [
+    "CaptainPlanetConsts",
     "RobotConstants",
     "SwerveModuleName",
     "SwerveDriveConsts",
