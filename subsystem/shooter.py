@@ -5,7 +5,7 @@ from commands2 import Subsystem
 from typing import Dict
 from math import floor, sqrt
 from enum import StrEnum
-
+import numpy as np
 
 class ShooterMotorNames(StrEnum):
     """
@@ -25,6 +25,19 @@ class Shooter(Subsystem):
 
         # Create lookup table of 100 elements (index 0-99)
         self.lookupTable = ([1000]*25) + ([2000]*25) + ([3000]*25) + ([4000]*25)
+        
+        self.newLookupTable = [
+            (0.0, 1000),
+            (1.0, 1500),
+            (2.0, 2000),
+            (3.0, 3000),
+            (4.0, 3500),
+            (5.0, 4000),
+            ]
+        # Create an array of just distances
+        self.lookupShooterDistances = np.array([d for d, _ in self.newLookupTable])
+        # Create an array of just RPMs
+        self.lookupShooterRpms = np.array([d for _, d in self.newLookupTable])
 
         # Instantiate motors
         self.feedMotor = rev.SparkMax(30, rev.SparkLowLevel.MotorType.kBrushless)
@@ -160,6 +173,8 @@ class Shooter(Subsystem):
                 self.RPM = self.lookupTable[-1]
             else:
                 self.RPM = 0
+
+        # self.RPM = float(np.interp(distance, self.lookupShooterDistances, self.lookupShooterRpms))
 
     def modifyOffset(self, offsetDelta: float):
         """
