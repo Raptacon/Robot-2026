@@ -456,12 +456,17 @@ class ControllerCanvas(tk.Frame):
         if canvas_w < 10 or canvas_h < 10:
             return
 
-        # Scale image to fit canvas with padding for labels
-        pad_x = _REF_BOX_WIDTH + 30
+        # Scale image to fit canvas with proportional padding for labels.
+        # Reserve a fraction of canvas width for label columns on each side
+        # so the controller image fills more space as the window shrinks.
+        pad_frac = 0.12  # fraction of canvas width reserved per side
+        pad_x = max(50, int(canvas_w * pad_frac))
+        pad_y = max(30, int(canvas_h * 0.06))
         avail_w = canvas_w - 2 * pad_x
-        avail_h = canvas_h - 40
+        avail_h = canvas_h - 2 * pad_y
 
         scale = min(avail_w / self._img_width, avail_h / self._img_height)
+        scale = max(scale, 0.08)
         scale = min(scale, 1.5)
 
         new_w = int(self._img_width * scale)
@@ -470,9 +475,10 @@ class ControllerCanvas(tk.Frame):
         resized = self._base_image.resize((new_w, new_h), Image.LANCZOS)
         self._tk_image = ImageTk.PhotoImage(resized)
 
-        # Center the image
+        # Center horizontally, shift down slightly to leave room for
+        # rumble icons above the controller and reduce bottom whitespace.
         img_x = canvas_w // 2
-        img_y = canvas_h // 2
+        img_y = int(canvas_h * 0.54)
         self._bg_image_id = self._canvas.create_image(
             img_x, img_y, image=self._tk_image, anchor=tk.CENTER)
 
@@ -522,17 +528,17 @@ class ControllerCanvas(tk.Frame):
         Reference sizes are defined for scale=1.0 (image at native res).
         Everything scales linearly so labels shrink/grow with the canvas.
         """
-        s = max(img_scale * self._LABEL_SCALE_BOOST, 0.15)
+        s = max(img_scale * self._LABEL_SCALE_BOOST, 0.25)
         self._s = s
-        self._box_w = int(_REF_BOX_WIDTH * s)
-        self._box_h = int(_REF_BOX_HEIGHT * s)
-        self._box_pad = max(2, int(_REF_BOX_PAD * s))
-        self._label_font_size = max(6, int(_REF_LABEL_FONT * s))
-        self._action_font_size = max(7, int(_REF_ACTION_FONT * s))
-        self._plus_font_size = max(10, int(_REF_PLUS_FONT * s))
-        self._label_y_offset = max(10, int(_REF_LABEL_Y * s))
-        self._action_step = max(12, int(_REF_ACTION_STEP * s))
-        self._icon_size = max(8, self._box_h - int(8 * s))
+        self._box_w = max(100, int(_REF_BOX_WIDTH * s))
+        self._box_h = max(22, int(_REF_BOX_HEIGHT * s))
+        self._box_pad = max(3, int(_REF_BOX_PAD * s))
+        self._label_font_size = max(8, int(_REF_LABEL_FONT * s))
+        self._action_font_size = max(9, int(_REF_ACTION_FONT * s))
+        self._plus_font_size = max(12, int(_REF_PLUS_FONT * s))
+        self._label_y_offset = max(12, int(_REF_LABEL_Y * s))
+        self._action_step = max(14, int(_REF_ACTION_STEP * s))
+        self._icon_size = max(10, self._box_h - int(8 * s))
 
     def _map_frac(self, frac_x: float, frac_y: float) -> tuple[float, float]:
         """Map fractional image coordinates (0-1) to canvas pixel position."""
