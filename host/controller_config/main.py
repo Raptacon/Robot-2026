@@ -13,17 +13,12 @@ import argparse
 import sys
 from pathlib import Path
 
+_HAS_TKINTER = True
 try:
-    import tkinter  # noqa: F401
+    import tkinter as _tkinter  # noqa: F401
 except ImportError:
-    print(
-        "Error: tkinter is not installed.\n"
-        "On macOS with Homebrew Python, run:\n"
-        "    brew install python-tk\n"
-        "Then retry.",
-        file=sys.stderr,
-    )
-    sys.exit(1)
+    _HAS_TKINTER = False
+
 
 def _get_project_root() -> Path:
     """Return the project root, handling PyInstaller frozen bundles."""
@@ -40,6 +35,16 @@ if str(_project_root) not in sys.path:
 
 
 def main():
+    if not _HAS_TKINTER:
+        print(
+            "Error: tkinter is not installed.\n"
+            "On macOS with Homebrew Python, run:\n"
+            "    brew install python-tk\n"
+            "Then retry.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     parser = argparse.ArgumentParser(
         description="FRC Controller Configuration Tool",
     )
