@@ -4,7 +4,7 @@ Physical constants and identifiers for the swerve drivetrain.
 
 # Native imports
 import math
-from enum import StrEnum
+from enum import Enum, StrEnum
 
 # Internal imports
 from .robot_constants import RobotConstants
@@ -51,7 +51,7 @@ class SwerveDriveConsts(RobotConstants):
         SwerveModuleName.BACK_RIGHT: True,
     }
 
-    maxTranslationMPS: float = 4.14528
+    maxTranslationMPS: float = 4.6
     maxAngularDPS: float = math.degrees(
         maxTranslationMPS / math.hypot(*moduleLocations[SwerveModuleName.FRONT_LEFT])
     )
@@ -106,7 +106,7 @@ class SwerveModuleMk4iL2Consts(SwerveModuleMk4iConsts):
 
     wheelDiameter: float = 0.10033  # in meters
     # COf: coefficient, force/force (no units)
-    wheelCOF: float = 1.00548
+    wheelCOF: float = 1.0130211
     driveGearRatio: float = 6.75
     steerGearRatio: float = 150 / 7
 
@@ -122,3 +122,24 @@ class SwerveModuleMk4iL2Consts(SwerveModuleMk4iConsts):
     steerVelocityConversionFactor: float = steerPositionConversionFactor / 60.0
 
     moduleType: str = "Mk4i_L2"
+
+#############################
+# INTAKE ###################
+#############################
+
+
+class CaptainPlanetConsts:
+    kIntakeMotorCanId = 11
+    kRollerMotorCanId = 56
+    kMotorInverted = False
+    kCurrentLimitAmps = 30
+    # kBreakBeam = 2
+    # kFrontBreakBeam = 2
+    # kBackBreakBeam = 0
+    # kHallEffectSensor = 6
+    kDefaultSpeed = 0.15
+    kOperatorDampener = 0.15
+    class BreakBeamActionOptions(Enum):
+        DONOTHING = 1
+        TOFRONT = 2
+        TOBACK = 3

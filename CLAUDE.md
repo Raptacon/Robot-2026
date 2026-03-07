@@ -43,6 +43,13 @@ make deploy             # Deploys libraries and code to the robot. (requires rob
 python -m robotpy deploy
 ```
 
+**Run controller config GUI:**
+```bash
+pip install -r host/requirements.txt   # First time only (Pillow, PyYAML)
+python -m host.controller_config       # Launch GUI
+```
+
+
 **Style:**
 Follow major style guidelines from PEP8 based on what is configured for flake8.
 
@@ -119,6 +126,22 @@ Logs controller inputs, odometry, swerve module states, and driver station data 
 
 Autonomous routines are defined as `.auto` and `.path` files in `deploy/pathplanner/`. PathPlanner is configured in `SwerveDrivetrain.configure_path_planner()` via `AutoBuilder`. The auto chooser is exposed on SmartDashboard.
 
+### Controller Config (`utils/controller/` and `host/controller_config/`)
+
+Shared data model (`utils/controller/model.py`) defines `ActionDefinition`, `ControllerConfig`, and `FullConfig`. Actions use qualified names: `group.name` (e.g. `intake.run`). Input types: BUTTON, ANALOG, OUTPUT, BOOLEAN_TRIGGER, VIRTUAL_ANALOG. D-pad directions are treated as buttons (factory converts POV angle to booleans at runtime). Config stored in `data/controller.yaml`. YAML I/O in `config_io.py`. Portable curve math in `utils/math/curves.py` (shared by robot code and host GUI).
+
+See `host/controller_config/ARCHITECTURE.md` for detailed GUI architecture and design patterns.
+
+### Input Factory (`utils/input/`)
+
+Config-driven controller input management. `InputFactory` loads YAML config, creates `wpilib.XboxController` instances, and provides `getButton()`, `getAnalog()`, `getRumbleControl()` and raw variants. All managed objects are eagerly created at init so NT entries publish immediately. Analog shaping pipeline: inversion -> deadband -> curve -> scale -> slew rate limit. Parameters published to NT under `/inputs/actions/<group>/<action>/` for runtime tuning; NT sync is automatic each scheduler cycle. Create the factory in `robotInit` **before** subsystems; use `get_factory()` for subsystem-local access.
+
+See `examples/inputFactory/` for a complete working example.
+
+## Future
+
+- [ ] JSON Schema for controller config YAML validation — IDE autocompletion + red squiggles. `config_io.py` abstraction makes format swaps straightforward.
+
 ### CAN ID Convention
 
 Drivetrain modules start at CAN ID 50 with 3 consecutive IDs per module (drive, steer, encoder). Additional mechanisms count backwards from CAN ID 40. See `subsystem/CAN_CONFIG.md`.
@@ -141,7 +164,6 @@ GitHub Actions (`.github/workflows/robot_ci.yml`) runs on Windows:
 - Lint (critical): flake8 with select rules for syntax errors and undefined names
 - Lint (extra): flake8 with complexity and line-length checks (non-blocking)
 - Docstring verification (non-blocking)
-
 
 ## Unit Tests
  - Unit tests should be encouraged and written
@@ -168,4 +190,3 @@ See `examples/nt-persistence-test/` for a comparison of persistence approaches.
 
 ## Claude.md updates
 If Claude sees an area that would benifit for remembering or having instructions in the future Claude should suggest adding it to CLAUDE.md
-

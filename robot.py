@@ -8,8 +8,10 @@ from constants import RobotConstants
 from robotswerve import RobotSwerve
 from utils.deploy_info import publish_deploy_info
 from utils.loop_timing import LoopTimer
+from utils.datalog_bridge import setup_logging
 import wpilib
 import logging
+
 
 class MyRobot(commands2.TimedCommandRobot):
     """
@@ -25,13 +27,16 @@ class MyRobot(commands2.TimedCommandRobot):
 
         self.__errorLogged = False
         self.__lastError = None
-        self.__errorCatchedCount = 0
+        self.__errorCaughtCount = 0
         self.__loopOverrunAlert = wpilib.Alert(
             "Loop overrun", wpilib.Alert.AlertType.kWarning
         )
         self.__loopOverrunCount = 0
         self.__loopTimer = wpilib.Timer()
         self.__loopTimer.start()
+
+        # Bridge Python logging -> wpilog + NT-controlled log level
+        setup_logging()
 
         self.__initFrameTiming()
 
@@ -67,7 +72,7 @@ class MyRobot(commands2.TimedCommandRobot):
             self.__loopOverrunAlert.set(overran)
             self.__loopTimer.reset()
 
-        wpilib.SmartDashboard.putNumber("Code Crash Count", self.__errorCatchedCount)
+        wpilib.SmartDashboard.putNumber("Code Crash Count", self.__errorCaughtCount)
         wpilib.SmartDashboard.putNumber("Loop Overrun Count", self.__loopOverrunCount)
         self.__frameTimingPeriodic()
 
@@ -158,7 +163,7 @@ class MyRobot(commands2.TimedCommandRobot):
             if self.isSimulation():
                 raise e
 
-            self.__errorCatchedCount = self.__errorCatchedCount + 1
+            self.__errorCaughtCount = self.__errorCaughtCount + 1
 
             if not self.__errorLogged:
                 logging.exception(f"(CRASH CATCH) {name} error: ")

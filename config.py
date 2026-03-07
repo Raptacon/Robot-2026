@@ -18,10 +18,10 @@ class OperatorRobotConfig:
     # Give in front-left, front-right, back-left, back-right order
     # starting rotational position for the absolute encoders
     swerve_abs_encoder_calibrations: Tuple[float] = (
-        241.3476 / 360.0, 4.131 / 360.0, 1.14264 / 360.0, 59.41404 / 360.0
+        10.283203125 / 360.0, 323.6148 / 360.0,  347.2737188 / 360.0, 83.2865625 / 360.0
     )
-    swerve_steer_pid: Tuple[float] = (0.007, 0, 0)
-    swerve_drive_pid: Tuple[float] = (0.0020645, 0, 0, 1 / 473)
+    swerve_steer_pid: Tuple[float] = (0.011, 0, 0)
+    swerve_drive_pid: Tuple[float] = (0.0021, 0, 0, 0) # TODO: tune PIDs
     pathplanner_translation_pid: Tuple[float] = (4.0, 0.0, 0.0)
     pathplanner_rotation_pid: Tuple[float] = (5.0, 0.0, 0.0)
 
@@ -49,3 +49,5 @@ class OperatorRobotConfig:
     # Values to give are: max translation velocity (mps), max translation acceleration (mps^2),
     # max angular velocity (dps), max angular acceleration (dps^2).
     teleop_pathplan_constraints: Tuple[float] = (2.5, 2.0, 360.0, 360.0)
+
+    # intake_roller_pid: Tuple[float] = [0, 0, 0, 1 / 565]

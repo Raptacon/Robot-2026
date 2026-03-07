@@ -1,9 +1,20 @@
+"""
+Container to hold the main robot code.
+
+## Controller Map
+
+![Driver Controller](./assets/2026bot_controller_map_page1.png)
+
+![Operator Controller](./assets/2026bot_controller_map_page2.png)
+"""
+
 # Native imports
 import logging
 
 # Internal imports
 from data.telemetry import Telemetry
 from subsystem.manifest import ROBOT_MANIFESTS
+from utils.input import InputFactory
 from utils.subsystem_factory import SubsystemRegistry
 
 # Third-party imports
@@ -12,6 +23,7 @@ import wpilib
 from ntcore.util import ntproperty
 from pathplannerlib.auto import AutoBuilder
 from pathplannerlib.path import PathPlannerPath
+
 
 logger = logging.getLogger(__name__)
 
@@ -34,8 +46,17 @@ class RobotSwerve:
     def __init__(self) -> None:
         # HID setup (must come before registry so controls modules can access controllers)
         wpilib.DriverStation.silenceJoystickConnectionWarning(True)
-        self.driver_controller = wpilib.XboxController(0)
-        self.mech_controller = wpilib.XboxController(1)
+        self.factory = InputFactory(config_path="data/inputs/2026bot.yaml")
+
+        # Speed toggle state
+        self._drive_scale_slow = 0.25
+        self._drive_scale_fast = 1
+        self._drive_is_slow = False
+
+        # TODO: Move input retrieval and binding into commands/{subsystem}_controls.py
+        # files as part of the subsystem registry refactor. Each subsystem's controls
+        # module should own its own factory.get*() calls and command wiring.
+        self._configure_controls()
 
         # Build manifest and create registry (container=self for controls discovery)
         manifest_builder = ROBOT_MANIFESTS.get(
@@ -63,6 +84,7 @@ class RobotSwerve:
             }
 
         # Telemetry setup (controller + driverstation logging)
+        wpilib.SmartDashboard.putNumber("Drivetrain speed", self._drive_scale_fast)
         self.enableTelemetry = wpilib.SmartDashboard.getBoolean("enableTelemetry", True)
         if self.enableTelemetry:
             self.telemetry = Telemetry()
@@ -79,12 +101,14 @@ class RobotSwerve:
         self.registry.run_all_telemetry()
 
     def disabledInit(self):
+        self.updateAlliance()
         self.registry.run_all_disabled_init()
 
     def disabledPeriodic(self):
         pass
 
     def autonomousInit(self):
+        self.updateAlliance()
         if self.auto_chooser is not None:
             self.auto_command = self.auto_chooser.getSelected()
         if self.auto_command:
@@ -96,6 +120,7 @@ class RobotSwerve:
         pass
 
     def teleopInit(self):
+        self.updateAlliance()
         if self.auto_command:
             self.auto_command.cancel()
 
@@ -111,3 +136,54 @@ class RobotSwerve:
 
     def testPeriodic(self):
         pass
+
+    def _configure_controls(self) -> None:
+        """Retrieve managed inputs from the factory and wire command bindings.
+
+        TODO: Move into commands/{subsystem}_controls.py files as part of the
+        subsystem registry refactor. Each subsystem's controls module would
+        call register_controls(subsystem, container) and own its own
+        factory.get*() calls and command wiring.
+        """
+        # Managed drive inputs
+        self.translate_x = self.factory.getAnalog("drivetrain.translate_x")
+        self.translate_y = self.factory.getAnalog("drivetrain.translate_y")
+        self.rotate = self.factory.getAnalog("drivetrain.rotate")
+        self.robot_relative_btn = self.factory.getRawButton("drivetrain.robot_relative")
+
+        # Cancel-all: event-driven via Trigger instead of polling
+        self.factory.getButton("drivetrain.cancel_all").onTrue(
+            commands2.cmd.runOnce(
+                lambda: commands2.CommandScheduler.getInstance().cancelAll()
+            )
+        )
+
+        # Speed toggle: Y button switches between slow and fast scale
+        self.factory.getButton("drivetrain.speed_toggle").onTrue(
+            commands2.cmd.runOnce(self._toggle_drive_scale)
+        )
+
+        # Map all drive axes' scale to a shared SmartDashboard entry.
+        # Dashboard changes and Y-button toggles both write to this path;
+        # the factory auto-syncs the value into all three analogs each cycle.
+        _SPEED_NT = "/SmartDashboard/Drivetrain speed"
+        for analog in (self.translate_x, self.translate_y, self.rotate):
+            analog.mapParamToNtPath(_SPEED_NT, "scale")
+
+    def _toggle_drive_scale(self) -> None:
+        """Toggle between slow and fast drive scale presets.
+
+        Writes the new scale to SmartDashboard; the factory auto-syncs
+        it into all three drive analogs via mapParamToNtPath each cycle.
+        """
+        self._drive_is_slow = not self._drive_is_slow
+        scale = self._drive_scale_slow if self._drive_is_slow else self._drive_scale_fast
+        wpilib.SmartDashboard.putNumber("Drivetrain speed", scale)
+
+    def updateAlliance(self) -> None:
+        """
+        Update the alliance the robot is on
+        """
+        self.alliance = wpilib.DriverStation.getAlliance()
+        if self.drivetrain is not None:
+            self.drivetrain.update_alliance_flag(self.alliance)
