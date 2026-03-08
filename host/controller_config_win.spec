@@ -19,6 +19,7 @@ a = Analysis(
         ('../images/raptacongear.png', 'images'),
         ('../images/rumble.svg', 'images'),
         ('../images/Raptacon3200-BG-BW.png', 'images'),
+        ('../images/XboxControlIcons/Buttons Full Solid', 'images/XboxControlIcons/Buttons Full Solid'),
         ('../utils/__init__.py', 'utils'),
         ('../utils/controller', 'utils/controller'),
         ('../utils/math', 'utils/math'),
