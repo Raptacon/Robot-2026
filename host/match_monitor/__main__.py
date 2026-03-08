@@ -14,8 +14,28 @@ def main():
                         help='Address to bind to (default: 0.0.0.0)')
     parser.add_argument('--debug', action='store_true',
                         help='Enable debug logging (shows connection attempts)')
+    parser.add_argument('--tray', action='store_true',
+                        help='Run as a Windows system tray application (requires pystray)')
     args = parser.parse_args()
-    run_server(args.bind, args.port, args.output_dir, debug=args.debug)
+
+    if args.tray:
+        # If launched from python.exe (has a console window), re-launch under
+        # pythonw.exe so the originating shell/cmd window closes immediately.
+        import ctypes, sys, subprocess
+        from pathlib import Path
+        if ctypes.windll.kernel32.GetConsoleWindow():
+            pythonw = Path(sys.executable).with_name('pythonw.exe')
+            if pythonw.exists():
+                # sys.argv[0] is the __main__.py path when using -m, so
+                # reconstruct the command with explicit -m to preserve imports.
+                subprocess.Popen(
+                    [str(pythonw), '-m', 'host.match_monitor'] + sys.argv[1:],
+                )
+                sys.exit(0)
+        from .tray_app import run_server_tray
+        run_server_tray(args.bind, args.port, args.output_dir, debug=args.debug)
+    else:
+        run_server(args.bind, args.port, args.output_dir, debug=args.debug)
 
 
 if __name__ == '__main__':

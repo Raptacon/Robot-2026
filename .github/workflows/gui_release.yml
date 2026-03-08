@@ -1,4 +1,4 @@
-name: Build Controller Config GUI
+name: Build Host Tools
 
 on:
   release:
@@ -84,3 +84,60 @@ jobs:
         with:
           name: raptacon-controls-editor-${{ runner.os }}
           path: dist/${{ matrix.artifact_name }}
+
+  build-match-monitor:
+    runs-on: windows-latest
+    environment: CODE_SIGN_CERT
+
+    env:
+      CERT_BASE64: ${{ secrets.CODE_SIGN_CERT }}
+      CERT_PASSWORD: ${{ secrets.CODE_SIGN_PASSWORD }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.*'
+
+      - name: Install dependencies
+        run: |
+          pip install pyinstaller
+          pip install -r host/requirements.txt
+
+      - name: Generate ICO
+        run: python host/make_ico.py
+
+      - name: Build executable
+        run: |
+          cd host
+          pyinstaller match_monitor_win.spec --distpath ../dist --workpath ../build/match_monitor --clean -y
+
+      - name: Sign EXE (if cert configured)
+        if: env.CERT_BASE64 != ''
+        shell: pwsh
+        run: |
+          $signtool = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits" -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
+              Where-Object { $_.FullName -match 'x64' } |
+              Select-Object -First 1 -ExpandProperty FullName
+          if (-not $signtool) { throw "signtool.exe not found" }
+          Write-Host "Using: $signtool"
+          $certBytes = [Convert]::FromBase64String($env:CERT_BASE64)
+          [IO.File]::WriteAllBytes("$env:RUNNER_TEMP\cert.pfx", $certBytes)
+          & $signtool sign /f "$env:RUNNER_TEMP\cert.pfx" /p $env:CERT_PASSWORD `
+              /fd sha256 /tr http://timestamp.digicert.com /td sha256 `
+              /d "Raptacon Match Monitor" dist\raptacon-match-monitor.exe
+          Remove-Item "$env:RUNNER_TEMP\cert.pfx"
+
+      - name: Upload release asset
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/raptacon-match-monitor.exe
+
+      - name: Upload build artifact (workflow_dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: raptacon-match-monitor-Windows
+          path: dist/raptacon-match-monitor.exe

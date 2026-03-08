@@ -3,13 +3,14 @@
 import hashlib
 import json
 import logging
-import os
 import threading
 import time
 import zlib
+from dataclasses import dataclass
 from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
+from typing import Optional
 
 from .analyzer import WpilogAnalyzer
 from .callbacks import CallbackRegistry
@@ -18,6 +19,39 @@ from .ds_log_reader import collect_for_match
 from .match_data_client import MatchDataClient
 
 logger = logging.getLogger("match_monitor")
+
+
+def _save_config_key(config_path: Path, key: str, value) -> None:
+    """Read/update/write a single key in match_monitor_config.json."""
+    cfg: dict = {}
+    if config_path.exists():
+        try:
+            cfg = json.loads(config_path.read_text())
+        except Exception:
+            pass
+    cfg[key] = value
+    try:
+        config_path.write_text(json.dumps(cfg, indent=4) + '\n')
+    except Exception as exc:
+        logger.warning(f"Could not save config: {exc}")
+
+
+@dataclass
+class ServerContext:
+    """All live components created by setup_server()."""
+    server: HTTPServer
+    connector: 'RobotConnector'
+    registry: 'CallbackRegistry'
+    discord_holder: list
+    match_client: object
+    console_handler: logging.Handler
+    file_handler: logging.Handler
+    log_dir: Path
+    out_path: Path
+    config_path: Path
+    code_dir_holder: list   # [Path | None] — mutable; updated by codedir command / tray
+    log_file: Path
+
 
 LOG_LEVELS = {
     'debug': logging.DEBUG,
@@ -237,8 +271,18 @@ def _console_loop(connector: RobotConnector,
                   registry: 'CallbackRegistry',
                   discord_holder: list,
                   config_path: Path,
-                  repo_root: Path) -> None:
-    """Interactive command loop running in a daemon thread."""
+                  code_dir_holder: list,
+                  quit_callback=None,
+                  close_callback=None) -> None:
+    """Interactive command loop running in a daemon thread.
+
+    quit_callback:  called when the user types quit/exit/q.  If None, sends
+                    KeyboardInterrupt to the main thread.
+    close_callback: called when the console is dismissed without quitting
+                    (e.g. user closes the console window).  In tray mode this
+                    frees the console window and resets state without stopping
+                    the tray.
+    """
     saved_console_level = console_handler.level
     saved_file_level = file_handler.level
     console_off = False
@@ -289,7 +333,6 @@ def _console_loop(connector: RobotConnector,
 
         # log rotate
         if arg1 == 'rotate':
-            old_file = file_handler.baseFilename
             logger.removeHandler(file_handler)
             file_handler.close()
             new_log_file = log_dir / f"match_monitor_{datetime.now():%Y%m%d_%H%M%S}.log"
@@ -362,22 +405,6 @@ def _console_loop(connector: RobotConnector,
         print("  Usage: log [debug|info|warning|error|off|on]")
         print("         log console <level>  |  log file <level>  |  log rotate")
 
-    def _save_config_key(key: str, value) -> None:
-        """Read/update/write a single key in match_monitor_config.json."""
-        cfg: dict = {}
-        if config_path.exists():
-            try:
-                import json as _json
-                cfg = _json.loads(config_path.read_text())
-            except Exception:
-                pass
-        cfg[key] = value
-        try:
-            import json as _json
-            config_path.write_text(_json.dumps(cfg, indent=4) + '\n')
-        except Exception as exc:
-            print(f"  Warning: could not save config: {exc}")
-
     def _handle_discord(parts: list) -> None:
         from .discord_notifier import DiscordNotifier
 
@@ -399,7 +426,7 @@ def _console_loop(connector: RobotConnector,
         if arg == 'off':
             if notifier:
                 notifier.webhook_url = ''
-            _save_config_key('discord_webhook_url', '')
+            _save_config_key(config_path, 'discord_webhook_url', '')
             print("  Discord notifications disabled")
             return
 
@@ -425,16 +452,42 @@ def _console_loop(connector: RobotConnector,
             return
 
         if notifier is None:
-            notifier = DiscordNotifier(url, repo_root)
+            notifier = DiscordNotifier(url, code_dir_holder[0])
             registry.register(notifier)
             discord_holder[0] = notifier
-            print(f"  Discord notifier registered")
+            print("  Discord notifier registered")
         else:
             notifier.webhook_url = url
-            print(f"  Discord webhook URL updated")
+            print("  Discord webhook URL updated")
 
-        _save_config_key('discord_webhook_url', url)
+        _save_config_key(config_path, 'discord_webhook_url', url)
         logger.info("Discord webhook URL updated via console")
+
+    def _handle_codedir(parts: list) -> None:
+        if len(parts) == 1:
+            path = code_dir_holder[0]
+            if path:
+                is_git = (path / '.git').exists()
+                git_str = ' (git ✓)' if is_git else ' ⚠ no .git'
+                print(f"  Code dir: {path}{git_str}")
+            else:
+                print("  Code dir: not set — use: codedir <path>")
+            return
+
+        new_path = Path(' '.join(parts[1:])).expanduser().resolve()
+        if not new_path.is_dir():
+            print(f"  Not a directory: {new_path}")
+            return
+
+        code_dir_holder[0] = new_path
+        notifier = discord_holder[0]
+        if notifier:
+            notifier._repo_root = new_path
+        _save_config_key(config_path, 'robot_code_dir', str(new_path))
+        is_git = (new_path / '.git').exists()
+        suffix = '' if is_git else ' ⚠ no .git directory found'
+        print(f"  Code dir set: {new_path}{suffix}")
+        logger.info(f"Code directory set to: {new_path}")
 
     def _print_help() -> None:
         print()
@@ -448,6 +501,10 @@ def _console_loop(connector: RobotConnector,
         print("    status            Show connection state")
         print("    connect           Resume polling / reconnect")
         print("    disconnect        Close connection and stop polling")
+        print()
+        print("  Settings:")
+        print("    codedir           Show current robot code directory")
+        print("    codedir <path>    Set robot code directory (for git info)")
         print()
         print("  Discord:")
         print("    discord           Show current webhook status")
@@ -465,8 +522,15 @@ def _console_loop(connector: RobotConnector,
         print("    log rotate        Rotate to a new log file")
         print()
         print("  help, h, ?          Show this help")
+        if close_callback:
+            # Tray mode: quit/exit just closes the console window
+            print("  quit, exit, q       Close this console (tray keeps running)")
+            print("  stop-server         Shut down the server and exit")
+        else:
+            print("  quit, exit, q       Shut down the server and exit")
         print()
 
+    _quit_requested = False
     while True:
         try:
             line = input("monitor> ").strip()
@@ -479,7 +543,30 @@ def _console_loop(connector: RobotConnector,
         parts = line.split()
         cmd = parts[0].lower()
 
-        if cmd in ('help', 'h', '?'):
+        if cmd in ('quit', 'exit', 'q'):
+            if close_callback:
+                # Tray mode: just close the console, keep tray running
+                print("  Closing console...")
+            else:
+                # Terminal mode: stop the server
+                _quit_requested = True
+                print("  Shutting down...")
+                import _thread
+                _thread.interrupt_main()
+            break
+
+        if cmd == 'stop-server':
+            print("  Shutting down...")
+            if quit_callback:
+                quit_callback()
+            else:
+                import _thread
+                _thread.interrupt_main()
+            # Don't set _quit_requested so close_callback runs to close the
+            # console window before the process exits.
+            break
+
+        elif cmd in ('help', 'h', '?'):
             _print_help()
 
         elif cmd == 'status':
@@ -526,15 +613,24 @@ def _console_loop(connector: RobotConnector,
         elif cmd == 'discord':
             _handle_discord(parts)
 
+        elif cmd == 'codedir':
+            _handle_codedir(parts)
+
         elif cmd == 'log':
             _handle_log(parts)
 
         else:
             print(f"  Unknown command: {cmd}. Type 'help' for available commands.")
 
+    # Loop exited — if not a deliberate quit, notify caller so it can clean up
+    # the console window without stopping the tray.
+    if not _quit_requested and close_callback:
+        close_callback()
 
-def run_server(bind: str, port: int, output_dir: str = None, debug: bool = False):
-    """Start the log receiver HTTP server."""
+
+def setup_server(bind: str, port: int, output_dir: Optional[str] = None,
+                 debug: bool = False) -> ServerContext:
+    """Create all server components and return a ServerContext (does not start serving)."""
     if output_dir is None:
         output_dir = r'C:\Users\Public\Documents\FRC\Log Files\WPILogs'
 
@@ -552,7 +648,11 @@ def run_server(bind: str, port: int, output_dir: str = None, debug: bool = False
     ))
     logger.addHandler(file_handler)
 
-    console_handler = logging.StreamHandler()
+    import sys as _sys, os as _os
+    # pythonw.exe sets sys.stderr = None; use devnull so the handler is safe
+    # to add immediately. stream is replaced when the tray console is opened.
+    _con_stream = _sys.stderr if _sys.stderr is not None else open(_os.devnull, 'w')
+    console_handler = logging.StreamHandler(_con_stream)
     console_handler.setFormatter(logging.Formatter(
         '[%(asctime)s] %(message)s', datefmt='%H:%M:%S'
     ))
@@ -586,13 +686,30 @@ def run_server(bind: str, port: int, output_dir: str = None, debug: bool = False
         logger.info("Match data client not configured — skipping official match data "
                     "(add tba_api_key or frc_events credentials to match_monitor_config.json)")
 
+    # Code directory — used for git info in Discord embeds and hash verification.
+    # Prefer a user-saved path; fall back to source-relative root when .git exists.
+    _source_root = Path(__file__).parent.parent.parent
+    _saved_code_dir = _cfg.get('robot_code_dir', '').strip()
+    if _saved_code_dir and Path(_saved_code_dir).is_dir():
+        _code_dir: Optional[Path] = Path(_saved_code_dir)
+    elif (_source_root / '.git').exists():
+        _code_dir = _source_root
+    else:
+        _code_dir = None
+    code_dir_holder: list = [_code_dir]  # mutable ref shared with console loop / tray
+
+    if _code_dir:
+        logger.info(f"Code directory: {_code_dir}")
+    else:
+        logger.info("Code directory not set — git info unavailable "
+                    "(use 'codedir <path>' or Set Code Directory in the tray menu)")
+
     # Discord notifier
-    repo_root = Path(__file__).parent.parent.parent
     discord_url = _cfg.get('discord_webhook_url', '').strip()
     discord_holder: list = [None]  # mutable ref shared with console loop
     if discord_url:
         from .discord_notifier import DiscordNotifier
-        discord_holder[0] = DiscordNotifier(discord_url, repo_root)
+        discord_holder[0] = DiscordNotifier(discord_url, code_dir_holder[0])
         registry.register(discord_holder[0])
         logger.info("Discord notifier registered")
     else:
@@ -623,31 +740,56 @@ def run_server(bind: str, port: int, output_dir: str = None, debug: bool = False
             daemon=True,
         ).start()
 
-    # Start TCP connector to poll for roboRIO
     connector = RobotConnector(http_port=port, on_upload_complete=on_upload_complete)
     connector.start()
 
-    # Start interactive console in background thread
-    console_thread = threading.Thread(
-        target=_console_loop,
-        args=(connector, console_handler, file_handler, log_dir,
-              registry, discord_holder, config_path, repo_root),
-        daemon=True,
-    )
-    console_thread.start()
-
     server = HTTPServer((bind, port), LogReceiverHandler)
-    logger.info(f"Match Monitor started on {bind}:{port}, saving to {out_path}")
-    print(f"Match Monitor - Log Receiver")
+
+    return ServerContext(
+        server=server,
+        connector=connector,
+        registry=registry,
+        discord_holder=discord_holder,
+        match_client=match_client,
+        console_handler=console_handler,
+        file_handler=file_handler,
+        log_dir=log_dir,
+        out_path=out_path,
+        config_path=config_path,
+        code_dir_holder=code_dir_holder,
+        log_file=log_file,
+    )
+
+
+def _start_console_thread(ctx: ServerContext) -> None:
+    """Start the interactive console loop as a daemon thread."""
+    threading.Thread(
+        target=_console_loop,
+        args=(ctx.connector, ctx.console_handler, ctx.file_handler, ctx.log_dir,
+              ctx.registry, ctx.discord_holder, ctx.config_path, ctx.code_dir_holder),
+        daemon=True,
+    ).start()
+
+
+def run_server(bind: str, port: int, output_dir: Optional[str] = None,
+               debug: bool = False) -> None:
+    """Start the log receiver HTTP server with an interactive console."""
+    ctx = setup_server(bind, port, output_dir, debug)
+
+    logger.info(f"Match Monitor started on {bind}:{port}, saving to {ctx.out_path}")
+    print("Match Monitor - Log Receiver")
     print(f"Listening on {bind}:{port}")
-    print(f"Saving files to {out_path}")
-    print(f"Server log: {log_file}")
-    print(f"TCP connector polling for roboRIO on port 5805")
+    print(f"Saving files to {ctx.out_path}")
+    print(f"Server log: {ctx.log_file}")
+    print("TCP connector polling for roboRIO on port 5805")
     print("Type 'help' for commands. Press Ctrl+C to stop.")
+
+    _start_console_thread(ctx)
+
     try:
-        server.serve_forever()
+        ctx.server.serve_forever()
     except KeyboardInterrupt:
-        connector.stop()
+        ctx.connector.stop()
         logger.info("Shutting down")
         print("\nShutting down")
-        server.shutdown()
+        ctx.server.shutdown()
