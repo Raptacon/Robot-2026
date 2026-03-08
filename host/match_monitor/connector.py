@@ -94,7 +94,7 @@ class RobotConnector:
                 try:
                     self._sock.close()
                 except Exception:
-                    pass
+                    logger.debug("Error closing socket during disconnect", exc_info=True)
                 self._sock = None
                 self._robot_addr = None
         logger.info("Disconnected, polling paused")
@@ -214,7 +214,7 @@ class RobotConnector:
             try:
                 sock.close()
             except Exception:
-                pass
+                logger.debug("Error closing socket after connection", exc_info=True)
 
     def _handle_robot_message(self, msg: dict, robot_addr: str) -> None:
         """Process a message received from the robot."""

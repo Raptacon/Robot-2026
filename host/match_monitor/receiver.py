@@ -3,6 +3,7 @@
 import hashlib
 import json
 import logging
+import sys
 import threading
 import time
 import zlib
@@ -648,11 +649,12 @@ def setup_server(bind: str, port: int, output_dir: Optional[str] = None,
     ))
     logger.addHandler(file_handler)
 
-    import sys as _sys, os as _os
-    # pythonw.exe sets sys.stderr = None; use devnull so the handler is safe
-    # to add immediately. stream is replaced when the tray console is opened.
-    _con_stream = _sys.stderr if _sys.stderr is not None else open(_os.devnull, 'w')
-    console_handler = logging.StreamHandler(_con_stream)
+    # pythonw.exe sets sys.stderr = None; use NullHandler so no file is needed.
+    # The stream is replaced when the tray console is opened.
+    if sys.stderr is not None:
+        console_handler = logging.StreamHandler(sys.stderr)
+    else:
+        console_handler = logging.NullHandler()
     console_handler.setFormatter(logging.Formatter(
         '[%(asctime)s] %(message)s', datefmt='%H:%M:%S'
     ))

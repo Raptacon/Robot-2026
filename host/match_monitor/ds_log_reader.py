@@ -228,7 +228,6 @@ def parse_dsevents(path: Path) -> tuple[Optional[datetime], List[DsEvent]]:
 # dslog record: packet_loss(B) trip_time(B) battery_v(H) robot_v(B)
 # status(B) can(B) signal(B) robot_cpu(B) ds_cpu(B) ram(B) bandwidth(H)
 # = 13 bytes; remaining bytes in record vary (PDP dumps etc.)
-_RECORD_HEADER = struct.Struct('>BBHBBBBBBBHx')  # 13 bytes + 1 pad = 14? adjust below
 _RECORD_FMT = struct.Struct('>BBHBBBBBBBH')       # 12 bytes
 _RECORD_SIZE = 21  # total record size including PDP/trailing bytes
 

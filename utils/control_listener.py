@@ -118,7 +118,7 @@ class ControlListener:
                 try:
                     self._conn.close()
                 except Exception:
-                    pass
+                    logger.debug("Error closing previous connection", exc_info=True)
             self._conn = conn
 
         conn.settimeout(35)  # slightly more than keepalive interval + timeout
@@ -174,7 +174,7 @@ class ControlListener:
             try:
                 conn.close()
             except Exception:
-                pass
+                logger.debug("Error closing connection socket", exc_info=True)
             self.status = 'listening'
             print("[ControlListener] Back to listening")
 
@@ -250,7 +250,7 @@ class ControlListener:
                 try:
                     manifest = set(manifest_path.read_text().strip().splitlines())
                 except Exception:
-                    pass
+                    logger.debug("Could not read manifest: %s", manifest_path, exc_info=True)
             for f in sorted(log_dir.iterdir()):
                 if f.is_file() and f.suffix.lower() in LOG_EXTENSIONS:
                     files.append({

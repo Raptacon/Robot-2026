@@ -57,8 +57,8 @@ def _git_short_hash(repo_root: Path) -> Optional[str]:
         )
         if r.returncode == 0:
             return r.stdout.strip()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Could not get git short hash: %s", exc)
     return None
 
 

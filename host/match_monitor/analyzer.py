@@ -242,12 +242,12 @@ class WpilogAnalyzer:
                                             raw[:19], fmt).replace(tzinfo=timezone.utc)
                                         break
                                     except ValueError:
-                                        pass
-                        except Exception:
-                            pass
+                                        pass  # try next format
+                        except Exception as e:
+                            logger.debug("Could not parse system time entry: %s", e)
 
-                except Exception:
-                    pass  # Skip malformed records
+                except Exception as e:
+                    logger.debug("Skipping malformed record: %s", e)
 
             # Finalize
             if voltage_count > 0:
