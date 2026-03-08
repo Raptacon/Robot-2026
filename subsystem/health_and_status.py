@@ -140,7 +140,7 @@ class HealthAndStatus(commands2.SubsystemBase):
         self._pdp_voltage.set(self.pdp.getVoltage())
         self._pdp_total_current.set(self.pdp.getTotalCurrent())
         self._pdp_temperature.set(self.pdp.getTemperature())
-        self._pdp_sticky_faults.set(self.pdp.getStickyFaults())
+        self._pdp_sticky_faults.set(self.pdp.getStickyFaults().value)
         for i, entry in enumerate(self._pdp_channels):
             entry.set(self.pdp.getCurrent(i))
 
@@ -238,7 +238,7 @@ class HealthAndStatus(commands2.SubsystemBase):
             self._prev_cpu_idle = idle
             self._prev_cpu_total = total
         except OSError:
-            pass
+            pass  # /proc/stat not available on Windows/sim — expected
 
     def _log_memory(self):
         try:
@@ -256,7 +256,7 @@ class HealthAndStatus(commands2.SubsystemBase):
             if total_mb > 0:
                 self._sys_mem_pct.set(100.0 * used_mb / total_mb)
         except OSError:
-            pass
+            pass  # /proc/meminfo not available on Windows/sim — expected
 
     def _log_network(self):
         try:
@@ -286,4 +286,4 @@ class HealthAndStatus(commands2.SubsystemBase):
                         self._prev_net_time = now
                         break
         except OSError:
-            pass
+            pass  # /proc/net/dev not available on Windows/sim — expected

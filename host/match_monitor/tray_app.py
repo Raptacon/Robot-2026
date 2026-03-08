@@ -45,7 +45,7 @@ def _make_icon(status: str, size: int = 64):
 
     try:
         logo = Image.open(_LOGO_PATH).convert('RGBA').resize((size, size), Image.LANCZOS)
-    except Exception:
+    except Exception:  # noqa: BLE001 — fall back to blank icon if logo missing/corrupt
         logo = Image.new('RGBA', (size, size), (0, 0, 0, 0))
         ImageDraw.Draw(logo).ellipse([4, 4, size - 4, size - 4], fill='#303030')
 
@@ -265,7 +265,7 @@ class MatchMonitorTray:
                 sys.stdin.close()
             sys.stdin = None
         except Exception:
-            pass
+            logger.debug("Error closing stdin during console teardown", exc_info=True)
 
         # Detach from the console — window closes (we are the only process).
         ctypes.windll.kernel32.FreeConsole()
@@ -277,14 +277,14 @@ class MatchMonitorTray:
                 if s is not None:
                     s.close()
             except Exception:
-                pass
+                logger.debug("Error closing %s during console teardown", attr, exc_info=True)
             setattr(sys, attr, None)
 
         # Force the tray menu to rebuild so "Open Console" replaces "Hide Console"
         try:
             self._icon.update_menu()
         except Exception:
-            pass
+            logger.debug("Error updating tray menu after console close", exc_info=True)
 
     def _hide_console(self):
         if self._console_hwnd:
@@ -337,7 +337,7 @@ class MatchMonitorTray:
                 self._icon.icon = _icon_for(icon_state)
                 self._icon.title = tooltip
             except Exception:
-                pass
+                logger.debug("Error updating tray icon", exc_info=True)
 
     # ------------------------------------------------------------------
     # Entry point

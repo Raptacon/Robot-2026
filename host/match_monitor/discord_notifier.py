@@ -72,7 +72,7 @@ def _git_is_clean(repo_root: Path) -> Optional[bool]:
         if r.returncode == 0:
             return r.stdout.strip() == ''
     except Exception:
-        pass
+        logger.debug("Could not check git status", exc_info=True)
     return None
 
 
@@ -82,7 +82,7 @@ def _controller_yaml_hash(repo_root: Path) -> Optional[str]:
     try:
         return hashlib.sha256(config_path.read_bytes()).hexdigest()[:8]
     except Exception:
-        return None
+        return None  # file missing or unreadable — not an error condition
 
 
 def _teams_str(teams: list) -> str:

@@ -29,7 +29,7 @@ def _save_config_key(config_path: Path, key: str, value) -> None:
         try:
             cfg = json.loads(config_path.read_text())
         except Exception:
-            pass
+            logger.debug("Could not read config %s, using defaults", config_path, exc_info=True)
     cfg[key] = value
     try:
         config_path.write_text(json.dumps(cfg, indent=4) + '\n')
