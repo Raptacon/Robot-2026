@@ -8,7 +8,7 @@ import wpilib
 from ntcore import NetworkTableInstance
 from wpimath.geometry import Pose2d, Rotation2d
 from wpimath.kinematics import ChassisSpeeds, SwerveModuleState
-from wpiutil.log import FloatLogEntry
+from wpiutil.log import FloatLogEntry, StringLogEntry, BooleanLogEntry
 
 telemetryOdometryEntries = [
     ["robotPose", "robotpose"],

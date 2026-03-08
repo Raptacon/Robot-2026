@@ -8,7 +8,6 @@ import json
 import logging
 import socket
 import threading
-from pathlib import Path
 from typing import Optional, Callable
 
 from ntcore.util import ntproperty

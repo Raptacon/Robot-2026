@@ -14,8 +14,6 @@ import os
 from pathlib import Path
 from typing import Callable
 
-import wpimath
-
 # Internal imports
 from data.telemetry import Telemetry
 from commands.default_swerve_drive import DefaultDrive
@@ -26,7 +24,6 @@ from utils.input import InputFactory
 # Third-party imports
 import commands2
 import wpilib
-from commands2.button import Trigger
 from pathplannerlib.auto import AutoBuilder
 
 
