@@ -208,6 +208,75 @@ Each test uses a **seed number** so the "random" inputs are the same every time.
 - `test_fuzz_teleop_all_extremes` - Only uses boundary stick values (-1, 0, +1)
 - `test_fuzz_teleop_long` - Thorough 5000-cycle test (runs in CI)
 
+# Host Tools
+
+## Controller Configuration GUI
+
+A tkinter-based GUI tool for visually configuring Xbox controller bindings for the robot. Define named actions with metadata (deadbands, inversions, trigger modes) and map them to controller inputs via a visual controller diagram. Configs are saved/loaded as YAML.
+
+### Dependencies
+
+```bash
+pip install -r host/requirements.txt
+```
+
+Note: For crisp SVG rendering, the native [Cairo](https://www.cairographics.org/download/) library must be installed on your system. Without it, the tool falls back to the pre-rendered PNG image.
+
+### Running
+
+```bash
+# Launch with a blank config (two default controllers: Driver and Operator)
+python -m host.controller_config
+
+# Open an existing config file
+python -m host.controller_config path/to/config.yaml
+```
+
+### Usage
+
+1. **Define actions** in the left panel (Add button) - set name, group, input type (button/analog/pov), trigger mode, deadband, inversion, scale
+2. **Assign actions** by dragging from the action panel to controller inputs, or click a binding box to open the assignment dialog
+3. **Switch controllers** using the tabs (Driver/Operator) - add/remove controllers via Edit menu
+4. **Save/Load** via File menu or Ctrl+S / Ctrl+O
+5. **Import/Export** actions or assignments separately via File > Import/Export submenus
+6. **Undo/Redo** via Ctrl+Z / Ctrl+Y
+
+The config YAML is saved to a location of your choice and will later be consumed by robot code via the shared parser in `utils/controller/`.
+
+### Printing and Exporting
+
+Export controller layouts as PNG or PDF for documentation, pit displays, or driver reference sheets.
+
+**From the GUI:**
+
+File > Print / Export, then choose:
+- **Portrait (2 per page)** - two controllers stacked vertically on a letter page
+- **Landscape (1 per page)** - one controller per page, wider layout
+
+Each option is available as PNG or PDF. To hide unbound inputs, toggle View > Hide Unassigned Inputs before exporting.
+
+**From the command line (no GUI):**
+
+```bash
+# PDF, landscape, one controller per page
+python -m host.controller_config data/controller.yaml --export docs/controllers.pdf --orientation landscape
+
+# PNG, portrait, two controllers per page
+python -m host.controller_config data/controller.yaml --export docs/controllers.png
+
+# Hide inputs with no bindings
+python -m host.controller_config data/controller.yaml --export docs/controllers.pdf --hide-unassigned
+```
+
+| Argument | Description |
+|----------|-------------|
+| `config_file` | Path to YAML config (required for export) |
+| `--export OUTPUT` | Output file path (.png or .pdf) |
+| `--orientation` | `portrait` (default, 2/page) or `landscape` (1/page) |
+| `--hide-unassigned` | Omit inputs with no bindings |
+
+Output is rendered at 150 DPI, US Letter size. Multi-page PNGs get `_page1`, `_page2` suffixes; PDFs are a single multi-page file.
+
 # Information
 
 ## Deployed Robot Version

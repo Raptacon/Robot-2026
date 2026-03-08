@@ -1,7 +1,6 @@
 # Internal imports
 from config import OperatorRobotConfig
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
-from vision import Vision
 from subsystem.intakeactions import IntakeSubsystem
 
 # Third-party imports
@@ -32,9 +31,12 @@ for i in range(len(OperatorRobotConfig.swerve_module_channels)):
         ]
     )
 
-visionEntries = [
-    ["cameraLeftPose", "cameraleftpose"],
-    ["cameraRightPose", "camerarightpose"],
+driverStationEntries = [
+    ["alliance", StringLogEntry, "alliance"],
+    ["autonomous", BooleanLogEntry, "autonomous"],
+    ["teleop", BooleanLogEntry, "teleop"],
+    ["test", BooleanLogEntry, "test"],
+    ["enabled", BooleanLogEntry, "enabled"],
 ]
 
 intakeEntries = [
@@ -47,13 +49,13 @@ class Telemetry:
     def __init__(
         self,
         driveTrain: SwerveDrivetrain = None,
-        vision: Vision = None,
+        driverStation: wpilib.DriverStation = None,
         intake: IntakeSubsystem = None
     ):
         self.odometryPosition = driveTrain.pose_estimator
         self.driveTrain = driveTrain
         self.swerveModules = driveTrain.swerve_modules
-        self.vision = vision
+        self.driverStation = driverStation
         self.intake = intake
 
         self.networkTable = NetworkTableInstance.getDefault()
@@ -87,14 +89,6 @@ class Telemetry:
                         "swervedrivetrain/" + logname, entrytype
                     ).publish(),
                 )
-        for entryname, logname in visionEntries:
-            setattr(
-                self,
-                entryname,
-                self.networkTable.getStructTopic(
-                    "vision/" + logname, Pose2d
-                ).publish(),
-            )
         for entryname, logname in intakeEntries:
             setattr(
                 self,
@@ -150,13 +144,25 @@ class Telemetry:
                     swerveModule.current_state().speed
                 )
 
-    def getVisionInputs(self):
-        if self.vision is not None:
-            if self.vision.cameraPoseEstimates[0]:
-                self.cameraLeftPose.set(self.vision.cameraPoseEstimates[0])
-            if self.vision.cameraPoseEstimates[1]:
-                self.cameraRightPose.set(self.vision.cameraPoseEstimates[1])
-    
+    def getDriverStationInputs(self):
+        """
+        Gets the inputs of some match/general robot things,
+        the things being: Alliance color and what mode it is in and
+        if it is enabled
+        """
+        if self.driverStation is not None:
+            alliance = "No Alliance"
+            if self.driverStation.getAlliance() == wpilib.DriverStation.Alliance.kBlue:
+                alliance = "Blue"
+            if self.driverStation.getAlliance() == wpilib.DriverStation.Alliance.kRed:
+                alliance = "Red"
+            self.alliance.append(alliance)
+            self.autonomous.append(self.driverStation.isAutonomous())
+            self.teleop.append(self.driverStation.isTeleop())
+            self.test.append(self.driverStation.isTest())
+            self.enabled.append(self.driverStation.isEnabled())
+
+
     def getIntakeInputs(self):
         if self.intake is not None:
             # self.intake.intakeVelocity = self.intakeSpeed.getEntry(getattr(self, "intakeSpeed"))
@@ -166,7 +172,6 @@ class Telemetry:
         self.getOdometryInputs()
         self.getFullSwerveState()
         self.getRawSwerveInputs()
-        self.getVisionInputs()
         self.getIntakeInputs()
 
     def logAdditionalOdometry(

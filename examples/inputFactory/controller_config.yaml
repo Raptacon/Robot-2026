@@ -1,0 +1,66 @@
+# InputFactory Example — Controller Configuration
+#
+# Demonstrates:
+#   - Analog actions for swerve drive axes (with deadband, inversion, scale)
+#   - A toggle button to swap between two axis mapping profiles
+#   - LED commands: "while held" on A, "toggle" on B
+#   - Rumble feedback
+#
+# This config is loaded by robot.py via InputFactory.
+
+actions:
+  drivetrain:
+    forward:
+      description: Forward/backward translation
+      input_type: analog
+      trigger_mode: scaled
+      deadband: 0.02
+      inversion: true
+      scale: 3.0
+    strafe:
+      description: Left/right strafe
+      input_type: analog
+      trigger_mode: scaled
+      deadband: 0.02
+      inversion: true
+      scale: 3.0
+    rotate:
+      description: Rotation rate
+      input_type: analog
+      trigger_mode: scaled
+      deadband: 0.02
+      inversion: true
+      scale: 3.14159
+    swap_axes:
+      description: Toggle between normal and swapped stick layout
+      input_type: button
+      trigger_mode: toggle_on_true
+  led:
+    while_held:
+      description: Light LED while button is held
+      input_type: button
+      trigger_mode: while_true
+    toggle:
+      description: Toggle LED on/off each press
+      input_type: button
+      trigger_mode: on_true
+  feedback:
+    rumble:
+      description: Controller rumble feedback
+      input_type: output
+
+controllers:
+  0:
+    name: Driver
+    bindings:
+      # Drive axes — normal layout: left stick translate, right stick rotate
+      left_stick_y: [drivetrain.forward]
+      left_stick_x: [drivetrain.strafe]
+      right_stick_x: [drivetrain.rotate]
+      # Swap axis layout toggle
+      back_button: [drivetrain.swap_axes]
+      # LED controls
+      a_button: [led.while_held]
+      b_button: [led.toggle]
+      # Rumble
+      rumble_left: [feedback.rumble]
