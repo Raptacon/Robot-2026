@@ -22,7 +22,7 @@ python -m host.match_monitor
 Options:
 - `--port` — HTTP port to listen on (default: 5800)
 - `--bind` — address to bind to (default: 0.0.0.0)
-- `--output-dir` — where to save logs (default: `~/Documents/robotlogs`)
+- `--output-dir` — where to save logs (default: `C:\Users\Public\Documents\FRC\Log Files\WPILogs`)
 
 ## Windows Firewall (first-time setup)
 

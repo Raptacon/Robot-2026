@@ -8,7 +8,8 @@ import json
 import logging
 import socket
 import threading
-from typing import Optional
+from pathlib import Path
+from typing import Optional, Callable
 
 from ntcore.util import ntproperty
 
@@ -26,6 +27,7 @@ class ControlListener:
         Host → Robot: PING
         Robot → Host: PONG
         Robot → Host: UPLOAD_STARTING / UPLOAD_COMPLETE
+        Host → Robot: CLEAR_MANIFEST / FORCE_UPLOAD / STOP_UPLOAD / LIST_LOGS
     """
 
     status = ntproperty('/ControlListener/status', 'idle',
@@ -37,6 +39,9 @@ class ControlListener:
         self._conn: Optional[socket.socket] = None
         self._conn_lock = threading.Lock()
         self._thread: Optional[threading.Thread] = None
+        self.on_force_upload: Optional[Callable[[], None]] = None
+        self.on_stop_upload: Optional[Callable[[], None]] = None
+        self.on_clear_manifest_done: Optional[Callable[[], None]] = None
 
     @property
     def host_ip(self) -> Optional[str]:
@@ -144,7 +149,7 @@ class ControlListener:
             logger.info(f"Host connected: {host_ip}, HTTP port {http_port}")
             print(f"[ControlListener] Host connected: {host_ip}:{http_port}")
 
-            # Keepalive loop — respond to PINGs
+            # Keepalive loop — respond to PINGs and host commands
             while True:
                 buf = self._read_message(conn, buf)
                 if buf is None:
@@ -152,11 +157,7 @@ class ControlListener:
                 msg, buf = self._parse_next_message(buf)
                 if msg is None:
                     continue
-                if msg.get('type') == 'PING':
-                    pong = json.dumps({'type': 'PONG'}) + '\n'
-                    conn.sendall(pong.encode('utf-8'))
-                else:
-                    logger.debug(f"Unexpected message from host: {msg}")
+                self._handle_host_message(msg, conn)
 
         except socket.timeout:
             logger.warning("Host connection timed out (no keepalive)")
@@ -177,6 +178,89 @@ class ControlListener:
                 pass
             self.status = 'listening'
             print("[ControlListener] Back to listening")
+
+    def _handle_host_message(self, msg: dict, conn: socket.socket) -> None:
+        """Process a message from the host."""
+        msg_type = msg.get('type', '')
+
+        if msg_type == 'PING':
+            pong = json.dumps({'type': 'PONG'}) + '\n'
+            conn.sendall(pong.encode('utf-8'))
+
+        elif msg_type == 'CLEAR_MANIFEST':
+            if self.on_clear_manifest_done:
+                try:
+                    # Callback handles: stop upload, wait, clear, respond, restart
+                    self.on_clear_manifest_done()
+                except Exception:
+                    logger.exception("on_clear_manifest_done callback failed")
+            else:
+                # No callback wired — just clear and respond
+                count = self._clear_manifests()
+                self.send_message({'type': 'MANIFEST_CLEARED', 'count': count})
+
+        elif msg_type == 'FORCE_UPLOAD':
+            if self.on_force_upload:
+                try:
+                    self.on_force_upload()
+                except Exception:
+                    logger.exception("on_force_upload callback failed")
+            self.send_message({'type': 'FORCE_UPLOAD_ACK'})
+
+        elif msg_type == 'STOP_UPLOAD':
+            if self.on_stop_upload:
+                try:
+                    self.on_stop_upload()
+                except Exception:
+                    logger.exception("on_stop_upload callback failed")
+            self.send_message({'type': 'STOP_UPLOAD_ACK'})
+
+        elif msg_type == 'LIST_LOGS':
+            files = self._list_log_files()
+            self.send_message({'type': 'LIST_LOGS_RESPONSE', 'files': files})
+
+        else:
+            logger.debug(f"Unexpected message from host: {msg}")
+
+    def _clear_manifests(self) -> int:
+        """Delete all .uploaded_manifest files from log directories."""
+        from utils.log_uploader import LOG_DIRS, MANIFEST_FILENAME
+        count = 0
+        for log_dir in LOG_DIRS:
+            manifest = log_dir / MANIFEST_FILENAME
+            if manifest.exists():
+                try:
+                    manifest.unlink()
+                    count += 1
+                    logger.info(f"Deleted manifest: {manifest}")
+                except Exception:
+                    logger.exception(f"Failed to delete {manifest}")
+        return count
+
+    def _list_log_files(self) -> list:
+        """Scan log directories and return file info with upload status."""
+        from utils.log_uploader import LOG_DIRS, LOG_EXTENSIONS, MANIFEST_FILENAME
+        files = []
+        for log_dir in LOG_DIRS:
+            if not log_dir.is_dir():
+                continue
+            # Load manifest for this directory
+            manifest_path = log_dir / MANIFEST_FILENAME
+            manifest = set()
+            if manifest_path.exists():
+                try:
+                    manifest = set(manifest_path.read_text().strip().splitlines())
+                except Exception:
+                    pass
+            for f in sorted(log_dir.iterdir()):
+                if f.is_file() and f.suffix.lower() in LOG_EXTENSIONS:
+                    files.append({
+                        'name': f.name,
+                        'size': f.stat().st_size,
+                        'uploaded': f.name in manifest,
+                        'dir': str(log_dir),
+                    })
+        return files
 
     @staticmethod
     def _read_message(conn: socket.socket, buf: str) -> Optional[str]:

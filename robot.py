@@ -53,6 +53,23 @@ class MyRobot(commands2.TimedCommandRobot):
             self.log_uploader = None
             wpilib.reportError("Unable to create LogUploader", printTrace=True)
 
+        # Wire up host command callbacks
+        if self.control_listener and self.log_uploader:
+            self.control_listener.on_force_upload = self.log_uploader.start_upload
+            self.control_listener.on_stop_upload = self.log_uploader.stop_upload
+
+            def _on_clear_manifest():
+                # 1. Let current file finish uploading, then stop
+                self.log_uploader.stop_and_wait()
+                # 2. Clear manifests
+                count = self.control_listener._clear_manifests()
+                self.control_listener.send_message(
+                    {'type': 'MANIFEST_CLEARED', 'count': count})
+                # 3. Restart uploads (same criteria as disabledInit)
+                self.log_uploader.start_upload()
+
+            self.control_listener.on_clear_manifest_done = _on_clear_manifest
+
         # Instantiate our RobotContainer. This will perform all our button bindings, and put our
         # autonomous chooser on the dashboard.
         if not hasattr(self, "container"):

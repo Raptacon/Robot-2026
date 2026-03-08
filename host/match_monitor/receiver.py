@@ -17,6 +17,14 @@ from .connector import RobotConnector
 
 logger = logging.getLogger("match_monitor")
 
+LOG_LEVELS = {
+    'debug': logging.DEBUG,
+    'info': logging.INFO,
+    'warning': logging.WARNING,
+    'error': logging.ERROR,
+}
+LOG_DISABLED = logging.CRITICAL + 1
+
 
 class LogReceiverHandler(BaseHTTPRequestHandler):
     """Handles POST /upload, GET /check, and GET /status requests."""
@@ -120,7 +128,7 @@ class LogReceiverHandler(BaseHTTPRequestHandler):
                 compressed_mb = compressed_size / (1024 * 1024)
                 uncompressed_mb = uncompressed_size / (1024 * 1024)
                 msg = (f"{action}: {sub_dir}/{filename} "
-                       f"({compressed_mb:.1f} MB compressed → {uncompressed_mb:.1f} MB, "
+                       f"({compressed_mb:.1f} MB compressed -> {uncompressed_mb:.1f} MB, "
                        f"{savings:.0f}% savings, {elapsed:.2f}s, {rate_mbps:.1f} MB/s)")
             else:
                 msg = (f"{action}: {sub_dir}/{filename} "
@@ -177,10 +185,233 @@ def _run_analysis(analyzer: WpilogAnalyzer, registry: CallbackRegistry,
         logger.exception(f"Analysis failed for {match_dir}")
 
 
+def _level_name(level: int) -> str:
+    """Return a human-readable name for a logging level."""
+    if level >= LOG_DISABLED:
+        return 'off'
+    return logging.getLevelName(level).lower()
+
+
+def _console_loop(connector: RobotConnector,
+                  console_handler: logging.Handler,
+                  file_handler: logging.Handler,
+                  log_dir: Path) -> None:
+    """Interactive command loop running in a daemon thread."""
+    saved_console_level = console_handler.level
+    saved_file_level = file_handler.level
+    console_off = False
+    file_off = False
+
+    def _require_connection() -> bool:
+        if not connector.is_connected:
+            print("  Not connected to robot")
+            return False
+        return True
+
+    def _set_console_level(level: int) -> None:
+        nonlocal saved_console_level, console_off
+        console_handler.setLevel(level)
+        saved_console_level = level
+        console_off = False
+        print(f"  Console log level: {_level_name(level)}")
+
+    def _handle_log(parts: list) -> None:
+        nonlocal saved_console_level, saved_file_level, console_off, file_off, file_handler
+
+        if len(parts) == 1:
+            # Just "log" — show current state
+            c_level = _level_name(console_handler.level)
+            f_level = _level_name(file_handler.level)
+            c_state = " (off)" if console_off else ""
+            f_state = " (off)" if file_off else ""
+            print(f"  Console: {c_level}{c_state}")
+            print(f"  File:    {f_level}{f_state}")
+            return
+
+        arg1 = parts[1].lower()
+
+        # log off — disable console
+        if arg1 == 'off':
+            saved_console_level = console_handler.level
+            console_handler.setLevel(LOG_DISABLED)
+            console_off = True
+            print("  Console logging disabled")
+            return
+
+        # log on — re-enable console
+        if arg1 == 'on':
+            console_handler.setLevel(saved_console_level)
+            console_off = False
+            print(f"  Console logging enabled ({_level_name(saved_console_level)})")
+            return
+
+        # log rotate
+        if arg1 == 'rotate':
+            old_file = file_handler.baseFilename
+            logger.removeHandler(file_handler)
+            file_handler.close()
+            new_log_file = log_dir / f"match_monitor_{datetime.now():%Y%m%d_%H%M%S}.log"
+            file_handler = logging.FileHandler(new_log_file)
+            file_handler.setFormatter(logging.Formatter(
+                '%(asctime)s %(levelname)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S'
+            ))
+            file_handler.setLevel(saved_file_level)
+            if not file_off:
+                logger.addHandler(file_handler)
+            print(f"  Rotated log file: {new_log_file}")
+            return
+
+        # log console <level|off|on>
+        if arg1 == 'console':
+            if len(parts) < 3:
+                print(f"  Console: {_level_name(console_handler.level)}")
+                return
+            arg2 = parts[2].lower()
+            if arg2 == 'off':
+                saved_console_level = console_handler.level
+                console_handler.setLevel(LOG_DISABLED)
+                console_off = True
+                print("  Console logging disabled")
+            elif arg2 == 'on':
+                console_handler.setLevel(saved_console_level)
+                console_off = False
+                print(f"  Console logging enabled ({_level_name(saved_console_level)})")
+            elif arg2 in LOG_LEVELS:
+                _set_console_level(LOG_LEVELS[arg2])
+            else:
+                print(f"  Unknown level: {arg2} (use debug, info, warning, error, off, on)")
+            return
+
+        # log file <level|off|on>
+        if arg1 == 'file':
+            if len(parts) < 3:
+                print(f"  File: {_level_name(file_handler.level)}")
+                return
+            arg2 = parts[2].lower()
+            if arg2 == 'off':
+                saved_file_level = file_handler.level
+                if not file_off:
+                    logger.removeHandler(file_handler)
+                file_off = True
+                print("  File logging disabled")
+            elif arg2 == 'on':
+                if file_off:
+                    file_handler.setLevel(saved_file_level)
+                    logger.addHandler(file_handler)
+                    file_off = False
+                print(f"  File logging enabled ({_level_name(saved_file_level)})")
+            elif arg2 in LOG_LEVELS:
+                file_handler.setLevel(LOG_LEVELS[arg2])
+                saved_file_level = LOG_LEVELS[arg2]
+                if file_off:
+                    logger.addHandler(file_handler)
+                    file_off = False
+                print(f"  File log level: {arg2}")
+            else:
+                print(f"  Unknown level: {arg2} (use debug, info, warning, error, off, on)")
+            return
+
+        # log <level> — set console level (and re-enable if off)
+        if arg1 in LOG_LEVELS:
+            _set_console_level(LOG_LEVELS[arg1])
+            return
+
+        print(f"  Unknown log command: {arg1}")
+        print("  Usage: log [debug|info|warning|error|off|on]")
+        print("         log console <level>  |  log file <level>  |  log rotate")
+
+    def _print_help() -> None:
+        print()
+        print("  Robot commands (require connection):")
+        print("    list              List log files on robot")
+        print("    upload            Force robot to start uploading now")
+        print("    stop              Stop robot log upload")
+        print("    clear-manifest    Clear upload manifest (re-upload all)")
+        print()
+        print("  Connection:")
+        print("    status            Show connection state")
+        print("    connect           Resume polling / reconnect")
+        print("    disconnect        Close connection and stop polling")
+        print()
+        print("  Logging:")
+        print("    log               Show current log levels")
+        print("    log <level>       Set console log level (debug/info/warning/error)")
+        print("    log off|on        Disable/enable console logging")
+        print("    log console <lv>  Set console level explicitly")
+        print("    log file <lv>     Set file log level")
+        print("    log file off|on   Disable/enable file logging")
+        print("    log rotate        Rotate to a new log file")
+        print()
+        print("  help, h, ?          Show this help")
+        print()
+
+    while True:
+        try:
+            line = input("monitor> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            break
+
+        if not line:
+            continue
+
+        parts = line.split()
+        cmd = parts[0].lower()
+
+        if cmd in ('help', 'h', '?'):
+            _print_help()
+
+        elif cmd == 'status':
+            info = connector.status_info
+            state = info['state']
+            print(f"  State:       {state}")
+            if info['robot_address']:
+                print(f"  Robot:       {info['robot_address']}")
+            if info['connected_since'] is not None:
+                uptime = time.monotonic() - info['connected_since']
+                mins, secs = divmod(int(uptime), 60)
+                hrs, mins = divmod(mins, 60)
+                print(f"  Uptime:      {hrs}h {mins}m {secs}s")
+            print(f"  HTTP port:   {info['http_port']}")
+            print(f"  Attempts:    {info['connect_attempts']}")
+            print(f"  Polling:     {', '.join(info['poll_addresses'])}")
+            if info['last_attempt_addr']:
+                print(f"  Last tried:  {info['last_attempt_addr']}")
+
+        elif cmd == 'connect':
+            connector.connect()
+            print("  Polling resumed")
+
+        elif cmd == 'disconnect':
+            connector.disconnect()
+            print("  Disconnected, polling stopped")
+
+        elif cmd == 'list':
+            if _require_connection():
+                connector.send_to_robot({'type': 'LIST_LOGS'})
+
+        elif cmd == 'upload':
+            if _require_connection():
+                connector.send_to_robot({'type': 'FORCE_UPLOAD'})
+
+        elif cmd == 'stop':
+            if _require_connection():
+                connector.send_to_robot({'type': 'STOP_UPLOAD'})
+
+        elif cmd == 'clear-manifest':
+            if _require_connection():
+                connector.send_to_robot({'type': 'CLEAR_MANIFEST'})
+
+        elif cmd == 'log':
+            _handle_log(parts)
+
+        else:
+            print(f"  Unknown command: {cmd}. Type 'help' for available commands.")
+
+
 def run_server(bind: str, port: int, output_dir: str = None, debug: bool = False):
     """Start the log receiver HTTP server."""
     if output_dir is None:
-        output_dir = os.path.join(Path.home(), 'Documents', 'robotlogs')
+        output_dir = r'C:\Users\Public\Documents\FRC\Log Files\WPILogs'
 
     out_path = Path(output_dir).resolve()
     out_path.mkdir(parents=True, exist_ok=True)
@@ -240,6 +471,14 @@ def run_server(bind: str, port: int, output_dir: str = None, debug: bool = False
     connector = RobotConnector(http_port=port, on_upload_complete=on_upload_complete)
     connector.start()
 
+    # Start interactive console in background thread
+    console_thread = threading.Thread(
+        target=_console_loop,
+        args=(connector, console_handler, file_handler, log_dir),
+        daemon=True,
+    )
+    console_thread.start()
+
     server = HTTPServer((bind, port), LogReceiverHandler)
     logger.info(f"Match Monitor started on {bind}:{port}, saving to {out_path}")
     print(f"Match Monitor - Log Receiver")
@@ -247,7 +486,7 @@ def run_server(bind: str, port: int, output_dir: str = None, debug: bool = False
     print(f"Saving files to {out_path}")
     print(f"Server log: {log_file}")
     print(f"TCP connector polling for roboRIO on port 5805")
-    print("Press Ctrl+C to stop")
+    print("Type 'help' for commands. Press Ctrl+C to stop.")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

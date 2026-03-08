@@ -9,7 +9,7 @@ def main():
     parser.add_argument('--port', type=int, default=5800,
                         help='Port to listen on (default: 5800)')
     parser.add_argument('--output-dir', type=str, default=None,
-                        help='Directory to save received logs (default: ~/Documents/robotlogs)')
+                        help=r'Directory to save received logs (default: C:\Users\Public\Documents\FRC\Log Files\WPILogs)')
     parser.add_argument('--bind', type=str, default='0.0.0.0',
                         help='Address to bind to (default: 0.0.0.0)')
     parser.add_argument('--debug', action='store_true',

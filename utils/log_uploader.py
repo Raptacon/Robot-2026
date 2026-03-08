@@ -77,6 +77,12 @@ class LogUploader:
         """Signal the upload thread to stop after the current file."""
         self._stop_event.set()
 
+    def stop_and_wait(self, timeout: float = 60) -> None:
+        """Stop the upload thread and wait for it to finish."""
+        self._stop_event.set()
+        if self._thread is not None and self._thread.is_alive():
+            self._thread.join(timeout=timeout)
+
     def is_uploading(self) -> bool:
         return self._thread is not None and self._thread.is_alive()
 
@@ -279,6 +285,14 @@ class LogUploader:
                      overwrite: bool = False) -> bool:
         try:
             raw_data = filepath.read_bytes()
+            if len(raw_data) == 0:
+                logger.info(f"Skipping {filepath.name}: file is empty (0 bytes)")
+                self._control.send_message({
+                    'type': 'FILE_SKIPPED',
+                    'filename': filepath.name,
+                    'reason': 'empty (0 bytes)',
+                })
+                return True  # Treat as "handled" so it gets added to manifest
             compressed_data = zlib.compress(raw_data)
 
             conn = http.client.HTTPConnection(host_ip, http_port, timeout=30)
