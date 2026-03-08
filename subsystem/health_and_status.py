@@ -2,25 +2,38 @@ import os
 import wpilib
 import commands2
 from ntcore import NetworkTableInstance
+from ntcore.util import ntproperty
 
 # Network interface used for DS/radio comms on the roboRIO
 _NET_IFACE = "eth0"
+
+_NT_BASE = "subsystems/HealthAndStatus"
 
 
 class HealthAndStatus(commands2.SubsystemBase):
     """
     Publishes Power Distribution Panel, RobotController, Driver Station,
-    and Linux OS health data to NetworkTables. DataLogManager.logNetworkTables(True)
-    in robot.py captures all entries to the wpilog automatically.
+    and Linux OS health data to NetworkTables under subsystems/HealthAndStatus/.
+    DataLogManager.logNetworkTables(True) in robot.py captures all entries to
+    the wpilog automatically.
 
     Linux metrics (CPU, memory, network) are read from /proc and are skipped
     gracefully in simulation.
+
+    NT entry updateRateSec controls how often data is published (0 = every loop).
     """
+
+    # Operator-adjustable update rate; 0 = update every periodic call (~50 Hz)
+    updateRateSec = ntproperty(
+        f"/{_NT_BASE}/updateRateSec", 0.0,
+        writeDefault=False, persistent=True,
+    )
 
     def __init__(self):
         super().__init__()
 
         self._is_sim = wpilib.RobotBase.isSimulation()
+        self._last_update: float = 0.0
 
         self.pdp = wpilib.PowerDistribution()
         nt = NetworkTableInstance.getDefault()
@@ -35,7 +48,7 @@ class HealthAndStatus(commands2.SubsystemBase):
         self._prev_net_time: float = wpilib.Timer.getFPGATimestamp()
 
         # -- PDP --
-        pdp_table = nt.getTable("health/pdp")
+        pdp_table = nt.getTable(f"{_NT_BASE}/pdp")
         self._pdp_voltage = pdp_table.getFloatTopic("voltage").publish()
         self._pdp_total_current = pdp_table.getFloatTopic("totalCurrent").publish()
         self._pdp_temperature = pdp_table.getFloatTopic("temperature").publish()
@@ -46,7 +59,7 @@ class HealthAndStatus(commands2.SubsystemBase):
         ]
 
         # -- RobotController --
-        rc_table = nt.getTable("health/robotcontroller")
+        rc_table = nt.getTable(f"{_NT_BASE}/robotcontroller")
         self._rc_battery_voltage = rc_table.getFloatTopic("batteryVoltage").publish()
         self._rc_brownout_voltage = rc_table.getFloatTopic("brownoutVoltage").publish()
         self._rc_input_voltage = rc_table.getFloatTopic("inputVoltage").publish()
@@ -78,7 +91,7 @@ class HealthAndStatus(commands2.SubsystemBase):
         self._rc_6v_faults = rail_6v.getIntegerTopic("faultCount").publish()
 
         # -- Driver Station --
-        ds_table = nt.getTable("health/driverstation")
+        ds_table = nt.getTable(f"{_NT_BASE}/driverstation")
         self._ds_alliance = ds_table.getStringTopic("alliance").publish()
         self._ds_station = ds_table.getStringTopic("station").publish()
         self._ds_enabled = ds_table.getBooleanTopic("enabled").publish()
@@ -92,7 +105,7 @@ class HealthAndStatus(commands2.SubsystemBase):
         self._ds_event_name = ds_table.getStringTopic("eventName").publish()
 
         # -- Linux OS metrics (roboRIO only, skipped in sim) --
-        sys_table = nt.getTable("health/system")
+        sys_table = nt.getTable(f"{_NT_BASE}/system")
         self._sys_cpu_pct = sys_table.getFloatTopic("cpuPercent").publish()
         self._sys_load_1 = sys_table.getFloatTopic("loadAvg1m").publish()
         self._sys_load_5 = sys_table.getFloatTopic("loadAvg5m").publish()
@@ -111,7 +124,12 @@ class HealthAndStatus(commands2.SubsystemBase):
         self._net_rx_kbps = net_table.getFloatTopic("rxKbps").publish()
         self._net_tx_kbps = net_table.getFloatTopic("txKbps").publish()
 
-    def updateTelemetry(self):
+    def periodic(self):
+        now = wpilib.Timer.getFPGATimestamp()
+        rate = self.updateRateSec
+        if rate > 0.0 and (now - self._last_update) < rate:
+            return
+        self._last_update = now
         self._log_pdp()
         self._log_robot_controller()
         self._log_driver_station()

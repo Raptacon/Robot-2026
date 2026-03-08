@@ -84,7 +84,6 @@ class RobotSwerve:
 
     def robotPeriodic(self):
         self.field.setRobotPose(self.drivetrain.current_pose())
-        self.health_and_status.updateTelemetry()
 
     def disabledInit(self):
         self.updateAlliance()
