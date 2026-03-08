@@ -356,7 +356,7 @@ class MatchMonitorTray:
         try:
             self._icon.run()  # blocks until _quit() calls icon.stop()
         except KeyboardInterrupt:
-            pass
+            logger.info("Keyboard interrupt received, shutting down")
 
         # --- Cleanup after tray icon stops ---
         self._stop_requested = True
