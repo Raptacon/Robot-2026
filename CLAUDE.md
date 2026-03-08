@@ -46,6 +46,7 @@ python -m robotpy deploy
 **Run controller config GUI:**
 ```bash
 pip install -r host/requirements.txt   # First time only (Pillow, PyYAML)
+# macOS (Homebrew Python only): brew install python-tk
 python -m host.controller_config       # Launch GUI
 ```
 
