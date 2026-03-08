@@ -14,6 +14,8 @@ from pathlib import Path
 from .analyzer import WpilogAnalyzer
 from .callbacks import CallbackRegistry
 from .connector import RobotConnector
+from .ds_log_reader import collect_for_match
+from .match_data_client import MatchDataClient
 
 logger = logging.getLogger("match_monitor")
 
@@ -170,17 +172,53 @@ class LogReceiverHandler(BaseHTTPRequestHandler):
 
 
 def _run_analysis(analyzer: WpilogAnalyzer, registry: CallbackRegistry,
-                   match_dir: Path, metadata: dict) -> None:
-    """Background worker: analyze .wpilog files and run callbacks."""
+                   match_dir: Path, metadata: dict,
+                   match_client: 'MatchDataClient') -> None:
+    """Background worker: analyze .wpilog files, collect DS logs, fetch match data, run callbacks."""
     try:
         stats = analyzer.analyze_directory(match_dir)
+
+        # Collect and correlate DS log files using the wpilog wall clock start
+        match_time = stats.wpilog_wall_start or datetime.now()
+        try:
+            stats.ds_log = collect_for_match(match_time, match_dir)
+            if stats.ds_log.copied_files:
+                logger.info(f"DS logs collected: {', '.join(stats.ds_log.copied_files)}")
+        except Exception:
+            logger.exception("DS log collection failed (non-fatal)")
+
+        # Fetch official match data from TBA / FRC Events API
+        match_result = None
+        event_stats = None
+        if match_client.configured:
+            event_name = metadata.get('event_name', '').strip()
+            match_number_str = metadata.get('match_number', '').strip()
+            match_type = metadata.get('match_type', '').strip().lower()
+            if event_name and match_number_str:
+                try:
+                    level = 'qm' if 'qual' in match_type else \
+                            'sf' if 'semi' in match_type else \
+                            'f' if 'final' in match_type else 'qm'
+                    match_result = match_client.fetch_match(
+                        event_name, int(match_number_str), level)
+                    event_stats = match_client.fetch_event_stats(event_name)
+                    if match_result:
+                        logger.info(f"Official result: {match_result.result} "
+                                    f"({match_result.our_score}-{match_result.opponent_score})")
+                except Exception:
+                    logger.exception("Match data fetch failed (non-fatal)")
+
         msg = (f"Analysis complete: {match_dir.name} — "
                f"brownouts={stats.brownout_count}, "
                f"disconnects={stats.disconnect_count}, "
                f"voltage={stats.avg_voltage}")
+        if stats.ds_log and stats.ds_log.avg_packet_loss_pct is not None:
+            msg += f", pkt_loss={stats.ds_log.avg_packet_loss_pct}%"
+        if match_result:
+            msg += f", result={match_result.result} ({match_result.our_score}-{match_result.opponent_score})"
         logger.info(msg)
         print(f"[{datetime.now():%H:%M:%S}] {msg}")
-        registry.run_all(match_dir, metadata, stats)
+        registry.run_all(match_dir, metadata, stats, match_result, event_stats)
     except Exception:
         logger.exception(f"Analysis failed for {match_dir}")
 
@@ -195,7 +233,11 @@ def _level_name(level: int) -> str:
 def _console_loop(connector: RobotConnector,
                   console_handler: logging.Handler,
                   file_handler: logging.Handler,
-                  log_dir: Path) -> None:
+                  log_dir: Path,
+                  registry: 'CallbackRegistry',
+                  discord_holder: list,
+                  config_path: Path,
+                  repo_root: Path) -> None:
     """Interactive command loop running in a daemon thread."""
     saved_console_level = console_handler.level
     saved_file_level = file_handler.level
@@ -320,6 +362,80 @@ def _console_loop(connector: RobotConnector,
         print("  Usage: log [debug|info|warning|error|off|on]")
         print("         log console <level>  |  log file <level>  |  log rotate")
 
+    def _save_config_key(key: str, value) -> None:
+        """Read/update/write a single key in match_monitor_config.json."""
+        cfg: dict = {}
+        if config_path.exists():
+            try:
+                import json as _json
+                cfg = _json.loads(config_path.read_text())
+            except Exception:
+                pass
+        cfg[key] = value
+        try:
+            import json as _json
+            config_path.write_text(_json.dumps(cfg, indent=4) + '\n')
+        except Exception as exc:
+            print(f"  Warning: could not save config: {exc}")
+
+    def _handle_discord(parts: list) -> None:
+        from .discord_notifier import DiscordNotifier
+
+        notifier: DiscordNotifier = discord_holder[0]
+
+        if len(parts) == 1:
+            # Show current status
+            if notifier and notifier.webhook_url:
+                url = notifier.webhook_url
+                # Mask middle of token for safety
+                masked = url[:45] + '...' + url[-6:] if len(url) > 55 else url
+                print(f"  Discord: enabled — {masked}")
+            else:
+                print("  Discord: disabled (no webhook URL set)")
+            return
+
+        arg = parts[1].lower()
+
+        if arg == 'off':
+            if notifier:
+                notifier.webhook_url = ''
+            _save_config_key('discord_webhook_url', '')
+            print("  Discord notifications disabled")
+            return
+
+        if arg == 'test':
+            if not notifier or not notifier.webhook_url:
+                print("  No webhook URL configured — use: discord <url>")
+                return
+            # Send a test message
+            try:
+                notifier._post({
+                    'content': '✅ Match Monitor test message — Discord webhook is working!',
+                })
+                print("  Test message sent")
+            except Exception as exc:
+                print(f"  Test failed: {exc}")
+            return
+
+        # Treat as a URL
+        url = parts[1]  # preserve original case
+        if not url.startswith('https://discord.com/api/webhooks/'):
+            print("  Expected a Discord webhook URL "
+                  "(https://discord.com/api/webhooks/...)")
+            return
+
+        if notifier is None:
+            notifier = DiscordNotifier(url, repo_root)
+            registry.register(notifier)
+            discord_holder[0] = notifier
+            print(f"  Discord notifier registered")
+        else:
+            notifier.webhook_url = url
+            print(f"  Discord webhook URL updated")
+
+        _save_config_key('discord_webhook_url', url)
+        logger.info("Discord webhook URL updated via console")
+
     def _print_help() -> None:
         print()
         print("  Robot commands (require connection):")
@@ -332,6 +448,12 @@ def _console_loop(connector: RobotConnector,
         print("    status            Show connection state")
         print("    connect           Resume polling / reconnect")
         print("    disconnect        Close connection and stop polling")
+        print()
+        print("  Discord:")
+        print("    discord           Show current webhook status")
+        print("    discord <url>     Set/update webhook URL (saved to config)")
+        print("    discord off       Disable Discord notifications")
+        print("    discord test      Send a test message")
         print()
         print("  Logging:")
         print("    log               Show current log levels")
@@ -401,6 +523,9 @@ def _console_loop(connector: RobotConnector,
             if _require_connection():
                 connector.send_to_robot({'type': 'CLEAR_MANIFEST'})
 
+        elif cmd == 'discord':
+            _handle_discord(parts)
+
         elif cmd == 'log':
             _handle_log(parts)
 
@@ -443,6 +568,37 @@ def run_server(bind: str, port: int, output_dir: str = None, debug: bool = False
     registry.register(JsonSummaryCallback())
     LogReceiverHandler.callback_registry = registry
 
+    # Load shared config once
+    config_path = out_path / 'match_monitor_config.json'
+    _cfg: dict = {}
+    if config_path.exists():
+        try:
+            import json as _json
+            _cfg = _json.loads(config_path.read_text())
+        except Exception:
+            logger.warning(f"Failed to read {config_path}")
+
+    # Match data client
+    match_client = MatchDataClient(config_path)
+    if match_client.configured:
+        logger.info("Match data client configured (TBA/FRC Events API)")
+    else:
+        logger.info("Match data client not configured — skipping official match data "
+                    "(add tba_api_key or frc_events credentials to match_monitor_config.json)")
+
+    # Discord notifier
+    repo_root = Path(__file__).parent.parent.parent
+    discord_url = _cfg.get('discord_webhook_url', '').strip()
+    discord_holder: list = [None]  # mutable ref shared with console loop
+    if discord_url:
+        from .discord_notifier import DiscordNotifier
+        discord_holder[0] = DiscordNotifier(discord_url, repo_root)
+        registry.register(discord_holder[0])
+        logger.info("Discord notifier registered")
+    else:
+        logger.info("Discord notifier not configured "
+                    "(use 'discord <url>' at the monitor prompt, or add to match_monitor_config.json)")
+
     # Build match directory path from metadata and trigger analysis
     def on_upload_complete(metadata: dict) -> None:
         event_name = metadata.get('event_name', '').strip()
@@ -463,7 +619,7 @@ def run_server(bind: str, port: int, output_dir: str = None, debug: bool = False
 
         threading.Thread(
             target=_run_analysis,
-            args=(analyzer, registry, match_dir, metadata),
+            args=(analyzer, registry, match_dir, metadata, match_client),
             daemon=True,
         ).start()
 
@@ -474,7 +630,8 @@ def run_server(bind: str, port: int, output_dir: str = None, debug: bool = False
     # Start interactive console in background thread
     console_thread = threading.Thread(
         target=_console_loop,
-        args=(connector, console_handler, file_handler, log_dir),
+        args=(connector, console_handler, file_handler, log_dir,
+              registry, discord_holder, config_path, repo_root),
         daemon=True,
     )
     console_thread.start()

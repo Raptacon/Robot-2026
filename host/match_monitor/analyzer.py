@@ -4,8 +4,12 @@ import logging
 import mmap
 import re
 from dataclasses import dataclass, field, asdict
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .ds_log_reader import DsLogData
 
 from wpiutil.log import DataLogReader
 
@@ -34,6 +38,10 @@ CONFIG_HASH_PATTERNS = [
     re.compile(r'controller.*hash', re.IGNORECASE),
     re.compile(r'config.*hash', re.IGNORECASE),
 ]
+SYSTEM_TIME_PATTERNS = [
+    re.compile(r'^systemTime$'),
+    re.compile(r'system.*time', re.IGNORECASE),
+]
 
 
 @dataclass
@@ -53,10 +61,17 @@ class MatchStats:
     controller_config_hash: Optional[str] = None
     mode_transitions: List[dict] = field(default_factory=list)
     entry_names: List[str] = field(default_factory=list)
+    # Wall clock time of the first wpilog record (derived from systemTime entry)
+    wpilog_wall_start: Optional[datetime] = field(default=None, compare=False)
+    # DS log data attached after collection (not part of wpilog analysis)
+    ds_log: Optional['DsLogData'] = field(default=None, compare=False)
 
     def to_dict(self) -> dict:
         """Convert to a JSON-serializable dictionary."""
         d = asdict(self)
+        # Remove non-serializable fields handled separately
+        d.pop('wpilog_wall_start', None)
+        d.pop('ds_log', None)
         # Group voltage fields
         d['voltage'] = {
             'start': d.pop('start_voltage'),
@@ -66,6 +81,10 @@ class MatchStats:
             'max': d.pop('max_voltage'),
             'samples': d.pop('voltage_samples'),
         }
+        if self.wpilog_wall_start:
+            d['wpilog_wall_start'] = self.wpilog_wall_start.isoformat()
+        if self.ds_log is not None:
+            d['ds_log'] = self.ds_log.to_dict()
         return d
 
 
@@ -95,6 +114,7 @@ class WpilogAnalyzer:
             ds_connected_ids = set()
             mode_ids: Dict[str, set] = {k: set() for k in MODE_PATTERNS}
             config_hash_ids = set()
+            system_time_ids = set()
 
             for record in reader:
                 if record.isStart():
@@ -115,6 +135,8 @@ class WpilogAnalyzer:
                             mode_ids[mode_name].add(data.entry)
                     if _match_any(data.name, CONFIG_HASH_PATTERNS):
                         config_hash_ids.add(data.entry)
+                    if _match_any(data.name, SYSTEM_TIME_PATTERNS):
+                        system_time_ids.add(data.entry)
 
             # Log discovered entries
             logger.info(f"Analyzing {wpilog_path.name}: "
@@ -201,6 +223,28 @@ class WpilogAnalyzer:
                     # Controller config hash
                     if record.getEntry() in config_hash_ids:
                         stats.controller_config_hash = record.getString()
+
+                    # System time — wall clock offset for DS log correlation
+                    if record.getEntry() in system_time_ids and stats.wpilog_wall_start is None:
+                        try:
+                            entry_type = entries[record.getEntry()]['type']
+                            if entry_type == 'int64':
+                                # Microseconds since Unix epoch
+                                wall_us = record.getInteger()
+                                wall_sec = wall_us / 1_000_000.0
+                                stats.wpilog_wall_start = datetime.fromtimestamp(
+                                    wall_sec, tz=timezone.utc)
+                            elif entry_type == 'string':
+                                raw = record.getString()
+                                for fmt in ('%Y-%m-%d %H:%M:%S', '%Y-%m-%dT%H:%M:%S'):
+                                    try:
+                                        stats.wpilog_wall_start = datetime.strptime(
+                                            raw[:19], fmt).replace(tzinfo=timezone.utc)
+                                        break
+                                    except ValueError:
+                                        pass
+                        except Exception:
+                            pass
 
                 except Exception:
                     pass  # Skip malformed records

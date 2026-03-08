@@ -20,6 +20,7 @@ import wpimath
 from data.telemetry import Telemetry
 from commands.default_swerve_drive import DefaultDrive
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
+from subsystem.health_and_status import HealthAndStatus
 from utils.input import InputFactory
 
 # Third-party imports
@@ -40,6 +41,7 @@ class RobotSwerve:
 
         # Subsystem instantiation
         self.drivetrain = SwerveDrivetrain()
+        self.health_and_status = HealthAndStatus()
 
         # Alliance instantiation
         self.updateAlliance()
@@ -82,6 +84,7 @@ class RobotSwerve:
 
     def robotPeriodic(self):
         self.field.setRobotPose(self.drivetrain.current_pose())
+        self.health_and_status.updateTelemetry()
 
     def disabledInit(self):
         self.updateAlliance()

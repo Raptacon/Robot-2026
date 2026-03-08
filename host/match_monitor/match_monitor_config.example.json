@@ -1,0 +1,12 @@
+{
+    "_comment": "Copy this file to your WPILogs output directory as match_monitor_config.json",
+
+    "team_number": 3200,
+
+    "tba_api_key": "YOUR_TBA_KEY_HERE",
+
+    "frc_events_username": "YOUR_FRC_EVENTS_USERNAME",
+    "frc_events_auth_key": "YOUR_FRC_EVENTS_AUTH_KEY",
+
+    "discord_webhook_url": "https://discord.com/api/webhooks/YOUR_ID/YOUR_TOKEN"
+}
