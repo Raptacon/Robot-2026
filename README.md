@@ -2,9 +2,14 @@
 
 ![Build link](https://github.com/Raptacon/Robot-2023/actions/workflows/robot_ci.yml)
 
-## Welcome to Robot 2024
+## Welcome to Robot 2026
 
-Please take a look at the [wiki](https://github.com/Raptacon/Robot-2023/wiki) for the most up to date documenation
+**New to the team? Start with the [docs/](docs/README.md) folder:**
+- [Getting Started](docs/getting-started.md) — Install, run the simulator, run tests
+- [Architecture Overview](docs/architecture/README.md) — How the code is structured
+- [Commands V2](docs/architecture/commands-v2.md) — The most important concept in FRC programming
+- [Adding a Subsystem](docs/architecture/adding-a-subsystem.md) — Step-by-step guide
+- [Git Workflow](docs/architecture/git-workflow.md) — Branches, PRs, CI, and how to contribute
 
 Browse the auto-generated [API documentation](http://raptacon.github.io/Robot-2026/robot.html)
 

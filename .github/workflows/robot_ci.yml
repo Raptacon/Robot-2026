@@ -95,13 +95,13 @@ jobs:
     - name: Build documentation with pdoc
       timeout-minutes: 2
       run: |
-        python3 doc/build_docs.py docs/
+        python3 docs/build_docs.py docs/api/
 
     - name: Upload docs artifact
       uses: actions/upload-artifact@v4
       with:
         name: documentation
-        path: docs/
+        path: docs/api/
 
   DeployDocs:
     name: Deploy Documentation
@@ -119,12 +119,12 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: documentation
-        path: docs/
+        path: docs/api/
 
     - name: Upload Pages artifact
       uses: actions/upload-pages-artifact@v3
       with:
-        path: docs/
+        path: docs/api/
 
     - name: Deploy to GitHub Pages
       id: deployment
