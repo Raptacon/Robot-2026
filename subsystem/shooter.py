@@ -3,7 +3,6 @@ import rev
 import wpilib
 from commands2 import Subsystem
 from typing import Dict
-from math import floor
 from enum import StrEnum
 import numpy as np
 
