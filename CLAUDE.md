@@ -50,6 +50,7 @@ pip install -r host/requirements.txt   # First time only (Pillow, PyYAML)
 python -m host.controller_config       # Launch GUI
 ```
 
+
 **Style:**
 Follow major style guidelines from PEP8 based on what is configured for flake8.
 
@@ -118,6 +119,13 @@ This directory contains examples and allows a location to develop new robots.py 
 - **`robotpy`** : Contains a set of wpilib examples that show how to do certain tasks with the wpilib library.
 - **`flywheel-sysid`** : Contains a example of how to collect data to run sysid on various mechanical components.
 
+### Telemetry (`data/telemetry.py`)
+
+Logs controller inputs, odometry, swerve module states, and driver station data via NetworkTables and WPILib DataLog. Per-subsystem telemetry is handled by each subsystem's own `updateTelemetry()` method, called automatically by the registry.
+
+### PathPlanner Integration
+
+Autonomous routines are defined as `.auto` and `.path` files in `deploy/pathplanner/`. PathPlanner is configured in `SwerveDrivetrain.configure_path_planner()` via `AutoBuilder`. The auto chooser is exposed on SmartDashboard.
 
 ### Controller Config (`utils/controller/` and `host/controller_config/`)
 

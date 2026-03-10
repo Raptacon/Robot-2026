@@ -1,22 +1,25 @@
 """
-Collection of numeric constants that define physical properties of the robot
+Physical constants and identifiers for the swerve drivetrain.
 """
 
 # Native imports
 import math
-from enum import Enum
+from enum import StrEnum
 
-# Third-Party Imports
-
-#############################
-# ROBOT ###################
-#############################
+# Internal imports
+from .robot_constants import RobotConstants
 
 
-class RobotConstants:
-    massKG: float = 63.9565
-    #MOI: Moment of inertia, kg*m^2
-    MOI: float = 5.94175290870316
+class SwerveModuleName(StrEnum):
+    """Canonical string identifiers for each swerve module position.
+
+    Values are the string names used in NetworkTables, SmartDashboard keys,
+    and subsystem registration (e.g. "frontLeft").
+    """
+    FRONT_LEFT = "frontLeft"
+    FRONT_RIGHT = "frontRight"
+    BACK_LEFT = "backLeft"
+    BACK_RIGHT = "backRight"
 
 
 #############################
@@ -25,31 +28,32 @@ class RobotConstants:
 
 
 class SwerveDriveConsts(RobotConstants):
-    # where the wheel is compared to the center of the robot in meters
-    moduleFrontLeftX: float = 0.264
-    moduleFrontLeftY: float = 0.287
-    moduleFrontRightX: float = 0.264
-    moduleFrontRightY: float = -0.287
-    moduleBackLeftX: float = -0.264
-    moduleBackLeftY: float = 0.287
-    moduleBackRightX: float = -0.264
-    moduleBackRightY: float = -0.287
+    # where each module is compared to the center of the robot, in meters (x, y)
+    moduleLocations = {
+        SwerveModuleName.FRONT_LEFT: (0.31115, 0.26035),
+        SwerveModuleName.FRONT_RIGHT: (0.31115, -0.26035),
+        SwerveModuleName.BACK_LEFT: (-0.31115, 0.26035),
+        SwerveModuleName.BACK_RIGHT: (-0.31115, -0.26035),
+    }
 
     # inverts if the module or gyro does not rotate counterclockwise positive
     invertGyro: bool = False
-    moduleFrontLeftInvertDrive: bool = True
-    moduleFrontRightInvertDrive: bool = True
-    moduleBackLeftInvertDrive: bool = True
-    moduleBackRightInvertDrive: bool = True
-
-    moduleFrontLeftInvertSteer: bool = True
-    moduleFrontRightInvertSteer: bool = True
-    moduleBackLeftInvertSteer: bool = True
-    moduleBackRightInvertSteer: bool = True
+    moduleInvertDrive = {
+        SwerveModuleName.FRONT_LEFT: True,
+        SwerveModuleName.FRONT_RIGHT: True,
+        SwerveModuleName.BACK_LEFT: True,
+        SwerveModuleName.BACK_RIGHT: True,
+    }
+    moduleInvertSteer = {
+        SwerveModuleName.FRONT_LEFT: True,
+        SwerveModuleName.FRONT_RIGHT: True,
+        SwerveModuleName.BACK_LEFT: True,
+        SwerveModuleName.BACK_RIGHT: True,
+    }
 
     maxTranslationMPS: float = 4.6
     maxAngularDPS: float = math.degrees(
-        maxTranslationMPS / math.hypot(moduleFrontLeftY, moduleFrontLeftX)
+        maxTranslationMPS / math.hypot(*moduleLocations[SwerveModuleName.FRONT_LEFT])
     )
 
 
@@ -118,24 +122,3 @@ class SwerveModuleMk4iL2Consts(SwerveModuleMk4iConsts):
     steerVelocityConversionFactor: float = steerPositionConversionFactor / 60.0
 
     moduleType: str = "Mk4i_L2"
-
-#############################
-# INTAKE ###################
-#############################
-
-
-class CaptainPlanetConsts:
-    kIntakeMotorCanId = 11
-    kRollerMotorCanId = 56
-    kMotorInverted = False
-    kCurrentLimitAmps = 30
-    # kBreakBeam = 2
-    # kFrontBreakBeam = 2
-    # kBackBreakBeam = 0
-    # kHallEffectSensor = 6
-    kDefaultSpeed = 0.15
-    kOperatorDampener = 0.15
-    class BreakBeamActionOptions(Enum):
-        DONOTHING = 1
-        TOFRONT = 2
-        TOBACK = 3

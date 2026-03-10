@@ -70,8 +70,8 @@ instance/
 # Sphinx documentation
 docs/_build/
 
-# pdoc generated documentation
-docs/
+# pdoc generated documentation (output goes to docs/api/, not tracked)
+docs/api/
 
 # PyBuilder
 target/
@@ -147,6 +147,7 @@ setup_.venv_windows
 logs/
 tests/logs
 **/ctre_sim/
+networktables.json
 
 # Host tool user settings
 host/controller_config/.settings.json

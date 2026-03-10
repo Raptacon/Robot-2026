@@ -71,11 +71,11 @@ import pytest
 import wpilib.simulation
 from wpilib.simulation import XboxControllerSim, DriverStationSim
 
-from robot import MyRobot
+from constants import RobotConstants
 
 # Step slightly under the robot's periodic period to avoid triggering
-# loop overrun detection (which fires at exactly the period boundary).
-_STEP_PERIOD = (MyRobot.kDefaultPeriod / 1000) - 0.001
+# the loop overrun detector (hasElapsed returns true at exactly the limit).
+_STEP_PERIOD = RobotConstants.kPeriodicPeriodSec - 0.001
 
 
 # ---------------------------------------------------------------------------
@@ -303,8 +303,7 @@ def _run_fuzz(
 
         # Transition to teleop — we use raw stepTiming here (and in the fuzz
         # loop below) instead of control.step_timing because we need per-tick
-        # control to inject different random inputs each cycle. control.step_timing
-        # steps multiple ticks at once with no per-tick callback.
+        # control to inject different random inputs each cycle.
         DriverStationSim.setAutonomous(False)
         DriverStationSim.setEnabled(True)
         DriverStationSim.notifyNewData()
