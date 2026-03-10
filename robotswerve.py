@@ -50,17 +50,20 @@ class RobotSwerve:
 
         # HID setup — config-driven via InputFactory
         wpilib.DriverStation.silenceJoystickConnectionWarning(True)
-        self.factory = InputFactory(config_path="data/inputs/2026bot.yaml")
+        # self.factory = InputFactory(config_path="data/inputs/2026bot.yaml")
 
         # Speed toggle state
         self._drive_scale_slow = 0.25
         self._drive_scale_fast = 1
         self._drive_is_slow = False
 
+        self.driver_controller = wpilib.XboxController(0)
+        self.mech_controller = wpilib.XboxController(1)
+
         # TODO: Move input retrieval and binding into commands/{subsystem}_controls.py
         # files as part of the subsystem registry refactor. Each subsystem's controls
         # module should own its own factory.get*() calls and command wiring.
-        self._configure_controls()
+        # self._configure_controls()
 
         # Autonomous setup
         self.auto_command = None
@@ -73,8 +76,8 @@ class RobotSwerve:
         if self.enableTelemetry:
             self.telemetry = Telemetry(
                 driveTrain=self.drivetrain,
-                driverController=self.factory.getController(0),
-                mechController=self.factory.getController(1),
+                driverController=self.driver_controller,
+                mechController=self.mech_controller,
             )
 
         wpilib.SmartDashboard.putString("Robot Version", self.getDeployInfo("git-hash"))
@@ -130,10 +133,10 @@ class RobotSwerve:
         self.drivetrain.setDefaultCommand(
             DefaultDrive(
                 self.drivetrain,
-                self.translate_x,
-                self.translate_y,
-                self.rotate,
-                lambda: not self.robot_relative_btn()
+                lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftY(), 0.06),
+                lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftX(), 0.06),
+                lambda: wpimath.applyDeadband(-1 * self.driver_controller.getRightX(), 0.1),
+                lambda: not self.driver_controller.getRightBumperButton()
             )
         )
 
