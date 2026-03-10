@@ -166,7 +166,7 @@ class Shooter(Subsystem):
 
     def modifyOffset(self, offsetDelta: float):
         """
-        Modify the RPM offset 
+        Modify the RPM offset
 
         Args:
             offsetDelta: change in offset that is applied
