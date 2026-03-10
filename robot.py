@@ -79,7 +79,7 @@ class MyRobot(commands2.TimedCommandRobot):
     def testPeriodic(self) -> None:
         self.container.testPeriodic()
 
-    def getRobot(self) -> RobotShooter:
+    def getRobot(self) -> RobotSwerve:
         return self.container
 
     def __callAndCatch(self, func: typing.Callable[[], None]) -> None:
