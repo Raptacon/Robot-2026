@@ -23,10 +23,8 @@ class Shooter(Subsystem):
         self.offsetAmount = 0
         self.RPM = 0
 
-        # Create lookup table of 100 elements (index 0-99)
-        self.lookupTable = ([1000]*25) + ([2000]*25) + ([3000]*25) + ([4000]*25)
-        
-        self.newLookupTable = [
+        # Create lookup table (distance, RPM)
+        self.lookupTable = [
             (0.0, 1000),
             (1.0, 1500),
             (2.0, 2000),
@@ -34,10 +32,11 @@ class Shooter(Subsystem):
             (4.0, 3500),
             (5.0, 4000),
             ]
+        self.lookupTable.sort()
         # Create an array of just distances
-        self.lookupShooterDistances = np.array([d for d, _ in self.newLookupTable])
+        self.lookupShooterDistances = np.array([d for d, _ in self.lookupTable])
         # Create an array of just RPMs
-        self.lookupShooterRpms = np.array([d for _, d in self.newLookupTable])
+        self.lookupShooterRpms = np.array([r for _, r in self.lookupTable])
 
         # Instantiate motors
         self.feedMotor = rev.SparkMax(30, rev.SparkLowLevel.MotorType.kBrushless)
@@ -163,18 +162,8 @@ class Shooter(Subsystem):
         Returns:
             None
         """
-        # Get an index number from the distance given
-        lookupIndex = abs(int(floor(distance / ShooterConfig.shooterRangeInterval)))
-        # Check if index number has exceeded the length of the list, else set RPM as 0
-        if lookupIndex < len(self.lookupTable):
-            self.RPM = self.lookupTable[lookupIndex]
-        else:
-            if len(self.lookupTable) > 0:
-                self.RPM = self.lookupTable[-1]
-            else:
-                self.RPM = 0
-
-        # self.RPM = float(np.interp(distance, self.lookupShooterDistances, self.lookupShooterRpms))
+        # Get RPM from the distance given
+        self.RPM = float(np.interp(distance, self.lookupShooterDistances, self.lookupShooterRpms))
 
     def modifyOffset(self, offsetDelta: float):
         """
