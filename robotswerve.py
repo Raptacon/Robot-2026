@@ -10,6 +10,7 @@ from vision import Vision
 from commands.default_swerve_drive import DefaultDrive
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
 from subsystem.vision.localization import Localization
+from subsystem.turret.turret import Turret
 
 # Third-party imports
 import commands2
@@ -31,14 +32,19 @@ class RobotSwerve:
         self.field = wpilib.Field2d()
         wpilib.SmartDashboard.putData("Field", self.field)
 
+        # Vision setup
+        self.localization = Localization()
+        self.localization.new_target_pose = 0
+
         # Subsystem instantiation
         self.drivetrain = SwerveDrivetrain()
+        self.turret = Turret()
         
         # Alliance instantiaion
         self.alliance = "red" if self.drivetrain.flip_to_red_alliance() else "blue"
 
-        # Vision setup
-        self.localization = Localization()
+        # # Vision setup
+        # self.localization = Localization()
 
         # Initialize timer
         self.timer = wpilib.Timer()
@@ -134,6 +140,7 @@ class RobotSwerve:
             commands2.CommandScheduler.getInstance().cancelAll()
         self.speedMultiplier = wpilib.SmartDashboard.getNumber("Drivetrain speed", 1)
         self.drivetrain.setSpeedMultiplier(self.speedMultiplier)
+        self.turret.setPosition(self.localization.getTargetpose())
 
     def testInit(self):
         commands2.CommandScheduler.getInstance().cancelAll()
