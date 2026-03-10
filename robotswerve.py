@@ -19,7 +19,9 @@ import wpimath
 # Internal imports
 from data.telemetry import Telemetry
 from commands.default_swerve_drive import DefaultDrive
+from config import ShooterConfig
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
+from subsystem.shooter import Shooter
 from utils.input import InputFactory
 
 # Third-party imports
@@ -40,6 +42,7 @@ class RobotSwerve:
 
         # Subsystem instantiation
         self.drivetrain = SwerveDrivetrain()
+        self.shooter = Shooter()
 
         # Alliance instantiation
         self.updateAlliance()
@@ -57,8 +60,8 @@ class RobotSwerve:
         self._drive_scale_fast = 1
         self._drive_is_slow = False
 
-        self.driver_controller = wpilib.XboxController(0)
-        self.mech_controller = wpilib.XboxController(1)
+        self.driver_controller = commands2.button.CommandXboxController(0)
+        self.mech_controller = commands2.button.CommandXboxController(1)
 
         # TODO: Move input retrieval and binding into commands/{subsystem}_controls.py
         # files as part of the subsystem registry refactor. Each subsystem's controls
@@ -111,6 +114,11 @@ class RobotSwerve:
         self.drivetrain.set_motor_stop_modes(to_drive=True, to_break=True, all_motor_override=True, burn_flash=False)
         self.drivetrain.stop_driving()
 
+        self.shooter.setRPM(0)
+        self.shooter.resetOffset()
+        for motor in ["feed", "lead", "follower"]:
+            self.shooter.setMotorVoltage(motor, 0)
+
     def disabledPeriodic(self):
         pass
 
@@ -136,8 +144,17 @@ class RobotSwerve:
                 lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftY(), 0.06),
                 lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftX(), 0.06),
                 lambda: wpimath.applyDeadband(-1 * self.driver_controller.getRightX(), 0.1),
-                lambda: not self.driver_controller.getRightBumperButton()
+                lambda: not self.driver_controller.getHID().getRightBumperButton()
             )
+        )
+
+        self.driver_controller.povUp().onTrue(commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(ShooterConfig.shooterOffsetDelta), self.shooter))
+        self.driver_controller.povUp().onTrue(commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(ShooterConfig.shooterOffsetDelta), self.shooter))
+        self.driver_controller.y().onTrue(
+            commands2.cmd.runOnce(self.shooter.resetOffset, self.shooter)
+        )
+        self.driver_controller.a().onTrue(
+            commands2.cmd.runOnce(lambda: self.shooter.setRPM(3000), self.shooter)
         )
 
     def teleopPeriodic(self):

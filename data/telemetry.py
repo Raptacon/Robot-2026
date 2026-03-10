@@ -5,6 +5,7 @@ from subsystem.intakeactions import IntakeSubsystem
 
 # Third-party imports
 import wpilib
+import commands2
 from ntcore import NetworkTableInstance
 from wpimath.geometry import Pose2d, Rotation2d
 from wpimath.kinematics import ChassisSpeeds, SwerveModuleState
@@ -68,8 +69,8 @@ class Telemetry:
 
     def __init__(
         self,
-        driverController: wpilib.XboxController = None,
-        mechController: wpilib.XboxController = None,
+        driverController: commands2.button.CommandXboxController = None,
+        mechController: commands2.button.CommandXboxController = None,
         driveTrain: SwerveDrivetrain = None,
         driverStation: wpilib.DriverStation = None,
         intake: IntakeSubsystem = None
@@ -150,23 +151,23 @@ class Telemetry:
         Records data for buttons and axis inputs for the first controller
         """
         if self.driverController is not None:
-            self.driverAButton.append(self.driverController.getAButton())  # bool
-            self.driverBButton.append(self.driverController.getBButton())  # bool
-            self.driverXButton.append(self.driverController.getXButton())  # bool
-            self.driverYButton.append(self.driverController.getYButton())  # bool
+            self.driverAButton.append(self.driverController.getHID().getAButton())  # bool
+            self.driverBButton.append(self.driverController.getHID().getBButton())  # bool
+            self.driverXButton.append(self.driverController.getHID().getXButton())  # bool
+            self.driverYButton.append(self.driverController.getHID().getYButton())  # bool
             self.driverBackButton.append(
-                self.driverController.getBackButton()
+                self.driverController.getHID().getBackButton()
             )  # left side , bool
             self.driverStartButton.append(
-                self.driverController.getStartButton()
+                self.driverController.getHID().getStartButton()
             )  # right side , bool
-            self.driverLeftBumper.append(self.driverController.getLeftBumper())  # bool
-            self.driverRightBumper.append(self.driverController.getRightBumper())  # bool
+            self.driverLeftBumper.append(self.driverController.getHID().getLeftBumper())  # bool
+            self.driverRightBumper.append(self.driverController.getHID().getRightBumper())  # bool
             self.driverLeftStickButton.append(
-                self.driverController.getLeftStickButton()
+                self.driverController.getHID().getLeftStickButton()
             )  # bool
             self.driverRightStickButton.append(
-                self.driverController.getRightStickButton()
+                self.driverController.getHID().getRightStickButton()
             )  # bool
             self.driverLeftTrigger.append(
                 self.driverController.getLeftTriggerAxis()
@@ -182,30 +183,30 @@ class Telemetry:
             self.driverJoystickRightX.append(
                 self.driverController.getRightX()
             )  # float -1-1
-            self.driverDPad.append(self.driverController.getPOV())  # ints
+            self.driverDPad.append(self.driverController.getHID().getPOV())  # ints
 
     def getMechControllerInputs(self):
         """
         Records data for buttons and axis inputs for the second controller
         """
         if self.mechController is not None:
-            self.mechAButton.append(self.mechController.getAButton())  # bool
-            self.mechBButton.append(self.mechController.getBButton())  # bool
-            self.mechXButton.append(self.mechController.getXButton())  # bool
-            self.mechYButton.append(self.mechController.getYButton())  # bool
+            self.mechAButton.append(self.mechController.getHID().getAButton())  # bool
+            self.mechBButton.append(self.mechController.getHID().getBButton())  # bool
+            self.mechXButton.append(self.mechController.getHID().getXButton())  # bool
+            self.mechYButton.append(self.mechController.getHID().getYButton())  # bool
             self.mechBackButton.append(
-                self.mechController.getBackButton()
+                self.mechController.getHID().getBackButton()
             )  # left side , bool
             self.mechStartButton.append(
-                self.mechController.getStartButton()
+                self.mechController.getHID().getStartButton()
             )  # right side , bool
-            self.mechLeftBumper.append(self.mechController.getLeftBumper())  # bool
-            self.mechRightBumper.append(self.mechController.getRightBumper())  # bool
+            self.mechLeftBumper.append(self.mechController.getHID().getLeftBumper())  # bool
+            self.mechRightBumper.append(self.mechController.getHID().getRightBumper())  # bool
             self.mechLeftStickButton.append(
-                self.mechController.getLeftStickButton()
+                self.mechController.getHID().getLeftStickButton()
             )  # bool
             self.mechRightStickButton.append(
-                self.mechController.getRightStickButton()
+                self.mechController.getHID().getRightStickButton()
             )  # bool
             self.mechLeftTrigger.append(
                 self.mechController.getLeftTriggerAxis()
@@ -217,7 +218,7 @@ class Telemetry:
             self.mechJoystickLeftX.append(self.mechController.getLeftX())  # float -1-1
             self.mechJoystickRightY.append(self.mechController.getRightY())  # float -1-1
             self.mechJoystickRightX.append(self.mechController.getRightX())  # float -1-1
-            self.mechDPad.append(self.mechController.getPOV())  # ints
+            self.mechDPad.append(self.mechController.getHID().getPOV())  # ints
 
     def getOdometryInputs(self):
         """

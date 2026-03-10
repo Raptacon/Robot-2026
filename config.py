@@ -54,7 +54,7 @@ class ShooterConfig:
     shooterFeedMotorPIDF = (0, 0, 0, 1 / 473)
     shooterFlywheelMotorPIDF = (0, 0, 0, 1 / 560)
     # Feed, Lead, Follower
-    shooterInverted = (False, False, False)
+    shooterInverted = (True, False, False)
     shooterRangeInterval = 0.2
     shooterOffsetDelta = 100
     shooterFeedPercentOfFlywheel = 0.9
