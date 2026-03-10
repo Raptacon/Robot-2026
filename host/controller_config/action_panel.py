@@ -84,8 +84,8 @@ class _WidgetTooltip:
         tw.wm_geometry(f"+{x}+{y}")
 
         label = tk.Label(tw, text=self.text, justify=tk.LEFT,
-                         background="#ffffe0", relief=tk.SOLID,
-                         borderwidth=1, padx=4, pady=2,
+                         background="#ffffe0", foreground="#222222",
+                         relief=tk.SOLID, borderwidth=1, padx=4, pady=2,
                          font=("TkDefaultFont", 9))
         label.pack()
 
@@ -144,8 +144,8 @@ class _TreeTooltip:
         tw.wm_geometry(f"+{x}+{y}")
 
         label = tk.Label(tw, text=text, justify=tk.LEFT,
-                         background="#ffffe0", relief=tk.SOLID,
-                         borderwidth=1, padx=4, pady=2,
+                         background="#ffffe0", foreground="#222222",
+                         relief=tk.SOLID, borderwidth=1, padx=4, pady=2,
                          font=("TkDefaultFont", 9))
         label.pack()
 
