@@ -4,9 +4,11 @@ import typing
 import inspect
 import commands2
 
-from examples.robotshooter import RobotShooter
+from robotswerve import RobotSwerve
+from utils.datalog_bridge import setup_logging
 import wpilib
 import logging
+
 
 class MyRobot(commands2.TimedCommandRobot):
     """
@@ -23,7 +25,10 @@ class MyRobot(commands2.TimedCommandRobot):
 
         self.__errorLogged = False
         self.__lastError = None
-        self.__errorCatchedCount = 0
+        self.__errorCaughtCount = 0
+
+        # Bridge Python logging -> wpilog + NT-controlled log level
+        setup_logging()
 
         # setup our scheduling period. Defaulting to 20 Hz (50 ms)
         super().__init__(period=MyRobot.kDefaultPeriod / 1000)
@@ -32,7 +37,7 @@ class MyRobot(commands2.TimedCommandRobot):
         if not hasattr(self, "container"):
             # to work around sim creating motors during tests, assign to class and if already created keep using created robot class for tests.
             # during robot running, this is only every called once
-            MyRobot.container = RobotShooter(lambda: self.isDisabled)
+            MyRobot.container = RobotSwerve(lambda: self.isDisabled)
 
     def robotInit(self) -> None:
         """
@@ -43,7 +48,7 @@ class MyRobot(commands2.TimedCommandRobot):
     def robotPeriodic(self) -> None:
         self.__callAndCatch(self.container.robotPeriodic)
 
-        wpilib.SmartDashboard.putNumber("Code Crash Count", self.__errorCatchedCount)
+        wpilib.SmartDashboard.putNumber("Code Crash Count", self.__errorCaughtCount)
 
     def disabledInit(self) -> None:
         """This function is called once each time the robot enters Disabled mode."""
@@ -93,7 +98,7 @@ class MyRobot(commands2.TimedCommandRobot):
             if self.isSimulation():
                 raise e
 
-            self.__errorCatchedCount = self.__errorCatchedCount + 1
+            self.__errorCaughtCount = self.__errorCaughtCount + 1
 
             if not self.__errorLogged:
                 logging.exception(f"(CRASH CATCH) {name} error: ")
