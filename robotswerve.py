@@ -150,8 +150,13 @@ class RobotSwerve:
             )
         )
 
+
     def teleopPeriodic(self):
-        pass
+        if self.driver_controller.getLeftTriggerAxis() > 0.5:
+            commands2.CommandScheduler.getInstance().cancelAll()
+        self.speedMultiplier = wpilib.SmartDashboard.getNumber("Drivetrain speed", 1)
+        self.drivetrain.setSpeedMultiplier(self.speedMultiplier)
+        self.turret.setPosition(self.localization.getTargetpose())
 
     def testInit(self):
         #TODO Move to NT listener on change listener
@@ -167,16 +172,6 @@ class RobotSwerve:
             )
         )
         commands2.cmd.run(lambda: self.drivetrain.drive(2, 0, 0, False), self.drivetrain).withTimeout(5).schedule()
-
-    def teleopPeriodic(self):
-        if self.driver_controller.getLeftTriggerAxis() > 0.5:
-            commands2.CommandScheduler.getInstance().cancelAll()
-        self.speedMultiplier = wpilib.SmartDashboard.getNumber("Drivetrain speed", 1)
-        self.drivetrain.setSpeedMultiplier(self.speedMultiplier)
-        self.turret.setPosition(self.localization.getTargetpose())
-
-    def testInit(self):
-        commands2.CommandScheduler.getInstance().cancelAll()
 
     def testPeriodic(self):
         pass
@@ -260,4 +255,4 @@ class RobotSwerve:
         self.drivetrain.update_alliance_flag(self.alliance)
 
 
-        self.alignmentTagId = alignmentTagId
+        #self.alignmentTagId = alignmentTagId
