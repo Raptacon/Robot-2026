@@ -94,10 +94,20 @@ class HealthAndStatus(commands2.SubsystemBase):
 
     def __init__(self):
         super().__init__()
+        import logging
+        self._log = logging.getLogger(__name__)
 
         self._is_sim = wpilib.RobotBase.isSimulation()
         self._last_update: float = 0.0
-        self.pdp = wpilib.PowerDistribution()
+
+        # PDP may not be present (e.g. bench testing without CAN bus)
+        try:
+            self.pdp = wpilib.PowerDistribution()
+            self._has_pdp = True
+        except Exception as e:
+            self._log.warning("No PDP/PDH found, PDP telemetry disabled: %s", e)
+            self.pdp = None
+            self._has_pdp = False
 
         # State for CPU % calculation between calls
         self._prev_cpu_idle: int = 0
@@ -109,12 +119,14 @@ class HealthAndStatus(commands2.SubsystemBase):
         self._prev_net_time: float = wpilib.Timer.getFPGATimestamp()
 
         # PDP per-channel currents — dynamic count, use publishers directly
-        nt = NetworkTableInstance.getDefault()
-        pdp_table = nt.getTable("subsystems/HealthAndStatus/pdp")
-        self._pdp_channels = [
-            pdp_table.getFloatTopic(f"channel{i}").publish()
-            for i in range(self.pdp.getNumChannels())
-        ]
+        self._pdp_channels = []
+        if self._has_pdp:
+            nt = NetworkTableInstance.getDefault()
+            pdp_table = nt.getTable("subsystems/HealthAndStatus/pdp")
+            self._pdp_channels = [
+                pdp_table.getFloatTopic(f"channel{i}").publish()
+                for i in range(self.pdp.getNumChannels())
+            ]
 
     def periodic(self):
         now = wpilib.Timer.getFPGATimestamp()
@@ -129,16 +141,22 @@ class HealthAndStatus(commands2.SubsystemBase):
             self._log_system_metrics()
 
     def _log_pdp(self):
-        self.pdp_voltage = self.pdp.getVoltage()
-        self.pdp_total_current = self.pdp.getTotalCurrent()
-        self.pdp_temperature = self.pdp.getTemperature()
-        sf = self.pdp.getStickyFaults()
-        self.pdp_has_sticky_faults = any([
-            sf.Brownout, sf.CanBusOff, sf.CanWarning,
-            sf.HardwareFault, sf.FirmwareFault, sf.HasReset,
-        ])
-        for i, entry in enumerate(self._pdp_channels):
-            entry.set(self.pdp.getCurrent(i))
+        if not self._has_pdp:
+            return
+        try:
+            self.pdp_voltage = self.pdp.getVoltage()
+            self.pdp_total_current = self.pdp.getTotalCurrent()
+            self.pdp_temperature = self.pdp.getTemperature()
+            sf = self.pdp.getStickyFaults()
+            self.pdp_has_sticky_faults = any([
+                sf.Brownout, sf.CanBusOff, sf.CanWarning,
+                sf.HardwareFault, sf.FirmwareFault, sf.HasReset,
+            ])
+            for i, entry in enumerate(self._pdp_channels):
+                entry.set(self.pdp.getCurrent(i))
+        except Exception as e:
+            self._log.warning("PDP read failed, disabling PDP telemetry: %s", e)
+            self._has_pdp = False
 
     def _log_robot_controller(self):
         rc = wpilib.RobotController
