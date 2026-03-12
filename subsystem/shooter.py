@@ -16,7 +16,7 @@ class ShooterMotorNames(StrEnum):
     FOLLOWER_FLYWHEEL = "follower"
 
 
-class Shooter(Subsystem):
+class Shooter():
     def __init__(self):
         super().__init__()
         self.offsetAmount = 0

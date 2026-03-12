@@ -23,13 +23,16 @@ from config import ShooterConfig
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
 from subsystem.shooter import Shooter
 from utils.input import InputFactory
+from config import ShooterConfig
+from subsystem.shooter import Shooter
 
 # Third-party imports
 import commands2
 import wpilib
 from commands2.button import Trigger
 from pathplannerlib.auto import AutoBuilder
-
+from subsystem.intakeactions import IntakeSubsystem
+from pathplannerlib.path import PathPlannerPath
 
 class RobotSwerve:
     # forward declare critical types for editors
@@ -60,7 +63,7 @@ class RobotSwerve:
         self._drive_scale_fast = 1
         self._drive_is_slow = False
 
-        self.driver_controller = commands2.button.CommandXboxController(0)
+        self.driver_controller = commands2.button.CommandXboxController(2)
         self.mech_controller = commands2.button.CommandXboxController(1)
 
         # TODO: Move input retrieval and binding into commands/{subsystem}_controls.py
@@ -103,11 +106,29 @@ class RobotSwerve:
             )
         )
 
+        # Initialize Intake
+        self.intake = IntakeSubsystem()
+
+        self.intakeController = wpilib.XboxController(0)
+
+        wpilib.SmartDashboard.putNumber("Intake Velocity", 0.3)
+        wpilib.SmartDashboard.putNumber("Roller Velocity", 0.3)
+
+        self.intakeVelocity = 0
+        self.rollerVelocity = 0
+
     def robotPeriodic(self):
         if self.enableTelemetry and self.telemetry:
             self.telemetry.runDefaultDataCollections()
 
         self.field.setRobotPose(self.drivetrain.current_pose())
+
+        # Intake Robot Periodic
+        self.intakeVelocity = wpilib.SmartDashboard.getNumber("Intake Velocity", 0.3)
+        self.rollerVelocity = wpilib.SmartDashboard.getNumber("Roller Velocity", 0.3)
+
+        self.intake.updateIntake(self.intakeVelocity)
+        self.intake.updateRoller(self.rollerVelocity)
 
     def disabledInit(self):
         self.updateAlliance()
@@ -155,6 +176,23 @@ class RobotSwerve:
         )
         self.driver_controller.a().onTrue(
             commands2.cmd.runOnce(lambda: self.shooter.setRPM(3000), self.shooter)
+        )
+
+        # Intake Telopinit
+        Trigger(self.intakeController.getYButtonPressed).onTrue(
+            commands2.cmd.run(self.intake.stowIntake, self.intake)
+        )
+        Trigger(self.intakeController.getAButtonPressed).onTrue(
+            commands2.cmd.run(self.intake.deployIntake, self.intake)
+        )
+        Trigger(self.intakeController.getXButtonPressed).onTrue(
+            commands2.cmd.runOnce(self.intake.deactivateRoller, self.intake)
+        )
+        Trigger(self.intakeController.getBButtonPressed).onTrue(
+            commands2.cmd.runOnce(self.intake.activateRoller, self.intake)
+        )
+        Trigger(self.intakeController.getStartButtonPressed).onTrue(
+            commands2.cmd.run(self.intake.rampIntake, self.intake)
         )
 
     def teleopPeriodic(self):
