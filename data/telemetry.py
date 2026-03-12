@@ -1,7 +1,7 @@
 # Internal imports
 from config import OperatorRobotConfig
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
-from vision import Vision
+from subsystem.intakeactions import IntakeSubsystem
 
 # Third-party imports
 import wpilib
@@ -59,11 +59,10 @@ driverStationEntries = [
     ["enabled", BooleanLogEntry, "enabled"],
 ]
 
-visionEntries = [
-    ["cameraLeftPose", "cameraleftpose"],
-    ["cameraRightPose", "camerarightpose"],
+intakeEntries = [
+    # ["intakeSpeed", "intakespeed"],
+    ["rollerSpeed", "rollerspeed"],
 ]
-
 
 class Telemetry:
 
@@ -73,7 +72,8 @@ class Telemetry:
         mechController: wpilib.XboxController = None,
         driveTrain: SwerveDrivetrain = None,
         driverStation: wpilib.DriverStation = None,
-        vision: Vision = None
+        intake: IntakeSubsystem = None
+
     ):
         self.driverController = driverController
         self.mechController = mechController
@@ -81,7 +81,7 @@ class Telemetry:
         self.driveTrain = driveTrain
         self.swerveModules = driveTrain.swerve_modules
         self.driverStation = driverStation
-        self.vision = vision
+        self.intake = intake
 
         self.networkTable = NetworkTableInstance.getDefault()
         for entryname, logname in telemetryOdometryEntries:
@@ -114,12 +114,12 @@ class Telemetry:
                         "swervedrivetrain/" + logname, entrytype
                     ).publish(),
                 )
-        for entryname, logname in visionEntries:
+        for entryname, logname in intakeEntries:
             setattr(
                 self,
                 entryname,
                 self.networkTable.getStructTopic(
-                    "vision/" + logname, Pose2d
+                    "intake/" + logname, entrytype
                 ).publish(),
             )
 
@@ -274,12 +274,10 @@ class Telemetry:
             self.test.append(self.driverStation.isTest())
             self.enabled.append(self.driverStation.isEnabled())
 
-    def getVisionInputs(self):
-        if self.vision is not None:
-            if self.vision.cameraPoseEstimates[0]:
-                self.cameraLeftPose.set(self.vision.cameraPoseEstimates[0])
-            if self.vision.cameraPoseEstimates[1]:
-                self.cameraRightPose.set(self.vision.cameraPoseEstimates[1])
+    def getIntakeInputs(self):
+        if self.intake is not None:
+            # self.intake.intakeVelocity = self.intakeSpeed.getEntry(getattr(self, "intakeSpeed"))
+            self.intake.rollerVelocity = self.rollerSpeed.getEntry(getattr(self, "rollerSpeed"))
 
     def runDefaultDataCollections(self):
         self.getDriverControllerInputs()
@@ -287,7 +285,7 @@ class Telemetry:
         self.getOdometryInputs()
         self.getFullSwerveState()
         self.getRawSwerveInputs()
-        self.getVisionInputs()
+        self.getIntakeInputs()
         self.getDriverStationInputs()
 
     def logAdditionalOdometry(

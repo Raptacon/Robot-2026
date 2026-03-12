@@ -6,6 +6,19 @@
 
 Please take a look at the [wiki](https://github.com/Raptacon/Robot-2023/wiki) for the most up to date documenation
 
+Browse the auto-generated [API documentation](http://raptacon.github.io/Robot-2026/robot.html)
+
+### Testing docs from a branch
+
+By default, docs only build and deploy on pushes to `main`. To test from a feature branch:
+
+1. In `.github/workflows/robot_ci.yml`, update the `BuildDocs` job's `if:` condition to include your branch:
+   ```yaml
+   if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/your-branch-name')
+   ```
+2. Ask a mentor to add your branch to the [GitHub Pages environment deployment rules](https://github.com/Raptacon/Robot-2026/settings/environments/).
+3. Revert the `if:` condition before merging to `main`.
+
 Also make sure to check out the [Kanban board](https://github.com/Raptacon/Robot-2023/projects/1)
 test
 
@@ -164,6 +177,105 @@ Extra things:
 
 # Stream Deck
 To use our Stream Deck, you need to run the Raptacon streamdeck repo along with the robot code. We do this because we do not want too many 3rd party libraries in the robot code.
+
+# Testing
+
+Tests run automatically when you deploy code (`make deploy`) and on every pull request in GitHub. If tests fail, your code won't deploy and your PR can't be merged. This keeps broken code off the robot.
+
+## Running tests locally
+
+```bash
+# Run all tests
+python -m robotpy test
+
+# Run just the fuzz tests
+python -m robotpy test -- tests/test_fuzz_teleop.py -v
+
+# Run a single test by name
+python -m robotpy test -- tests/test_fuzz_teleop.py::test_fuzz_teleop_short -v
+```
+
+## Fuzz Tests (`tests/test_fuzz_teleop.py`)
+
+Fuzz tests feed **random controller inputs** to the robot in simulation to make sure no button combination can crash it. Think of it like a toddler mashing every button on the Xbox controller hundreds of times in a row.
+
+Each test uses a **seed number** so the "random" inputs are the same every time. If a test fails, anyone on the team can re-run it and get the exact same crash. Check the test file's docstring for detailed instructions on what to do when a fuzz test fails.
+
+**What the tests cover:**
+- `test_fuzz_teleop_default` - Full match flow (disabled -> auto -> teleop) with 500 cycles
+- `test_fuzz_teleop_skip_auto` - Same inputs but skips auto, catches code that assumes auto ran first
+- `test_fuzz_teleop_short` - Quick 100-cycle smoke test
+- `test_fuzz_teleop_all_extremes` - Only uses boundary stick values (-1, 0, +1)
+- `test_fuzz_teleop_long` - Thorough 5000-cycle test (runs in CI)
+
+# Host Tools
+
+## Controller Configuration GUI
+
+A tkinter-based GUI tool for visually configuring Xbox controller bindings for the robot. Define named actions with metadata (deadbands, inversions, trigger modes) and map them to controller inputs via a visual controller diagram. Configs are saved/loaded as YAML.
+
+### Dependencies
+
+```bash
+pip install -r host/requirements.txt
+```
+
+Note: For crisp SVG rendering, the native [Cairo](https://www.cairographics.org/download/) library must be installed on your system. Without it, the tool falls back to the pre-rendered PNG image.
+
+### Running
+
+```bash
+# Launch with a blank config (two default controllers: Driver and Operator)
+python -m host.controller_config
+
+# Open an existing config file
+python -m host.controller_config path/to/config.yaml
+```
+
+### Usage
+
+1. **Define actions** in the left panel (Add button) - set name, group, input type (button/analog/pov), trigger mode, deadband, inversion, scale
+2. **Assign actions** by dragging from the action panel to controller inputs, or click a binding box to open the assignment dialog
+3. **Switch controllers** using the tabs (Driver/Operator) - add/remove controllers via Edit menu
+4. **Save/Load** via File menu or Ctrl+S / Ctrl+O
+5. **Import/Export** actions or assignments separately via File > Import/Export submenus
+6. **Undo/Redo** via Ctrl+Z / Ctrl+Y
+
+The config YAML is saved to a location of your choice and will later be consumed by robot code via the shared parser in `utils/controller/`.
+
+### Printing and Exporting
+
+Export controller layouts as PNG or PDF for documentation, pit displays, or driver reference sheets.
+
+**From the GUI:**
+
+File > Print / Export, then choose:
+- **Portrait (2 per page)** - two controllers stacked vertically on a letter page
+- **Landscape (1 per page)** - one controller per page, wider layout
+
+Each option is available as PNG or PDF. To hide unbound inputs, toggle View > Hide Unassigned Inputs before exporting.
+
+**From the command line (no GUI):**
+
+```bash
+# PDF, landscape, one controller per page
+python -m host.controller_config data/controller.yaml --export docs/controllers.pdf --orientation landscape
+
+# PNG, portrait, two controllers per page
+python -m host.controller_config data/controller.yaml --export docs/controllers.png
+
+# Hide inputs with no bindings
+python -m host.controller_config data/controller.yaml --export docs/controllers.pdf --hide-unassigned
+```
+
+| Argument | Description |
+|----------|-------------|
+| `config_file` | Path to YAML config (required for export) |
+| `--export OUTPUT` | Output file path (.png or .pdf) |
+| `--orientation` | `portrait` (default, 2/page) or `landscape` (1/page) |
+| `--hide-unassigned` | Omit inputs with no bindings |
+
+Output is rendered at 150 DPI, US Letter size. Multi-page PNGs get `_page1`, `_page2` suffixes; PDFs are a single multi-page file.
 
 # Information
 

@@ -1,0 +1,104 @@
+version: "1.0.0"
+actions:
+  myfunio: {}
+  drivetrain:
+    speed:
+      description: speedy driver drive
+      input_type: analog
+      trigger_mode: scaled
+      deadband: 0.05
+    rotation:
+      description: rotate the robot
+      input_type: analog
+      trigger_mode: squared
+      deadband: 0.05
+    spliney:
+      input_type: analog
+      trigger_mode: spline
+      deadband: 0.05
+      extra:
+        spline_points:
+        - x: -1.0
+          y: -1.0
+          tangent: 1.0
+        - x: -0.395
+          y: -0.28
+          tangent: 2.25
+        - x: 0.0
+          y: 0.0
+          tangent: 0.27
+        - x: 0.395
+          y: 0.28
+          tangent: 2.25
+        - x: 1.0
+          y: 1.0
+          tangent: 1.0
+    plade:
+      description: Yes you heard it..we went to plade
+      input_type: output
+    sawblade:
+      input_type: analog
+      trigger_mode: segmented
+      deadband: 0.05
+      extra:
+        segment_points:
+        - x: -1.0
+          y: 0.88
+        - x: -0.605
+          y: -0.765
+        - x: -0.32
+          y: -0.54
+        - x: 0.0
+          y: 0.0
+        - x: 0.36
+          y: 0.335
+        - x: 0.605
+          y: 0.765
+        - x: 0.85
+          y: 0.9
+        - x: 1.0
+          y: 0.9
+    new_action: {}
+  intake:
+    jiggle:
+      trigger_mode: while_true
+    manual:
+      input_type: analog
+      trigger_mode: scaled
+      deadband: 0.05
+    run:
+      description: Runs the Inake
+      trigger_mode: toggle_on_true
+    deploy:
+      description: Toggles if Intake is deployed or not
+      trigger_mode: toggle_on_true
+    triggerTest:
+      description: Test the trigger action
+      input_type: analog
+      trigger_mode: scaled
+      deadband: 0.05
+controllers:
+  0:
+    name: Driver
+    bindings:
+      rumble_both:
+      - drivetrain.plade
+      right_stick_y:
+      - drivetrain.rotation
+      left_stick_y:
+      - drivetrain.speed
+      right_stick_x:
+      - drivetrain.spliney
+      left_trigger:
+      - intake.triggerTest
+  1:
+    name: Operator
+    bindings:
+      y_button:
+      - intake.jiggle
+      right_stick_y:
+      - intake.manual
+      a_button:
+      - intake.run
+      left_bumper:
+      - intake.deploy
