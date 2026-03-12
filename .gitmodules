@@ -1,0 +1,3 @@
+[submodule "examples/robotpy"]
+	path = examples/robotpy
+	url = https://github.com/robotpy/examples.git

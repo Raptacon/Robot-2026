@@ -1,22 +1,25 @@
 """
-Collection of numeric constants that define physical properties of the robot
+Physical constants and identifiers for the swerve drivetrain.
 """
 
 # Native imports
 import math
-from enum import Enum
+from enum import Enum, StrEnum
 
-# Third-Party Imports
-
-#############################
-# ROBOT ###################
-#############################
+# Internal imports
+from .robot_constants import RobotConstants
 
 
-class RobotConstants:
-    massKG: float = 63.9565
-    #MOI: Moment of inertia, kg*m^2
-    MOI: float = 5.94175290870316
+class SwerveModuleName(StrEnum):
+    """Canonical string identifiers for each swerve module position.
+
+    Values are the string names used in NetworkTables, SmartDashboard keys,
+    and subsystem registration (e.g. "frontLeft").
+    """
+    FRONT_LEFT = "frontLeft"
+    FRONT_RIGHT = "frontRight"
+    BACK_LEFT = "backLeft"
+    BACK_RIGHT = "backRight"
 
 
 #############################

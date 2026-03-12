@@ -73,7 +73,6 @@ class Telemetry:
         driveTrain: SwerveDrivetrain = None,
         driverStation: wpilib.DriverStation = None,
         intake: IntakeSubsystem = None
-
     ):
         self.driverController = driverController
         self.mechController = mechController
@@ -278,6 +277,7 @@ class Telemetry:
         if self.intake is not None:
             # self.intake.intakeVelocity = self.intakeSpeed.getEntry(getattr(self, "intakeSpeed"))
             self.intake.rollerVelocity = self.rollerSpeed.getEntry(getattr(self, "rollerSpeed"))
+
 
     def runDefaultDataCollections(self):
         self.getDriverControllerInputs()
