@@ -140,14 +140,20 @@ class InputFactory:
         register_global: bool | None = None,
     ):
         # Load configuration and track source for error messages
+        # Resolve relative paths against the project root (two levels up from
+        # utils/input/) so callers don't depend on cwd.
+        _project_root = Path(__file__).resolve().parent.parent.parent
         if config is not None:
             self._config = config
             self._config_source = "<FullConfig object>"
             self._config_files: list[Path] = []
         elif config_path is not None:
-            self._config = load_config(config_path)
+            p = Path(config_path)
+            if not p.is_absolute():
+                p = _project_root / p
+            self._config = load_config(p)
             self._config_source = str(config_path)
-            self._config_files = [Path(config_path).resolve()]
+            self._config_files = [p.resolve()]
         elif actions_path is not None and assignments_path is not None:
             actions = load_actions_from_file(actions_path)
             controllers = load_assignments_from_file(assignments_path)
