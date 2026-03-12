@@ -1,0 +1,10 @@
+[
+  {
+    "name": "/robot/logLevel",
+    "type": "string",
+    "value": "INFO",
+    "properties": {
+      "persistent": true
+    }
+  }
+]
