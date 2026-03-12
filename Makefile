@@ -66,7 +66,7 @@ sync:
 deploy: sync
 	${PYTHON} -m robotpy deploy
 
-gui-exe: setup_${VENV} ## Build standalone GUI executable
+gui-exe: setup_${VENV} ## Build standalone controller config GUI executable
 	${VENVBIN}/pip install pyinstaller
 	${VENVBIN}/pip install -r host/requirements.txt
 ifeq ($(OS), Windows_NT)
@@ -77,3 +77,15 @@ else
 	cd host && ../${VENVBIN}/pyinstaller controller_config_linux.spec --distpath ../dist --workpath ../build/gui --clean -y
 endif
 	@echo "Built in: dist/"
+
+match-monitor-exe: setup_${VENV} ## Build standalone Match Monitor executable (Windows only)
+	${VENVBIN}/pip install pyinstaller
+	${VENVBIN}/pip install -r host/requirements.txt
+ifeq ($(OS), Windows_NT)
+	${VENVBIN}/python host/make_ico.py
+	cd host && ../${VENVBIN}/pyinstaller match_monitor_win.spec --distpath ../dist --workpath ../build/match_monitor --clean -y
+	@echo "Built: dist/raptacon-match-monitor.exe"
+else
+	@echo "ERROR: Match Monitor exe is Windows-only (uses Windows tray/console APIs)"
+	@exit 1
+endif

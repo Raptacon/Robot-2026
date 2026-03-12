@@ -2,3 +2,6 @@ pyyaml
 cairosvg
 Pillow
 XInput-Python
+pystray
+robotpy-wpiutil
+matplotlib

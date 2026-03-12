@@ -5,6 +5,8 @@ import inspect
 import commands2
 
 from robotswerve import RobotSwerve
+from utils.control_listener import ControlListener
+from utils.log_uploader import LogUploader
 from utils.datalog_bridge import setup_logging
 import wpilib
 import logging
@@ -32,6 +34,42 @@ class MyRobot(commands2.TimedCommandRobot):
 
         # setup our scheduling period. Defaulting to 20 Hz (50 ms)
         super().__init__(period=MyRobot.kDefaultPeriod / 1000)
+        
+        #Init telem files
+        self.telemInit()
+
+        # TCP control listener — host connects to robot to establish link
+        try:
+            self.control_listener = ControlListener()
+            self.control_listener.start()
+        except Exception:
+            self.control_listener = None
+            wpilib.reportError("Unable to create ControlListener", printTrace=True)
+
+        # Log uploader for match monitor
+        try:
+            self.log_uploader = LogUploader(self.control_listener) if self.control_listener else None
+        except Exception:
+            self.log_uploader = None
+            wpilib.reportError("Unable to create LogUploader", printTrace=True)
+
+        # Wire up host command callbacks
+        if self.control_listener and self.log_uploader:
+            self.control_listener.on_force_upload = self.log_uploader.start_upload
+            self.control_listener.on_stop_upload = self.log_uploader.stop_upload
+
+            def _on_clear_manifest():
+                # 1. Let current file finish uploading, then stop
+                self.log_uploader.stop_and_wait()
+                # 2. Clear manifests
+                count = self.control_listener._clear_manifests()
+                self.control_listener.send_message(
+                    {'type': 'MANIFEST_CLEARED', 'count': count})
+                # 3. Restart uploads (same criteria as disabledInit)
+                self.log_uploader.start_upload()
+
+            self.control_listener.on_clear_manifest_done = _on_clear_manifest
+
         # Instantiate our RobotContainer. This will perform all our button bindings, and put our
         # autonomous chooser on the dashboard.
         if not hasattr(self, "container"):
@@ -44,6 +82,33 @@ class MyRobot(commands2.TimedCommandRobot):
         This function is run when the robot is first started up and should be used for any
         initialization code.
         """
+        
+
+    def telemInit(self) -> None:
+        """Initialize data logging: NT logging, console, DS, and vendor loggers.
+
+        WPILib DataLogManager auto-detects USB and falls back to
+        /home/lvuser/logs.  Phoenix 6 and REV also auto-detect USB.
+        Logging is disabled in simulation to avoid junk files.
+        """
+        if self.isSimulation():
+            return
+
+        # WPILib data log (.wpilog) — auto-uses USB if present
+        wpilib.DataLogManager.start()
+        wpilib.DataLogManager.logNetworkTables(True)
+        wpilib.DataLogManager.logConsoleOutput(True)
+        wpilib.DriverStation.startDataLog(wpilib.DataLogManager.getLog())
+
+        # Phoenix 6 signal logging (.hoot files)
+        # Disabled: SignalLogger spams errors about full disks
+        # from phoenix6 import SignalLogger
+        # SignalLogger.enable_auto_logging(True)
+        # SignalLogger.start()
+
+        # REV status logging (.revlog files)
+        from rev import StatusLogger
+        StatusLogger.start()
 
     def robotPeriodic(self) -> None:
         self.__callAndCatch(self.container.robotPeriodic)
@@ -53,13 +118,21 @@ class MyRobot(commands2.TimedCommandRobot):
     def disabledInit(self) -> None:
         """This function is called once each time the robot enters Disabled mode."""
         self.container.disabledInit()
+        if self.log_uploader is not None:
+            self.log_uploader.start_upload()
 
     def disabledPeriodic(self) -> None:
         """This function is called periodically when disabled"""
         self.container.disabledPeriodic()
 
+    def _stopLogUpload(self) -> None:
+        """Stop any in-progress log upload to free bandwidth."""
+        if self.log_uploader is not None:
+            self.log_uploader.stop_upload()
+
     def autonomousInit(self) -> None:
         """This autonomous runs the autonomous command selected by your RobotContainer class."""
+        self._stopLogUpload()
         self.container.autonomousInit()
 
     def autonomousPeriodic(self) -> None:
@@ -67,6 +140,7 @@ class MyRobot(commands2.TimedCommandRobot):
         self.__callAndCatch(self.container.autonomousPeriodic)
 
     def teleopInit(self) -> None:
+        self._stopLogUpload()
         self.container.teleopInit()
 
     def teleopPeriodic(self) -> None:
@@ -74,6 +148,7 @@ class MyRobot(commands2.TimedCommandRobot):
         self.__callAndCatch(self.container.teleopPeriodic)
 
     def testInit(self) -> None:
+        self._stopLogUpload()
         self.container.testInit()
 
     def testPeriodic(self) -> None:

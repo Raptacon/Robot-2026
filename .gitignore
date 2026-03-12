@@ -1,3 +1,6 @@
+# match_monitor live config (contains API keys / webhook URLs)
+match_monitor_config.json
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

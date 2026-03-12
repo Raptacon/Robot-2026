@@ -15,6 +15,8 @@ pdoc
 #host gui tools
 cairosvg
 Pillow
+pystray
+XInput-Python
 
 #Raptacon base lib
 # raptacon3200>=2025.0.1
