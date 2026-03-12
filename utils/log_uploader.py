@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 LOG_EXTENSIONS = {'.wpilog', '.hoot', '.revlog'}
 
 LOG_DIRS = [
+    Path('/media/sda1/logs'),
     Path('/media/sda1'),
     Path('/home/lvuser/logs'),
     # Fallback for simulation / Windows dev
@@ -53,20 +54,22 @@ class LogUploader:
         """Begin a non-blocking upload cycle. No-op if already uploading."""
         if not self.upload_enabled:
             self.status = 'disabled'
+            logger.info("Upload disabled via NT, skipping")
             return
         if not self._control.is_connected:
             self.status = 'no host connected'
-            print("[LogUploader] No host connected, skipping upload")
+            logger.info("No host connected, skipping upload")
             return
 
         host_ip = self._control.host_ip
         http_port = self._control.http_port
-        print(f"[LogUploader] start_upload: host={host_ip}:{http_port}")
+        logger.info("start_upload: host=%s:%s", host_ip, http_port)
 
         with self._lock:
             if self._thread is not None and self._thread.is_alive():
-                logger.info("Upload already in progress, skipping")
+                logger.info("Upload already in progress, skipping start_upload")
                 return
+            logger.info("Starting upload worker thread")
             self._stop_event.clear()
             self._thread = threading.Thread(
                 target=self._upload_worker, daemon=True
@@ -96,7 +99,7 @@ class LogUploader:
 
             self.status = 'scanning'
             log_dirs = self._find_log_dirs()
-            print(f"[LogUploader] Found log dirs: {log_dirs}")
+            logger.info("Found log dirs: %s", log_dirs)
             if not log_dirs:
                 self.status = 'no log directory found'
                 return
@@ -111,7 +114,7 @@ class LogUploader:
             for log_dir in log_dirs:
                 manifest_files.extend(self._find_manifest_files(log_dir))
 
-            print(f"[LogUploader] new={len(new_files)}, manifest={len(manifest_files)}")
+            logger.info("new=%d, manifest=%d", len(new_files), len(manifest_files))
             if not new_files and not manifest_files:
                 self.status = 'idle (no files)'
                 return
@@ -119,7 +122,7 @@ class LogUploader:
             self.status = 'connecting'
             if not self._check_receiver(host_ip, http_port):
                 self.status = 'receiver unreachable'
-                print("[LogUploader] Receiver unreachable!")
+                logger.warning("Receiver unreachable at %s:%s", host_ip, http_port)
                 return
 
             event_name, match_type, match_number = self._get_match_metadata()

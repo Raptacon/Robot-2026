@@ -10,7 +10,7 @@ from typing import Optional
 logger = logging.getLogger("match_monitor")
 
 CONTROL_PORT = 5805
-ROBOT_ADDRESSES = ['roboRIO-3200-FRC.local', '172.22.11.2']
+ROBOT_ADDRESSES = ['roboRIO-3200-FRC.local', '10.32.0.2', '172.22.11.2']
 POLL_INTERVAL = 10  # seconds between connection attempts
 KEEPALIVE_INTERVAL = 10  # seconds between PINGs
 KEEPALIVE_TIMEOUT = 30  # seconds to wait for PONG
@@ -132,9 +132,14 @@ class RobotConnector:
                     self._connect_attempts += 1
                     self._last_attempt_addr = addr
                     self._last_attempt_time = time.monotonic()
-                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    # Resolve address to support both IPv4 and IPv6 (mDNS may return IPv6)
+                    addrinfo = socket.getaddrinfo(addr, CONTROL_PORT, socket.AF_UNSPEC, socket.SOCK_STREAM)
+                    if not addrinfo:
+                        raise OSError(f"Could not resolve {addr}")
+                    af, socktype, proto, canonname, sockaddr = addrinfo[0]
+                    sock = socket.socket(af, socktype, proto)
                     sock.settimeout(3)
-                    sock.connect((addr, CONTROL_PORT))
+                    sock.connect(sockaddr)
                     logger.info(f"Connected to robot at {addr}:{CONTROL_PORT}")
                     self._handle_connection(sock, addr)
                     logger.info(f"Disconnected from robot at {addr}, resuming polling")
@@ -233,12 +238,14 @@ class RobotConnector:
             mtype = msg.get('match_type', '')
             mnum = msg.get('match_number', '')
             logger.info(f"Robot starting upload: {event} {mtype}_{mnum}")
+            print(f"  Robot starting upload: {event} {mtype}_{mnum}")
 
         elif msg_type == 'UPLOAD_COMPLETE':
             event = msg.get('event_name', '')
             mtype = msg.get('match_type', '')
             mnum = msg.get('match_number', '')
             logger.info(f"Robot upload complete: {event} {mtype}_{mnum}")
+            print(f"  Robot upload complete: {event} {mtype}_{mnum}")
 
             if self._on_upload_complete:
                 metadata = {

@@ -111,10 +111,33 @@ class DiscordNotifier(MatchCompleteCallback):
                           match_result: Optional['MatchResult'] = None,
                           event_stats: Optional['EventStats'] = None) -> None:
         if not self._webhook_url:
+            logger.debug("Discord notification skipped — no webhook URL")
             return
         try:
             embed = self._build_embed(metadata, stats, match_result, event_stats)
-            self._post({'embeds': [embed]})
+
+            # Generate voltage chart if timeseries data is available
+            chart_png = b''
+            if stats.voltage_timeseries:
+                try:
+                    from .chart_generator import voltage_chart
+                    chart_png = voltage_chart(
+                        stats.voltage_timeseries,
+                        brownout_times=stats.brownout_timestamps_sec,
+                        mode_transitions=stats.mode_transitions,
+                        match_duration=stats.match_duration_seconds,
+                    )
+                except Exception:
+                    logger.exception("Chart generation failed (non-fatal)")
+
+            if chart_png:
+                embed['image'] = {'url': 'attachment://voltage.png'}
+                self._post_multipart(
+                    {'embeds': [embed]},
+                    files=[('voltage.png', chart_png, 'image/png')],
+                )
+            else:
+                self._post({'embeds': [embed]})
             logger.info("Discord notification sent")
         except Exception:
             logger.exception("Discord notification failed (non-fatal)")
@@ -339,4 +362,64 @@ class DiscordNotifier(MatchCompleteCallback):
             body = e.read().decode(errors='replace')[:200]
             logger.warning(f"Discord webhook HTTP error {e.code}: {body}")
         except urllib.error.URLError as e:
-            logger.debug(f"Discord webhook unreachable: {e.reason}")
+            logger.warning(f"Discord webhook unreachable: {e.reason}")
+
+    def _post_multipart(self, payload: dict,
+                        files: list[tuple[str, bytes, str]]) -> None:
+        """POST with multipart/form-data to attach files alongside JSON payload.
+
+        Args:
+            payload: JSON payload (sent as 'payload_json' part).
+            files: List of (filename, data_bytes, content_type) tuples.
+        """
+        import uuid
+        boundary = uuid.uuid4().hex
+
+        parts = []
+        # JSON payload part
+        parts.append(
+            f'--{boundary}\r\n'
+            f'Content-Disposition: form-data; name="payload_json"\r\n'
+            f'Content-Type: application/json\r\n\r\n'
+            f'{json.dumps(payload)}\r\n'
+        )
+        # File parts
+        for i, (filename, data, content_type) in enumerate(files):
+            header = (
+                f'--{boundary}\r\n'
+                f'Content-Disposition: form-data; name="files[{i}]"; '
+                f'filename="{filename}"\r\n'
+                f'Content-Type: {content_type}\r\n\r\n'
+            )
+            parts.append(header)
+            parts.append(data)
+            parts.append(b'\r\n')
+
+        parts.append(f'--{boundary}--\r\n')
+
+        # Build body
+        body = b''
+        for part in parts:
+            if isinstance(part, str):
+                body += part.encode('utf-8')
+            else:
+                body += part
+
+        req = urllib.request.Request(
+            self._webhook_url,
+            data=body,
+            headers={
+                'Content-Type': f'multipart/form-data; boundary={boundary}',
+                'User-Agent': 'DiscordBot (https://github.com/Raptacon/Robot-2026, 1.0)',
+            },
+            method='POST',
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                if resp.status not in (200, 204):
+                    logger.warning(f"Discord webhook returned {resp.status}")
+        except urllib.error.HTTPError as e:
+            body_text = e.read().decode(errors='replace')[:200]
+            logger.warning(f"Discord webhook HTTP error {e.code}: {body_text}")
+        except urllib.error.URLError as e:
+            logger.warning(f"Discord webhook unreachable: {e.reason}")

@@ -52,6 +52,7 @@ class ServerContext:
     config_path: Path
     code_dir_holder: list   # [Path | None] — mutable; updated by codedir command / tray
     log_file: Path
+    analyzer: 'WpilogAnalyzer' = None
 
 
 LOG_LEVELS = {
@@ -155,7 +156,8 @@ class LogReceiverHandler(BaseHTTPRequestHandler):
                 uncompressed_size = len(data)
 
             part_path.write_bytes(data)
-            part_path.rename(dest)
+            import os as _os
+            _os.replace(str(part_path), str(dest))  # os.replace() atomically overwrites on all platforms
             elapsed = time.monotonic() - start_time
             rate_mbps = (compressed_size / (1024 * 1024)) / elapsed if elapsed > 0 else 0
 
@@ -206,56 +208,81 @@ class LogReceiverHandler(BaseHTTPRequestHandler):
         pass
 
 
+def _analyze_and_report(analyzer: WpilogAnalyzer, registry: CallbackRegistry,
+                        match_dir: Path, wpilog_file: Path, metadata: dict,
+                        match_client: 'MatchDataClient') -> None:
+    """Analyze a single .wpilog file, collect DS logs, fetch match data, run callbacks."""
+    logger.info(f"Analyzing: {wpilog_file.name}")
+    stats = analyzer.analyze(wpilog_file)
+
+    # Collect and correlate DS log files using the wpilog wall clock start
+    match_time = stats.wpilog_wall_start or datetime.now()
+    try:
+        stats.ds_log = collect_for_match(match_time, match_dir)
+        if stats.ds_log.copied_files:
+            logger.info(f"DS logs collected: {', '.join(stats.ds_log.copied_files)}")
+    except Exception:
+        logger.exception("DS log collection failed (non-fatal)")
+
+    # Fetch official match data from TBA / FRC Events API
+    match_result = None
+    event_stats = None
+    if match_client and match_client.configured:
+        event_name = metadata.get('event_name', '').strip()
+        match_number_str = metadata.get('match_number', '').strip()
+        match_type = metadata.get('match_type', '').strip().lower()
+        if event_name and match_number_str:
+            try:
+                level = 'qm' if 'qual' in match_type else \
+                        'sf' if 'semi' in match_type else \
+                        'f' if 'final' in match_type else 'qm'
+                match_result = match_client.fetch_match(
+                    event_name, int(match_number_str), level)
+                event_stats = match_client.fetch_event_stats(event_name)
+                if match_result:
+                    logger.info(f"Official result: {match_result.result} "
+                                f"({match_result.our_score}-{match_result.opponent_score})")
+            except Exception:
+                logger.exception("Match data fetch failed (non-fatal)")
+
+    msg = (f"Analysis complete: {wpilog_file.name} — "
+           f"brownouts={stats.brownout_count}, "
+           f"disconnects={stats.disconnect_count}, "
+           f"voltage={stats.avg_voltage}")
+    if stats.ds_log and stats.ds_log.avg_packet_loss_pct is not None:
+        msg += f", pkt_loss={stats.ds_log.avg_packet_loss_pct}%"
+    if match_result:
+        msg += f", result={match_result.result} ({match_result.our_score}-{match_result.opponent_score})"
+    logger.info(msg)
+    print(f"[{datetime.now():%H:%M:%S}] {msg}")
+    registry.run_all(match_dir, metadata, stats, match_result, event_stats)
+
+
 def _run_analysis(analyzer: WpilogAnalyzer, registry: CallbackRegistry,
                    match_dir: Path, metadata: dict,
                    match_client: 'MatchDataClient') -> None:
-    """Background worker: analyze .wpilog files, collect DS logs, fetch match data, run callbacks."""
+    """Background worker: analyze the most recent .wpilog file in match_dir."""
     try:
-        stats = analyzer.analyze_directory(match_dir)
-
-        # Collect and correlate DS log files using the wpilog wall clock start
-        match_time = stats.wpilog_wall_start or datetime.now()
-        try:
-            stats.ds_log = collect_for_match(match_time, match_dir)
-            if stats.ds_log.copied_files:
-                logger.info(f"DS logs collected: {', '.join(stats.ds_log.copied_files)}")
-        except Exception:
-            logger.exception("DS log collection failed (non-fatal)")
-
-        # Fetch official match data from TBA / FRC Events API
-        match_result = None
-        event_stats = None
-        if match_client.configured:
-            event_name = metadata.get('event_name', '').strip()
-            match_number_str = metadata.get('match_number', '').strip()
-            match_type = metadata.get('match_type', '').strip().lower()
-            if event_name and match_number_str:
-                try:
-                    level = 'qm' if 'qual' in match_type else \
-                            'sf' if 'semi' in match_type else \
-                            'f' if 'final' in match_type else 'qm'
-                    match_result = match_client.fetch_match(
-                        event_name, int(match_number_str), level)
-                    event_stats = match_client.fetch_event_stats(event_name)
-                    if match_result:
-                        logger.info(f"Official result: {match_result.result} "
-                                    f"({match_result.our_score}-{match_result.opponent_score})")
-                except Exception:
-                    logger.exception("Match data fetch failed (non-fatal)")
-
-        msg = (f"Analysis complete: {match_dir.name} — "
-               f"brownouts={stats.brownout_count}, "
-               f"disconnects={stats.disconnect_count}, "
-               f"voltage={stats.avg_voltage}")
-        if stats.ds_log and stats.ds_log.avg_packet_loss_pct is not None:
-            msg += f", pkt_loss={stats.ds_log.avg_packet_loss_pct}%"
-        if match_result:
-            msg += f", result={match_result.result} ({match_result.our_score}-{match_result.opponent_score})"
-        logger.info(msg)
-        print(f"[{datetime.now():%H:%M:%S}] {msg}")
-        registry.run_all(match_dir, metadata, stats, match_result, event_stats)
+        wpilog_files = sorted(match_dir.glob('*.wpilog'),
+                              key=lambda f: f.stat().st_mtime, reverse=True)
+        if not wpilog_files:
+            logger.info(f"No .wpilog files found in {match_dir}")
+            return
+        _analyze_and_report(analyzer, registry, match_dir, wpilog_files[0],
+                            metadata, match_client)
     except Exception:
         logger.exception(f"Analysis failed for {match_dir}")
+
+
+def _run_analysis_single(analyzer: WpilogAnalyzer, registry: CallbackRegistry,
+                          match_dir: Path, wpilog_file: Path, metadata: dict,
+                          match_client: 'MatchDataClient') -> None:
+    """Background worker: analyze a specific .wpilog file."""
+    try:
+        _analyze_and_report(analyzer, registry, match_dir, wpilog_file,
+                            metadata, match_client)
+    except Exception:
+        logger.exception(f"Analysis failed for {wpilog_file}")
 
 
 def _level_name(level: int) -> str:
@@ -273,6 +300,9 @@ def _console_loop(connector: RobotConnector,
                   discord_holder: list,
                   config_path: Path,
                   code_dir_holder: list,
+                  analyzer: WpilogAnalyzer = None,
+                  out_path: Path = None,
+                  match_client: 'MatchDataClient' = None,
                   quit_callback=None,
                   close_callback=None) -> None:
     """Interactive command loop running in a daemon thread.
@@ -288,6 +318,8 @@ def _console_loop(connector: RobotConnector,
     saved_file_level = file_handler.level
     console_off = False
     file_off = False
+    test_mode = False
+    _html_preview_cb = None  # HtmlPreviewCallback instance when test mode is on
 
     def _require_connection() -> bool:
         if not connector.is_connected:
@@ -503,6 +535,14 @@ def _console_loop(connector: RobotConnector,
         print("    connect           Resume polling / reconnect")
         print("    disconnect        Close connection and stop polling")
         print()
+        print("  Analysis:")
+        print("    analyze           List available .wpilog files (with index)")
+        print("    analyze last      Re-analyze the most recent .wpilog file")
+        print("    analyze <N>       Analyze Nth file (0=most recent)")
+        print("    analyze <name>    Analyze a file by name (partial match)")
+        print("    test enable       Open HTML preview in browser on analyze")
+        print("    test disable      Send to Discord on analyze (normal mode)")
+        print()
         print("  Settings:")
         print("    codedir           Show current robot code directory")
         print("    codedir <path>    Set robot code directory (for git info)")
@@ -610,6 +650,107 @@ def _console_loop(connector: RobotConnector,
         elif cmd == 'clear-manifest':
             if _require_connection():
                 connector.send_to_robot({'type': 'CLEAR_MANIFEST'})
+
+        elif cmd == 'analyze':
+            if analyzer is None or out_path is None:
+                print("  Analyzer not available")
+            elif len(parts) >= 2 and (parts[1].lower() == 'last' or parts[1].isdigit()):
+                # analyze last  → index 0 (most recent)
+                # analyze N     → index N (0=most recent, 1=second most recent, ...)
+                idx = 0 if parts[1].lower() == 'last' else int(parts[1])
+                wpilog_files = sorted(out_path.rglob('*.wpilog'),
+                                      key=lambda f: f.stat().st_mtime,
+                                      reverse=True)
+                if not wpilog_files:
+                    print("  No .wpilog files found")
+                elif idx >= len(wpilog_files):
+                    print(f"  Index {idx} out of range (have {len(wpilog_files)} files, 0-{len(wpilog_files) - 1})")
+                else:
+                    target_file = wpilog_files[idx]
+                    match_dir = target_file.parent
+                    print(f"  Analyzing [{idx}] {target_file.relative_to(out_path)}...")
+                    metadata = {'event_name': '', 'match_type': '', 'match_number': ''}
+                    threading.Thread(
+                        target=_run_analysis_single,
+                        args=(analyzer, registry, match_dir, target_file,
+                              metadata, match_client),
+                        daemon=True,
+                    ).start()
+            elif len(parts) < 2:
+                # List available wpilog files
+                wpilog_files = sorted(out_path.rglob('*.wpilog'),
+                                      key=lambda f: f.stat().st_mtime,
+                                      reverse=True)
+                if not wpilog_files:
+                    print("  No .wpilog files found")
+                else:
+                    print(f"  {'#':<4} {'File':<52} {'Size':>10}")
+                    print(f"  {'-' * 4} {'-' * 52} {'-' * 10}")
+                    for i, f in enumerate(wpilog_files[:20]):
+                        rel = f.relative_to(out_path)
+                        size = f.stat().st_size
+                        if size >= 1024 * 1024:
+                            size_str = f"{size / (1024 * 1024):.1f} MB"
+                        elif size >= 1024:
+                            size_str = f"{size / 1024:.1f} KB"
+                        else:
+                            size_str = f"{size} B"
+                        print(f"  {i:<4} {str(rel):<52} {size_str:>10}")
+                    if len(wpilog_files) > 20:
+                        print(f"  ... and {len(wpilog_files) - 20} more")
+                    print()
+                    print("  Usage: analyze <filename>")
+            else:
+                # Find and analyze specific file
+                target = ' '.join(parts[1:])
+                matches = [f for f in out_path.rglob('*.wpilog')
+                           if target in f.name or target in str(f.relative_to(out_path))]
+                if not matches:
+                    print(f"  No .wpilog file matching '{target}'")
+                elif len(matches) > 1:
+                    print(f"  Multiple matches for '{target}':")
+                    for f in matches:
+                        print(f"    {f.relative_to(out_path)}")
+                else:
+                    wpilog_file = matches[0]
+                    match_dir = wpilog_file.parent
+                    print(f"  Analyzing {wpilog_file.name}...")
+                    metadata = {'event_name': '', 'match_type': '', 'match_number': ''}
+                    threading.Thread(
+                        target=_run_analysis_single,
+                        args=(analyzer, registry, match_dir, wpilog_file,
+                              metadata, match_client),
+                        daemon=True,
+                    ).start()
+
+        elif cmd == 'test':
+            if len(parts) < 2:
+                print(f"  Test mode: {'enabled' if test_mode else 'disabled'}")
+            elif parts[1].lower() in ('enable', 'on'):
+                if not test_mode:
+                    from .callbacks import HtmlPreviewCallback
+                    _html_preview_cb = HtmlPreviewCallback()
+                    registry.register(_html_preview_cb)
+                    # Disable Discord while testing
+                    notifier = discord_holder[0]
+                    if notifier:
+                        notifier._saved_url = notifier.webhook_url
+                        notifier.webhook_url = ''
+                    test_mode = True
+                print("  Test mode enabled — analyze will open HTML preview in browser")
+            elif parts[1].lower() in ('disable', 'off'):
+                if test_mode and _html_preview_cb is not None:
+                    registry.unregister(_html_preview_cb)
+                    _html_preview_cb = None
+                    # Re-enable Discord
+                    notifier = discord_holder[0]
+                    if notifier and hasattr(notifier, '_saved_url'):
+                        notifier.webhook_url = notifier._saved_url
+                        del notifier._saved_url
+                    test_mode = False
+                print("  Test mode disabled — analyze will send to Discord")
+            else:
+                print("  Usage: test enable|disable")
 
         elif cmd == 'discord':
             _handle_discord(parts)
@@ -734,8 +875,10 @@ def setup_server(bind: str, port: int, output_dir: Optional[str] = None,
         match_dir = out_path / sub_dir
         if not match_dir.is_dir():
             logger.warning(f"Match dir not found for analysis: {sub_dir}")
+            print(f"  [!] Match dir not found for analysis: {match_dir}")
             return
 
+        print(f"  Starting analysis for {sub_dir}...")
         threading.Thread(
             target=_run_analysis,
             args=(analyzer, registry, match_dir, metadata, match_client),
@@ -760,15 +903,19 @@ def setup_server(bind: str, port: int, output_dir: Optional[str] = None,
         config_path=config_path,
         code_dir_holder=code_dir_holder,
         log_file=log_file,
+        analyzer=analyzer,
     )
 
 
-def _start_console_thread(ctx: ServerContext) -> None:
+def _start_console_thread(ctx: ServerContext, analyzer: WpilogAnalyzer = None,
+                          match_client: 'MatchDataClient' = None) -> None:
     """Start the interactive console loop as a daemon thread."""
     threading.Thread(
         target=_console_loop,
         args=(ctx.connector, ctx.console_handler, ctx.file_handler, ctx.log_dir,
               ctx.registry, ctx.discord_holder, ctx.config_path, ctx.code_dir_holder),
+        kwargs={'analyzer': analyzer, 'out_path': ctx.out_path,
+                'match_client': match_client},
         daemon=True,
     ).start()
 
@@ -786,7 +933,7 @@ def run_server(bind: str, port: int, output_dir: Optional[str] = None,
     print("TCP connector polling for roboRIO on port 5805")
     print("Type 'help' for commands. Press Ctrl+C to stop.")
 
-    _start_console_thread(ctx)
+    _start_console_thread(ctx, analyzer=ctx.analyzer, match_client=ctx.match_client)
 
     try:
         ctx.server.serve_forever()

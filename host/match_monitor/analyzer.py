@@ -18,8 +18,13 @@ logger = logging.getLogger("match_monitor")
 # Patterns to match entry names (case-insensitive)
 VOLTAGE_PATTERNS = [
     re.compile(r'battery\s*voltage', re.IGNORECASE),
-    re.compile(r'voltage', re.IGNORECASE),
 ]
+# Rail voltage patterns — tracked separately as named rails
+RAIL_VOLTAGE_PATTERNS = {
+    '3_3v': re.compile(r'rail3v3/voltage', re.IGNORECASE),
+    '5v': re.compile(r'rail5v/voltage', re.IGNORECASE),
+    '6v': re.compile(r'rail6v/voltage', re.IGNORECASE),
+}
 BROWNOUT_PATTERNS = [
     re.compile(r'brownout', re.IGNORECASE),
     re.compile(r'browned?\s*out', re.IGNORECASE),
@@ -61,6 +66,10 @@ class MatchStats:
     controller_config_hash: Optional[str] = None
     mode_transitions: List[dict] = field(default_factory=list)
     entry_names: List[str] = field(default_factory=list)
+    # Voltage timeseries: [(time_sec_from_start, voltage), ...]
+    voltage_timeseries: List[tuple] = field(default_factory=list)
+    # Rail voltages: {rail_name: {avg, min, max, samples}}
+    rail_voltages: Dict[str, dict] = field(default_factory=dict)
     # Wall clock time of the first wpilog record (derived from systemTime entry)
     wpilog_wall_start: Optional[datetime] = field(default=None, compare=False)
     # DS log data attached after collection (not part of wpilog analysis)
@@ -69,9 +78,10 @@ class MatchStats:
     def to_dict(self) -> dict:
         """Convert to a JSON-serializable dictionary."""
         d = asdict(self)
-        # Remove non-serializable fields handled separately
+        # Remove non-serializable / large fields handled separately
         d.pop('wpilog_wall_start', None)
         d.pop('ds_log', None)
+        d.pop('voltage_timeseries', None)
         # Group voltage fields
         d['voltage'] = {
             'start': d.pop('start_voltage'),
@@ -115,6 +125,8 @@ class WpilogAnalyzer:
             mode_ids: Dict[str, set] = {k: set() for k in MODE_PATTERNS}
             config_hash_ids = set()
             system_time_ids = set()
+            # Rail voltage entry IDs: rail_name -> set of entry IDs
+            rail_voltage_ids: Dict[str, set] = {k: set() for k in RAIL_VOLTAGE_PATTERNS}
 
             for record in reader:
                 if record.isStart():
@@ -137,6 +149,9 @@ class WpilogAnalyzer:
                         config_hash_ids.add(data.entry)
                     if _match_any(data.name, SYSTEM_TIME_PATTERNS):
                         system_time_ids.add(data.entry)
+                    for rail_name, pattern in RAIL_VOLTAGE_PATTERNS.items():
+                        if pattern.search(data.name):
+                            rail_voltage_ids[rail_name].add(data.entry)
 
             # Log discovered entries
             logger.info(f"Analyzing {wpilog_path.name}: "
@@ -153,6 +168,8 @@ class WpilogAnalyzer:
             prev_brownout = False
             prev_ds_connected = True
             mode_state: Dict[str, bool] = {}
+            # Rail voltage accumulators: {rail: [sum, count, min, max]}
+            rail_accum: Dict[str, list] = {k: [0.0, 0, None, None] for k in RAIL_VOLTAGE_PATTERNS}
 
             mm.seek(0)
             reader2 = DataLogReader(mm)
@@ -171,10 +188,10 @@ class WpilogAnalyzer:
                 last_timestamp = ts_sec
 
                 try:
-                    # Voltage
+                    # Voltage (skip 0.0 — default NT value before first real reading)
                     if record.getEntry() in voltage_ids:
                         v = self._get_numeric(record, entry_info['type'])
-                        if v is not None:
+                        if v is not None and v > 0.0:
                             if stats.start_voltage is None:
                                 stats.start_voltage = v
                             stats.end_voltage = v
@@ -184,6 +201,9 @@ class WpilogAnalyzer:
                                 stats.min_voltage = v
                             if stats.max_voltage is None or v > stats.max_voltage:
                                 stats.max_voltage = v
+                            stats.voltage_timeseries.append((
+                                round(ts_sec - (first_timestamp or 0), 3), v
+                            ))
 
                     # Brownout
                     if record.getEntry() in brownout_ids:
@@ -205,20 +225,33 @@ class WpilogAnalyzer:
                             )
                         prev_ds_connected = val
 
-                    # Mode transitions
+                    # Mode transitions (record both True and False)
                     for mode_name, ids in mode_ids.items():
                         if record.getEntry() in ids:
                             val = record.getBoolean()
                             prev = mode_state.get(mode_name)
                             if prev is None or val != prev:
                                 mode_state[mode_name] = val
-                                if val:
-                                    stats.mode_transitions.append({
-                                        'time_sec': round(
-                                            ts_sec - (first_timestamp or 0), 3
-                                        ),
-                                        'mode': mode_name,
-                                    })
+                                stats.mode_transitions.append({
+                                    'time_sec': round(
+                                        ts_sec - (first_timestamp or 0), 3
+                                    ),
+                                    'mode': mode_name,
+                                    'value': val,
+                                })
+
+                    # Rail voltages
+                    for rail_name, ids in rail_voltage_ids.items():
+                        if record.getEntry() in ids:
+                            v = self._get_numeric(record, entry_info['type'])
+                            if v is not None:
+                                acc = rail_accum[rail_name]
+                                acc[0] += v
+                                acc[1] += 1
+                                if acc[2] is None or v < acc[2]:
+                                    acc[2] = v
+                                if acc[3] is None or v > acc[3]:
+                                    acc[3] = v
 
                     # Controller config hash
                     if record.getEntry() in config_hash_ids:
@@ -266,6 +299,16 @@ class WpilogAnalyzer:
                 stats.match_duration_seconds = round(
                     last_timestamp - first_timestamp, 3
                 )
+
+            # Finalize rail voltages
+            for rail_name, acc in rail_accum.items():
+                if acc[1] > 0:
+                    stats.rail_voltages[rail_name] = {
+                        'avg': round(acc[0] / acc[1], 3),
+                        'min': round(acc[2], 3),
+                        'max': round(acc[3], 3),
+                        'samples': acc[1],
+                    }
 
             mm.close()
 

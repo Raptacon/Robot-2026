@@ -231,7 +231,10 @@ class MatchMonitorTray:
                   self._ctx.file_handler, self._ctx.log_dir,
                   self._ctx.registry, self._ctx.discord_holder,
                   self._ctx.config_path, self._ctx.code_dir_holder),
-            kwargs={'quit_callback': self._quit,
+            kwargs={'analyzer': self._ctx.analyzer,
+                    'out_path': self._ctx.out_path,
+                    'match_client': self._ctx.match_client,
+                    'quit_callback': self._quit,
                     'close_callback': self._on_console_closed},
             daemon=True,
         )
