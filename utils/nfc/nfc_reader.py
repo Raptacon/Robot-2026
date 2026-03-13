@@ -1,10 +1,11 @@
 """PN532 NFC reader protocol layer.
 
-Implements ISO14443A tag detection and NTAG page reading on top of a
+Implements ISO14443A tag detection, NTAG page reading and writing on top of a
 duck-typed transport (anything with write_command/read_response/is_open).
 """
 
 import logging
+import time
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -17,77 +18,90 @@ _CMD_IN_DATA_EXCHANGE = 0x40
 # ISO14443A baud rate code
 _MIFARE_ISO14443A = 0x00
 
-# NTAG READ command (reads 4 pages = 16 bytes at a time)
-_NTAG_CMD_READ = 0x30
+# NTAG commands
+_NTAG_CMD_READ = 0x30   # reads 4 pages = 16 bytes at a time
+_NTAG_CMD_WRITE = 0xA2  # writes 1 page = 4 bytes at a time
 
 # Response codes
 _RESP_SAM_CONFIG = 0x15
 _RESP_IN_LIST_PASSIVE_TARGET = 0x4B
 _RESP_IN_DATA_EXCHANGE = 0x41
 
+# NDEF URI identifier codes (prefix bytes that save tag space)
+_URI_PREFIXES = {
+    0x00: '',
+    0x01: 'http://www.',
+    0x02: 'https://www.',
+    0x03: 'http://',
+    0x04: 'https://',
+    0x05: 'tel:',
+    0x06: 'mailto:',
+}
+
 
 def parse_ndef_text_records(data: bytes) -> list:
     """Parse NDEF text records from NTAG user data pages.
 
-    NTAG user data starts with a TLV block:
-      - 0x03 = NDEF Message TLV, followed by length, then NDEF records
-      - 0xFE = Terminator TLV
-
-    Each NDEF record has:
-      - Header byte (MB, ME, CF, SR, IL, TNF)
-      - Type length, payload length (1 or 4 bytes if SR), optional ID length
-      - Type, optional ID, payload
-
-    For Text records (TNF=0x01, type="T"):
-      - Payload[0] = status byte (bit 7 = encoding, bits 5-0 = lang code length)
-      - Payload[1:1+lang_len] = language code (e.g. "en")
-      - Payload[1+lang_len:] = the actual text
-
     Returns a list of decoded text strings.
     """
-    texts = []
-    if not data or len(data) < 3:
-        return texts
+    texts, _ = _parse_ndef_message_tlv(data)
+    return texts
 
-    # Find NDEF Message TLV (type 0x03)
+
+def parse_ndef_uri_records(data: bytes) -> list:
+    """Parse NDEF URI records from NTAG user data pages.
+
+    Returns a list of decoded URI strings.
+    """
+    _, uris = _parse_ndef_message_tlv(data)
+    return uris
+
+
+def _parse_ndef_message_tlv(data: bytes) -> tuple:
+    """Parse NDEF TLV and return (texts, uris) from all NDEF messages."""
+    all_texts = []
+    all_uris = []
+    if not data or len(data) < 3:
+        return all_texts, all_uris
+
     pos = 0
     while pos < len(data):
         tlv_type = data[pos]
         if tlv_type == 0x00:
-            # NULL TLV, skip
             pos += 1
             continue
         if tlv_type == 0xFE:
-            # Terminator
             break
         if pos + 1 >= len(data):
             break
         tlv_len = data[pos + 1]
         pos += 2
         if tlv_len == 0xFF:
-            # 3-byte length format
             if pos + 2 > len(data):
                 break
             tlv_len = (data[pos] << 8) | data[pos + 1]
             pos += 2
 
         if tlv_type == 0x03:
-            # NDEF Message — parse records within
             ndef_data = data[pos:pos + tlv_len]
-            texts.extend(_parse_ndef_records(ndef_data))
+            texts, uris = _parse_ndef_records(ndef_data)
+            all_texts.extend(texts)
+            all_uris.extend(uris)
 
         pos += tlv_len
 
-    return texts
+    return all_texts, all_uris
 
 
-def _parse_ndef_records(data: bytes) -> list:
-    """Parse NDEF records from an NDEF message payload."""
+def _parse_ndef_records(data: bytes) -> tuple:
+    """Parse NDEF records from an NDEF message payload.
+
+    Returns (texts, uris) tuple.
+    """
     texts = []
+    uris = []
     pos = 0
     while pos < len(data):
-        if pos >= len(data):
-            break
         header = data[pos]
         pos += 1
         tnf = header & 0x07
@@ -129,10 +143,18 @@ def _parse_ndef_records(data: bytes) -> list:
             lang_len = status & 0x3F
             encoding = 'utf-8' if (status & 0x80) == 0 else 'utf-16'
             if len(payload) > 1 + lang_len:
-                text = payload[1 + lang_len:].decode(encoding, errors='replace')
+                text = payload[1 + lang_len:].decode(encoding,
+                                                     errors='replace')
                 texts.append(text)
 
-    return texts
+        # TNF 0x01 = Well-Known, type "U" = URI
+        if tnf == 0x01 and rec_type == b'U' and len(payload) >= 1:
+            prefix_code = payload[0]
+            prefix = _URI_PREFIXES.get(prefix_code, '')
+            uri_body = payload[1:].decode('utf-8', errors='replace')
+            uris.append(prefix + uri_body)
+
+    return texts, uris
 
 
 class NfcTagData:
@@ -160,9 +182,22 @@ class NfcTagData:
             return ' | '.join(records)
         # Fallback: raw decode
         try:
-            return self.user_data.rstrip(b'\x00').decode('utf-8', errors='replace')
+            return self.user_data.rstrip(b'\x00').decode('utf-8',
+                                                         errors='replace')
         except Exception:
             return ""
+
+    def get_uri_records(self) -> list:
+        """Parse NDEF URI records from user data.
+
+        Returns a list of URI strings.
+        """
+        return parse_ndef_uri_records(self.user_data)
+
+    def get_uri(self) -> str:
+        """Get the first NDEF URI record, or empty string."""
+        uris = self.get_uri_records()
+        return uris[0] if uris else ""
 
     def __repr__(self):
         return f"NfcTagData(uid={self.uid_hex}, data_len={len(self.user_data)})"
@@ -307,6 +342,85 @@ class NfcReader:
             return NfcTagData(uid=uid, user_data=b"")
 
         return NfcTagData(uid=uid, user_data=user_data)
+
+    def write_ntag_page(self, tg: int, page: int,
+                        data: bytes) -> bool:
+        """Write a single NTAG page (4 bytes).
+
+        Args:
+            tg: Target number from read_passive_target().
+            page: Page number to write.
+            data: Exactly 4 bytes of page data.
+
+        Returns:
+            True on success, False on failure.
+        """
+        if not self.is_ready:
+            return False
+        if len(data) != 4:
+            logger.error("NTAG write: data must be exactly 4 bytes, "
+                         "got %d", len(data))
+            return False
+
+        cmd = bytes([_CMD_IN_DATA_EXCHANGE, tg & 0xFF,
+                     _NTAG_CMD_WRITE, page & 0xFF]) + data
+        if not self._transport.write_command(cmd):
+            logger.debug("NFC page write: no ACK for page %d", page)
+            return False
+
+        resp = self._transport.read_response()
+        if resp is None or len(resp) < 2:
+            logger.debug("NFC page write: no/short response for page %d",
+                         page)
+            return False
+
+        if resp[0] != _RESP_IN_DATA_EXCHANGE:
+            logger.debug("NFC page write: unexpected response code 0x%02X",
+                         resp[0])
+            return False
+
+        if resp[1] != 0x00:
+            logger.debug("NFC page write error at page %d: status 0x%02X",
+                         page, resp[1])
+            return False
+
+        return True
+
+    def write_ntag_pages(self, tg: int, start_page: int,
+                         data: bytes) -> bool:
+        """Write data to consecutive NTAG pages.
+
+        Data is padded to a 4-byte boundary with zeros. Each page (4 bytes)
+        is written individually.
+
+        Args:
+            tg: Target number from read_passive_target().
+            start_page: First page to write.
+            data: Data to write (will be zero-padded to 4-byte boundary).
+
+        Returns:
+            True if all pages written successfully, False on first failure.
+        """
+        if not self.is_ready:
+            return False
+
+        # Pad to 4-byte boundary
+        padded = bytearray(data)
+        while len(padded) % 4 != 0:
+            padded.append(0x00)
+
+        for i in range(0, len(padded), 4):
+            page = start_page + (i // 4)
+            page_data = bytes(padded[i:i + 4])
+            if not self.write_ntag_page(tg, page, page_data):
+                logger.error("NFC write failed at page %d", page)
+                return False
+            logger.debug("NFC wrote page %d: %s", page,
+                         page_data.hex(' '))
+            # NTAG needs ~5ms per write; add brief delay for reliability
+            time.sleep(0.01)
+
+        return True
 
     def _read_4_pages(self, tg: int, page: int) -> Optional[bytes]:
         """Issue a single NTAG READ for 4 pages (16 bytes) starting at page."""

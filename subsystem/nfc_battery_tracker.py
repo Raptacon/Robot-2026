@@ -18,6 +18,7 @@ import time
 
 import commands2
 import wpilib
+from ntcore import NetworkTableType
 from ntcore.util import ntproperty
 
 from config import NfcBatteryTrackerConfig as Cfg
@@ -31,10 +32,19 @@ class NfcBatteryTracker(commands2.Subsystem):
 
     battery_sn = ntproperty('/NfcBatteryTracker/batterySN', 'unknown',
                             writeDefault=True)
+    battery_year = ntproperty('/NfcBatteryTracker/batteryYear', '',
+                              writeDefault=True)
+    battery_note = ntproperty('/NfcBatteryTracker/batteryNote', '',
+                              writeDefault=True)
+    battery_uri = ntproperty('/NfcBatteryTracker/batteryURI', '',
+                             writeDefault=True)
     uid = ntproperty('/NfcBatteryTracker/uid', '',
                      writeDefault=True)
     status = ntproperty('/NfcBatteryTracker/status', 'initializing',
                         writeDefault=True)
+    tag_data = ntproperty('/NfcBatteryTracker/tagData', [],
+                          writeDefault=True,
+                          type=NetworkTableType.kStringArray)
 
     def __init__(self):
         super().__init__()
@@ -146,20 +156,33 @@ class NfcBatteryTracker(commands2.Subsystem):
         self._current_uid = uid_hex
         self._log_tag_data(tag_data)
 
-        # Extract battery serial number from tag text
+        # Extract battery data from tag text
         text = tag_data.get_text()
+        uri = tag_data.get_uri()
+        self.uid = uid_hex
+        self.battery_uri = uri
+
+        # Publish all key=value pairs as string array
+        self._publish_tag_data(text, uri)
+
         if text and self._looks_like_battery(text):
-            self.battery_sn = text
-            self.uid = uid_hex
+            fields = self._parse_battery_fields(text)
+            self.battery_sn = fields.get('sn', '')
+            self.battery_year = fields.get('year', '')
+            self.battery_note = fields.get('note', '')
             self._has_valid_data = True
             self.status = "ok"
-            logger.info("Battery identified — SN: %s (UID: %s)", self.battery_sn, uid_hex)
+            logger.info("Battery identified — SN: %s (UID: %s)",
+                        self.battery_sn, uid_hex)
         else:
             self.battery_sn = f"unrecognized (UID: {uid_hex})"
-            self.uid = uid_hex
+            self.battery_year = ''
+            self.battery_note = ''
             self._has_valid_data = False
             self.status = "unrecognized_tag"
-            logger.warning("NFC tag UID %s does not contain valid battery data", uid_hex)
+            logger.warning(
+                "NFC tag UID %s does not contain valid battery data",
+                uid_hex)
 
     def _log_tag_data(self, tag_data: NfcTagData):
         """Log all tag details including non-zero data pages."""
@@ -183,10 +206,33 @@ class NfcBatteryTracker(commands2.Subsystem):
     def _looks_like_battery(self, text: str) -> bool:
         """Check if tag text looks like valid battery data.
 
-        Current format: "Battery SN: XXX"
-        This will be refined as the data format is finalized.
+        Format: bat: section header with sn=XXX key-value line.
         """
-        return "Battery SN:" in text or "Battery" in text
+        return 'bat:' in text and 'sn=' in text
+
+    def _parse_battery_fields(self, text: str) -> dict:
+        """Extract all key=value fields from bat: section."""
+        fields = {}
+        if 'bat:' in text:
+            section = text.split('bat:', 1)[1]
+            for line in section.split('\n'):
+                line = line.strip()
+                if '=' in line:
+                    k, v = line.split('=', 1)
+                    fields[k.strip()] = v.strip()
+        return fields
+
+    def _publish_tag_data(self, text: str, uri: str):
+        """Publish all tag data as a string array to NT."""
+        data = []
+        if uri:
+            data.append(f"uri={uri}")
+        if text:
+            for line in text.strip().split('\n'):
+                line = line.strip()
+                if line:
+                    data.append(line)
+        self.tag_data = data
 
     def onDisabledInit(self):
         """Called when robot transitions to disabled.
@@ -199,7 +245,11 @@ class NfcBatteryTracker(commands2.Subsystem):
         self._retry_count = 0
         self._current_uid = ""
         self.battery_sn = "unknown"
+        self.battery_year = ""
+        self.battery_note = ""
+        self.battery_uri = ""
         self.uid = ""
+        self.tag_data = []
         self.status = "scanning" if self._reader_ok else self.status
         logger.info("NFC battery tracker reset — scanning for battery")
 
