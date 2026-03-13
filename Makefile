@@ -66,7 +66,7 @@ sync:
 deploy: sync
 	${PYTHON} -m robotpy deploy
 
-gui-exe: setup_${VENV} ## Build standalone GUI executable
+gui-exe: setup_${VENV} ## Build standalone Controller Config GUI executable
 	${VENVBIN}/pip install pyinstaller
 	${VENVBIN}/pip install -r host/requirements.txt
 ifeq ($(OS), Windows_NT)
@@ -75,5 +75,17 @@ else ifeq ($(shell uname),Darwin)
 	cd host && ../${VENVBIN}/pyinstaller controller_config_mac.spec --distpath ../dist --workpath ../build/gui --clean -y
 else
 	cd host && ../${VENVBIN}/pyinstaller controller_config_linux.spec --distpath ../dist --workpath ../build/gui --clean -y
+endif
+	@echo "Built in: dist/"
+
+nfc-exe: setup_${VENV} ## Build standalone NFC Battery Tag Tool executable
+	${VENVBIN}/pip install pyinstaller
+	${VENVBIN}/pip install -r host/requirements.txt
+ifeq ($(OS), Windows_NT)
+	cd host && ../${VENVBIN}/pyinstaller nfc_tool_win.spec --distpath ../dist --workpath ../build/gui --clean -y
+else ifeq ($(shell uname),Darwin)
+	cd host && ../${VENVBIN}/pyinstaller nfc_tool_mac.spec --distpath ../dist --workpath ../build/gui --clean -y
+else
+	cd host && ../${VENVBIN}/pyinstaller nfc_tool_linux.spec --distpath ../dist --workpath ../build/gui --clean -y
 endif
 	@echo "Built in: dist/"
