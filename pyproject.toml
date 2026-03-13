@@ -33,7 +33,8 @@ requires = [
     "robotpy-navx",
     "robotpy-pathplannerlib",
     "photonlibpy",
-    "robotpy-urcl"
+    "robotpy-urcl",
+    "pyserial"
 ]
 
 pyfrc.isolated = true

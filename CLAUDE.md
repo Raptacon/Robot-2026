@@ -164,9 +164,11 @@ GitHub Actions (`.github/workflows/robot_ci.yml`) runs on Windows:
  - Unit tests should use sim feedback when working with hardware based devices
  - Prefer pytest style (plain classes + `assert`) over `unittest.TestCase` — pyfrc/robotpy uses pytest as its test runner
 
-## NetworkTables Persistence
+## NetworkTables
 
-Use `ntcore.util.ntproperty` for values that need to persist across reboots (calibration data, saved positions, etc.). Declare as class-level attributes with `persistent=True` and `writeDefault=False` so existing persisted values are not overwritten on startup:
+**Prefer `ntproperty` over `SmartDashboard`** for publishing subsystem state. `ntproperty` creates proper NT entries under the subsystem's own path (e.g. `/SubsystemName/value`) and is the standard pattern for this codebase. Avoid `wpilib.SmartDashboard.putString/putNumber` in subsystems — it puts values under `/SmartDashboard/` which doesn't organize well and doesn't create a proper subsystem NT entry. During code reviews, flag any `SmartDashboard.put*` in subsystem code as something to convert to `ntproperty`.
+
+**Persistence:** Use `ntproperty` with `persistent=True` and `writeDefault=False` for values that need to persist across reboots (calibration data, saved positions, etc.) so existing persisted values are not overwritten on startup:
 
 ```python
 from ntcore.util import ntproperty
@@ -174,6 +176,13 @@ from ntcore.util import ntproperty
 class MySubsystem:
     saved_limit = ntproperty('/MySubsystem/saved_limit', 0.0,
                              writeDefault=False, persistent=True)
+```
+
+**Non-persistent state:** Use `ntproperty` with `writeDefault=True` (default) for runtime telemetry that doesn't need to persist:
+
+```python
+class MySubsystem:
+    status = ntproperty('/MySubsystem/status', 'unknown', writeDefault=True)
 ```
 
 See `examples/nt-persistence-test/` for a comparison of persistence approaches.
