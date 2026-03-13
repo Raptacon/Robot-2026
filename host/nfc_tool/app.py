@@ -190,7 +190,7 @@ class NfcToolApp(tk.Tk):
         try:
             img = tk.PhotoImage(file=str(logo_path))
             # Subsample to ~64px (original is large)
-            w, h = img.width(), img.height()
+            w = img.width()
             factor = max(1, w // 64)
             img = img.subsample(factor, factor)
             self._gear_image = img  # prevent GC
