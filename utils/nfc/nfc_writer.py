@@ -4,7 +4,9 @@ Builds NDEF records (URI and Text) and wraps them in TLV format
 ready to write to NTAG user data pages starting at page 4.
 """
 
-# NDEF URI identifier codes — common prefixes compressed to 1 byte
+# NDEF URI identifier codes — common prefixes compressed to 1 byte.
+# Order matters: longer prefixes must come first so the first match
+# is the most specific (e.g. 'http://www.' before 'http://').
 _URI_PREFIX_MAP = {
     'http://www.': 0x01,
     'https://www.': 0x02,

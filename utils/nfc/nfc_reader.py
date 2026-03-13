@@ -179,7 +179,7 @@ class NfcTagData:
         """Get all NDEF text records joined, or raw decode as fallback."""
         records = self.get_text_records()
         if records:
-            return ' | '.join(records)
+            return '\n'.join(records)
         # Fallback: raw decode
         try:
             return self.user_data.rstrip(b'\x00').decode('utf-8',

@@ -61,8 +61,7 @@ class NfcBatteryTracker(commands2.Subsystem):
         self._has_valid_data = False
         self._retry_read = False  # True when tag detected but data read failed
         self._retry_count: int = 0
-        _MAX_RETRIES = 5
-        self._max_retries = _MAX_RETRIES
+        self._max_retries = 5
         self._last_poll_time: float = 0.0
         self._reader_ok = False
 
@@ -88,7 +87,14 @@ class NfcBatteryTracker(commands2.Subsystem):
             )
 
     def periodic(self):
-        """Called every 20ms by the scheduler."""
+        """Called every 20ms by the scheduler.
+
+        NOTE: _poll_tag() does synchronous serial I/O on the main robot
+        thread. This is acceptable because polling only happens while
+        disabled (not during match), and the serial timeout is short
+        (~50ms). TODO: consider a background thread if latency becomes
+        an issue, similar to the host GUI's NfcWorker pattern.
+        """
         if not self._reader_ok:
             return
 
