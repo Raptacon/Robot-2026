@@ -6,6 +6,7 @@ import rev
 import wpilib
 from commands2 import Command, Subsystem
 from commands2.sysid import SysIdRoutine
+from ntcore.util import ntproperty
 from wpilib.sysid import SysIdRoutineLog
 from wpimath.controller import PIDController
 
@@ -63,6 +64,50 @@ class Turret(Subsystem):
     limits and persists them across reboots.
     """
 
+    # -- Telemetry (ntproperty) --
+    nt_position = ntproperty("/Turret/position", 0.0)
+    nt_velocity = ntproperty("/Turret/velocity", 0.0)
+    nt_applied_output = ntproperty("/Turret/appliedOutput", 0.0)
+    nt_current = ntproperty("/Turret/current", 0.0)
+    nt_bus_voltage = ntproperty("/Turret/busVoltage", 0.0)
+    nt_temperature = ntproperty("/Turret/temperature", 0.0)
+    nt_target_position = ntproperty("/Turret/targetPosition", 0.0)
+    nt_at_target = ntproperty("/Turret/atTargetPosition", False)
+    nt_min_soft_limit = ntproperty("/Turret/minSoftLimit", 0.0)
+    nt_max_soft_limit = ntproperty("/Turret/maxSoftLimit", 0.0)
+    nt_forward_limit_hit = ntproperty("/Turret/forwardLimitHit", False)
+    nt_reverse_limit_hit = ntproperty("/Turret/reverseLimitHit", False)
+
+    # -- Tunable parameters (read back from NT each cycle) --
+    # TODO: Remove ±4V limit after initial hardware testing — restore to ±12V
+    nt_min_output_voltage = ntproperty(
+        "/Turret/pid/minOutputVoltage", -4.0)
+    nt_max_output_voltage = ntproperty(
+        "/Turret/pid/maxOutputVoltage", 4.0)
+
+    @classmethod
+    def from_config(cls, config) -> "Turret":
+        """
+        Create a Turret from a TurretConfig object.
+
+        Args:
+            config: a TurretConfig instance with turret_motor_can_id,
+                position_conversion_factor, min_soft_limit, max_soft_limit
+
+        Returns:
+            A configured Turret subsystem
+        """
+        motor = rev.SparkMax(
+            config.turret_motor_can_id,
+            rev.SparkLowLevel.MotorType.kBrushless,
+        )
+        return cls(
+            motor=motor,
+            position_conversion_factor=config.position_conversion_factor,
+            min_soft_limit=config.min_soft_limit,
+            max_soft_limit=config.max_soft_limit,
+        )
+
     def __init__(
         self,
         motor: rev.SparkMax,
@@ -93,9 +138,10 @@ class Turret(Subsystem):
         self.min_soft_limit = min_soft_limit
         self.max_soft_limit = max_soft_limit
 
-        # Voltage output limits
-        self._min_output_voltage = -12.0
-        self._max_output_voltage = 12.0
+        # Voltage output limits (synced from ntproperty each cycle)
+        # TODO: Remove ±4V limit after initial hardware testing — restore to ±12V
+        self._min_output_voltage = -4.0
+        self._max_output_voltage = 4.0
 
         # Position tracking state
         self._target_position = None
@@ -363,49 +409,40 @@ class Turret(Subsystem):
 
     def updateTelemetry(self) -> None:
         """
-        Publish telemetry to SmartDashboard and read back tunable
-        parameters (PID gains and voltage limits) for live tuning.
+        Publish telemetry via ntproperty and read back tunable
+        parameters (voltage limits) for live tuning.
         """
-        prefix = self.getName() + "/"
-        sd = wpilib.SmartDashboard
-        sd.putNumber(prefix + "position", self.encoder.getPosition())
-        sd.putNumber(prefix + "velocity", self.encoder.getVelocity())
-        sd.putNumber(
-            prefix + "appliedOutput", self.motor.getAppliedOutput()
+        self.nt_position = self.encoder.getPosition()
+        self.nt_velocity = self.encoder.getVelocity()
+        self.nt_applied_output = self.motor.getAppliedOutput()
+        self.nt_current = self.motor.getOutputCurrent()
+        self.nt_bus_voltage = self.motor.getBusVoltage()
+        self.nt_temperature = self.motor.getMotorTemperature()
+        self.nt_target_position = (
+            self._target_position if self._target_position is not None
+            else 0.0
         )
-        sd.putNumber(prefix + "current", self.motor.getOutputCurrent())
-        sd.putNumber(
-            prefix + "busVoltage", self.motor.getBusVoltage()
-        )
-        sd.putNumber(
-            prefix + "temperature", self.motor.getMotorTemperature()
-        )
-        target = self._target_position if self._target_position is not None else 0.0
-        sd.putNumber(prefix + "targetPosition", target)
-        sd.putBoolean(
-            prefix + "atTargetPosition",
-            self._target_position is not None
-        )
+        self.nt_at_target = self._target_position is not None
+
         # Soft limits
         sl = self.motor.configAccessor.softLimit
-        sd.putNumber(prefix + "minSoftLimit", sl.getReverseSoftLimit())
-        sd.putNumber(prefix + "maxSoftLimit", sl.getForwardSoftLimit())
+        self.nt_min_soft_limit = sl.getReverseSoftLimit()
+        self.nt_max_soft_limit = sl.getForwardSoftLimit()
+
         # Limit switches
-        sd.putBoolean(
-            prefix + "forwardLimitHit",
-            self.motor.getForwardLimitSwitch().get()
-        )
-        sd.putBoolean(
-            prefix + "reverseLimitHit",
-            self.motor.getReverseLimitSwitch().get()
-        )
-        # Voltage output limits (read back from dashboard)
-        self._min_output_voltage = sd.getNumber(
-            prefix + "pid/minOutputVoltage", self._min_output_voltage)
-        self._max_output_voltage = sd.getNumber(
-            prefix + "pid/maxOutputVoltage", self._max_output_voltage)
+        self.nt_forward_limit_hit = (
+            self.motor.getForwardLimitSwitch().get())
+        self.nt_reverse_limit_hit = (
+            self.motor.getReverseLimitSwitch().get())
+
+        # Voltage output limits (read back from NT for live tuning)
+        self._min_output_voltage = self.nt_min_output_voltage
+        self._max_output_voltage = self.nt_max_output_voltage
+
         # Calibration telemetry (delegated)
+        prefix = self.getName() + "/"
         self.calibration.update_telemetry(prefix)
+
         # Mechanism2d visualization
         self.mech_current_arm.setAngle(self.encoder.getPosition())
         self.mech_target_arm.setAngle(

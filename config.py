@@ -49,6 +49,16 @@ class OperatorRobotConfig:
     # max angular velocity (dps), max angular acceleration (dps^2).
     teleop_pathplan_constraints: Tuple[float] = (2.5, 2.0, 360.0, 360.0)
 
+class TurretConfig:
+    # CAN ID for turret motor (first mechanism, counts back from 40)
+    turret_motor_can_id: int = 40
+    # 11:1 gear ratio: 1 motor rotation = 360/11 degrees turret rotation
+    position_conversion_factor: float = 360.0 / 11.0
+    # Soft limits in degrees
+    min_soft_limit: float = 0.0
+    max_soft_limit: float = 360.0
+
+
 class ShooterConfig:
     # Configs for shooter
     shooterFeedMotorPIDF = (0, 0, 0, 1 / 473)

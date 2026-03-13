@@ -21,6 +21,7 @@ _VALID_CALLBACKS = {
     'save_config', 'restore_config',
     'get_forward_limit_switch', 'get_reverse_limit_switch',
     'on_limit_detected',
+    'set_conversion_factor',
 }
 
 # Callbacks that must always be set before homing or calibration
@@ -74,6 +75,7 @@ class PositionCalibration:
     | `save_config` | `() -> Any` | Snapshot motor config before homing |
     | `restore_config` | `(Any) -> None` | Restore snapshot after homing |
     | `on_limit_detected` | `(pos, dir) -> None` | Fires when a hard limit is found |
+    | `set_conversion_factor` | `(float) -> None` | Apply new encoder conversion factor |
 
     Use ``get_callbacks()`` to inspect the current callback dict (returns
     ``None`` for any callback that has not been set).
@@ -136,6 +138,7 @@ class PositionCalibration:
     _cb_get_forward_limit_switch: Optional[Callable[[], bool]]
     _cb_get_reverse_limit_switch: Optional[Callable[[], bool]]
     _cb_on_limit_detected: Optional[Callable[[float, str], None]]
+    _cb_set_conversion_factor: Optional[Callable[[float], None]]
 
     def __init__(
         self,
@@ -515,6 +518,134 @@ class PositionCalibration:
         if self._cb_set_soft_limits is not None:
             self._cb_set_soft_limits(
                 self._min_soft_limit, self._max_soft_limit)
+
+    def compute_conversion_factor(
+        self,
+        current_factor: float,
+        desired_min: float,
+        desired_max: float,
+    ) -> float:
+        """
+        Compute a corrected encoder conversion factor after calibration.
+
+        After a full calibration discovers the raw mechanical range, this
+        method computes the conversion factor needed so that the measured
+        range maps to [desired_min, desired_max].
+
+        For example, if calibration measured 500 encoder-units of travel
+        with the initial conversion factor, and you want -90 to 90 (180°),
+        the corrected factor scales the encoder so that full travel equals
+        180°.
+
+        Args:
+            current_factor: the position conversion factor currently set
+                on the encoder (degrees per motor rotation)
+            desired_min: the desired minimum position in user units
+            desired_max: the desired maximum position in user units
+
+        Returns:
+            The corrected conversion factor to apply to the encoder
+
+        Raises:
+            RuntimeError: if calibration has not been completed
+        """
+        if not self._is_calibrated:
+            raise RuntimeError(
+                f"{self._name}: cannot compute conversion factor "
+                "before calibration is complete"
+            )
+        measured_range = self._hard_limit_max - self._hard_limit_min
+        if measured_range == 0:
+            raise RuntimeError(
+                f"{self._name}: measured range is zero, "
+                "calibration data invalid"
+            )
+        desired_range = desired_max - desired_min
+        return current_factor * (desired_range / measured_range)
+
+    def apply_conversion_factor(
+        self,
+        current_factor: float,
+        desired_min: float,
+        desired_max: float,
+    ) -> float:
+        """
+        Compute and apply a corrected encoder conversion factor.
+
+        Calls compute_conversion_factor() to determine the corrected
+        value, then applies it via the set_conversion_factor callback.
+        Also resets the encoder position to desired_min (the new zero
+        reference) and updates the internal hard/soft limits to match
+        the desired range.
+
+        **Important:** This should only be called immediately after a
+        full calibration completes (which homes to the reverse hard
+        stop and sets the encoder to 0). If the mechanism has moved
+        since calibration, the encoder position will not have correct
+        units after the conversion factor change.
+
+        TODO(hardware): Verify on real hardware that encoder position
+        reads correctly after apply_conversion_factor. The relative
+        encoder resets to desired_min here, so the mechanism must be
+        at the reverse hard stop when this is called.
+
+        Args:
+            current_factor: the position conversion factor currently set
+                on the encoder (degrees per motor rotation)
+            desired_min: the desired minimum position in user units
+            desired_max: the desired maximum position in user units
+
+        Returns:
+            The corrected conversion factor that was applied
+
+        Raises:
+            RuntimeError: if calibration has not been completed or
+                mechanism is not at the zeroed position
+            ValueError: if set_conversion_factor callback is not set
+        """
+        if self._cb_set_conversion_factor is None:
+            raise ValueError(
+                "set_conversion_factor callback not set"
+            )
+
+        if not self.is_zeroed:
+            raise RuntimeError(
+                f"{self._name}: cannot apply conversion factor "
+                "before homing to zero position"
+            )
+
+        # Guard: only allow immediately after calibration when the
+        # mechanism is at the reverse hard stop (position ~0).
+        if self._cb_get_position is not None:
+            pos = abs(self._cb_get_position())
+            full_range = self._max_soft_limit - self._min_soft_limit
+            tolerance = abs(full_range) * 0.05
+            if pos > tolerance:
+                raise RuntimeError(
+                    f"{self._name}: mechanism is not at the zero "
+                    f"position (current: {pos:.1f}, tolerance: "
+                    f"{tolerance:.1f}). Home the mechanism before "
+                    "applying a new conversion factor"
+                )
+
+        new_factor = self.compute_conversion_factor(
+            current_factor, desired_min, desired_max
+        )
+
+        # Apply the new conversion factor to the encoder
+        self._cb_set_conversion_factor(new_factor)
+
+        # Reset encoder to the min position (we calibrated from the
+        # reverse hard stop, so current position is the minimum)
+        self._cb_set_position(desired_min)
+
+        # Update internal limits to the desired range
+        self._hard_limit_min = desired_min
+        self._hard_limit_max = desired_max
+        self.set_soft_limit_margin(self._soft_limit_margin)
+        self._save_to_nt()
+
+        return new_factor
 
     def update_telemetry(self, prefix: str) -> None:
         """

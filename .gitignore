@@ -162,5 +162,6 @@ controller_maps.py
 # Generated ICO (rebuilt during EXE build)
 images/*.ico
 
-# NetworkTables backup
+# NetworkTables persistence
+networktables.json
 networktables.json.bck
