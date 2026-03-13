@@ -139,3 +139,8 @@ class CaptainPlanetConsts:
         DONOTHING = 1
         TOFRONT = 2
         TOBACK = 3
+
+class BallpitConstants:
+    motorStop = 0
+    motorGo = 0.5
+    motorOsc = 0.5

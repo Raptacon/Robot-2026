@@ -23,6 +23,8 @@ from config import ShooterConfig
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
 from subsystem.shooter import Shooter
 from utils.input import InputFactory
+from subsystem.ballpit import BallPitHopper as Hopper
+from constants import BallpitConstants
 
 # Third-party imports
 import commands2
@@ -34,6 +36,7 @@ from pathplannerlib.auto import AutoBuilder
 class RobotSwerve:
     # forward declare critical types for editors
     drivetrain: SwerveDrivetrain
+    hopper: Hopper
 
     def __init__(self, is_disabled: Callable[[], bool]) -> None:
         # networktables setup
@@ -43,6 +46,7 @@ class RobotSwerve:
         # Subsystem instantiation
         self.drivetrain = SwerveDrivetrain()
         self.shooter = Shooter()
+        self.hopper = Hopper()
 
         # Alliance instantiation
         self.updateAlliance()
@@ -156,6 +160,10 @@ class RobotSwerve:
         self.driver_controller.a().onTrue(
             commands2.cmd.runOnce(lambda: self.shooter.setRPM(3000), self.shooter)
         )
+
+        # hopper controller commands
+        self.mech_controller.x().toggleOnTrue(self.hopper.hex_shaft_generator(BallpitConstants.motorGo).andThen(self.hopper.hex_shaft_generator(BallpitConstants.motorStop)))
+        self.mech_controller.y().onTrue(self.hopper.unjamHopper(BallpitConstants.motorOsc))
 
     def teleopPeriodic(self):
         pass
