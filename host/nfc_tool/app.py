@@ -139,8 +139,8 @@ class NfcWorker(threading.Thread):
         if self._transport is not None:
             try:
                 self._transport.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Error closing NFC transport: %s", e)
             self._transport = None
             self._reader = None
 
@@ -177,8 +177,8 @@ class NfcToolApp(tk.Tk):
             try:
                 self._icon_image = tk.PhotoImage(file=str(icon_path))
                 self.iconphoto(True, self._icon_image)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Failed to load window icon: %s", e)
 
     def _load_gear_logo(self, parent):
         """Load the gear logo and return a Label widget, or None."""
@@ -196,7 +196,8 @@ class NfcToolApp(tk.Tk):
             self._gear_image = img  # prevent GC
             label = ttk.Label(parent, image=img)
             return label
-        except Exception:
+        except Exception as e:
+            logger.debug("Failed to load gear logo: %s", e)
             return None
 
     def _build_ui(self):
