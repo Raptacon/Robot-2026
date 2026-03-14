@@ -35,6 +35,7 @@ class SparkMaxCallbacks:
     ``disable_soft_limits``       ``motor.configure(softLimit ...)``
     ``save_config``               reads ``motor.configAccessor``
     ``restore_config``            ``motor.configure(...)``
+    ``set_conversion_factor``     ``motor.configure(encoder ...)``
     ============================  ======================================
     """
 
@@ -60,6 +61,9 @@ class SparkMaxCallbacks:
             ),
             'get_reverse_limit_switch': (
                 lambda: self._motor.getReverseLimitSwitch().get()
+            ),
+            'set_conversion_factor': (
+                self._make_set_conversion_factor()
             ),
         }
 
@@ -152,3 +156,21 @@ class SparkMaxCallbacks:
                 rev.PersistMode.kNoPersistParameters
             )
         return restore_config
+
+    def _make_set_conversion_factor(self):
+        motor = self._motor
+
+        def set_conversion_factor(factor):
+            velocity_factor = factor / 60.0
+            cfg = rev.SparkMaxConfig()
+            (
+                cfg.encoder
+                .positionConversionFactor(factor)
+                .velocityConversionFactor(velocity_factor)
+            )
+            motor.configure(
+                cfg,
+                rev.ResetMode.kNoResetSafeParameters,
+                rev.PersistMode.kNoPersistParameters
+            )
+        return set_conversion_factor

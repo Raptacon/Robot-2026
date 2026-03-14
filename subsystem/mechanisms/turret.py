@@ -6,8 +6,10 @@ import rev
 import wpilib
 from commands2 import Command, Subsystem
 from commands2.sysid import SysIdRoutine
+from ntcore.util import ntproperty
 from wpilib.sysid import SysIdRoutineLog
-from wpimath.controller import PIDController
+from wpimath.controller import PIDController, ProfiledPIDController
+from wpimath.trajectory import TrapezoidProfile
 
 # Internal imports
 from utils.position_calibration import PositionCalibration
@@ -63,12 +65,70 @@ class Turret(Subsystem):
     limits and persists them across reboots.
     """
 
+    # -- Telemetry (ntproperty) --
+    nt_position = ntproperty("/Turret/position", 0.0)
+    nt_velocity = ntproperty("/Turret/velocity", 0.0)
+    nt_applied_output = ntproperty("/Turret/appliedOutput", 0.0)
+    nt_current = ntproperty("/Turret/current", 0.0)
+    nt_bus_voltage = ntproperty("/Turret/busVoltage", 0.0)
+    nt_temperature = ntproperty("/Turret/temperature", 0.0)
+    nt_target_position = ntproperty("/Turret/targetPosition", 0.0)
+    nt_at_target = ntproperty("/Turret/atTargetPosition", False)
+    nt_min_soft_limit = ntproperty("/Turret/minSoftLimit", 0.0)
+    nt_max_soft_limit = ntproperty("/Turret/maxSoftLimit", 0.0)
+    nt_forward_limit_hit = ntproperty("/Turret/forwardLimitHit", False)
+    nt_reverse_limit_hit = ntproperty("/Turret/reverseLimitHit", False)
+
+    # -- Tunable parameters (read back from NT each cycle) --
+    # TODO: Remove ±4V limit after initial hardware testing — restore to ±12V
+    nt_min_output_voltage = ntproperty(
+        "/Turret/pid/minOutputVoltage", -4.0)
+    nt_max_output_voltage = ntproperty(
+        "/Turret/pid/maxOutputVoltage", 4.0)
+    # Trapezoidal profile constraints (live-tunable)
+    nt_max_velocity = ntproperty("/Turret/pid/maxVelocityDegS", 180.0)
+    nt_max_acceleration = ntproperty("/Turret/pid/maxAccelDegS2", 360.0)
+    # Velocity feedforward: volts per deg/s (kV * profile_velocity = feedforward voltage)
+    # Default: 4V at max velocity (4.0 / 180.0 ≈ 0.022)
+    nt_kV = ntproperty("/Turret/pid/kV", 4.0 / 180.0)
+    # Static friction feedforward: constant voltage to overcome stiction.
+    # kS * sign(velocity_command) applied before PID feedback.
+    # Default 0.0 = no behavior change until tuned via SysId.
+    nt_kS = ntproperty("/Turret/pid/kS", 0.0)
+
+    @classmethod
+    def from_config(cls, config) -> "Turret":
+        """
+        Create a Turret from a TurretConfig object.
+
+        Args:
+            config: a TurretConfig instance with turret_motor_can_id,
+                position_conversion_factor, min_soft_limit, max_soft_limit
+
+        Returns:
+            A configured Turret subsystem
+        """
+        motor = rev.SparkMax(
+            config.turret_motor_can_id,
+            rev.SparkLowLevel.MotorType.kBrushless,
+        )
+        return cls(
+            motor=motor,
+            position_conversion_factor=config.position_conversion_factor,
+            min_soft_limit=config.min_soft_limit,
+            max_soft_limit=config.max_soft_limit,
+            use_profiled_pid=config.use_profiled_pid,
+            kS_voltage=config.kS_voltage,
+        )
+
     def __init__(
         self,
         motor: rev.SparkMax,
         position_conversion_factor: float,
         min_soft_limit: float,
-        max_soft_limit: float
+        max_soft_limit: float,
+        use_profiled_pid: bool = False,
+        kS_voltage: float = 0.0,
     ) -> None:
         """
         Creates a new Turret subsystem.
@@ -79,6 +139,9 @@ class Turret(Subsystem):
                 raw encoder rotations to degrees
             min_soft_limit: the minimum turret position in degrees (reverse limit)
             max_soft_limit: the maximum turret position in degrees (forward limit)
+            use_profiled_pid: if True, use ProfiledPIDController with trapezoidal
+                ramp-up/down and velocity feedforward. If False, use plain
+                PIDController (recommended until hardware is tuned).
 
         Returns:
             None: class initialization executed upon construction
@@ -86,16 +149,32 @@ class Turret(Subsystem):
         super().__init__()
         self.motor = motor
         self.encoder = self.motor.getEncoder()
-        self.controller = PIDController(0, 0, 0)
+        self.position_conversion_factor = position_conversion_factor
+        self._use_profiled_pid = use_profiled_pid
+        self._max_velocity = 180.0    # deg/s
+        self._max_acceleration = 360.0  # deg/s²
+        self._kV = 4.0 / 180.0
+        self._kS = kS_voltage
+        if use_profiled_pid:
+            self.controller = ProfiledPIDController(
+                0.05, 0, 0,
+                TrapezoidProfile.Constraints(
+                    self._max_velocity, self._max_acceleration)
+            )
+            self.controller.setTolerance(1.0, 5.0)  # degrees, deg/s
+        else:
+            self.controller = PIDController(0.05, 0, 0)
+            self.controller.setTolerance(1.0)  # degrees
         wpilib.SmartDashboard.putData(
             self.getName() + "/pid", self.controller)
 
         self.min_soft_limit = min_soft_limit
         self.max_soft_limit = max_soft_limit
 
-        # Voltage output limits
-        self._min_output_voltage = -12.0
-        self._max_output_voltage = 12.0
+        # Voltage output limits (synced from ntproperty each cycle)
+        # TODO: Remove ±4V limit after initial hardware testing — restore to ±12V
+        self._min_output_voltage = -4.0
+        self._max_output_voltage = 4.0
 
         # Position tracking state
         self._target_position = None
@@ -324,11 +403,11 @@ class Turret(Subsystem):
             "target_position", 80, 0, 4,
             wpilib.Color8Bit(wpilib.Color.kGreen)
         )
-        pivot.appendLigament(
+        self.mech_min_limit_arm = pivot.appendLigament(
             "min_limit", 80, self.min_soft_limit, 2,
             wpilib.Color8Bit(100, 100, 100)
         )
-        pivot.appendLigament(
+        self.mech_max_limit_arm = pivot.appendLigament(
             "max_limit", 80, self.max_soft_limit, 2,
             wpilib.Color8Bit(100, 100, 100)
         )
@@ -350,64 +429,86 @@ class Turret(Subsystem):
             self.calibration.periodic()
         elif self._target_position is not None:
             position = self.encoder.getPosition()
-            pidOutput = self.controller.calculate(
-                position, self._target_position)
-            pidOutput = max(self._min_output_voltage,
-                           min(self._max_output_voltage, pidOutput))
-            if self.controller.atSetpoint():
+            pid_output = self.controller.calculate(position, self._target_position)
+            if self._use_profiled_pid:
+                profile_velocity = self.controller.getSetpoint().velocity
+                kS_component = (
+                    self._kS * math.copysign(1.0, profile_velocity)
+                    if abs(profile_velocity) > 1e-6 else 0.0
+                )
+                feedforward = kS_component + self._kV * profile_velocity
+                at_goal = self.controller.atGoal()
+            else:
+                error = self._target_position - position
+                kS_component = (
+                    self._kS * math.copysign(1.0, error)
+                    if abs(error) > self.controller.getPositionTolerance() else 0.0
+                )
+                feedforward = kS_component
+                at_goal = self.controller.atSetpoint()
+            output = max(self._min_output_voltage,
+                         min(self._max_output_voltage, pid_output + feedforward))
+            if at_goal:
                 self.motor.setVoltage(0)
             else:
-                self.motor.setVoltage(pidOutput)
+                self.motor.setVoltage(output)
 
         self.updateTelemetry()
 
     def updateTelemetry(self) -> None:
         """
-        Publish telemetry to SmartDashboard and read back tunable
-        parameters (PID gains and voltage limits) for live tuning.
+        Publish telemetry via ntproperty and read back tunable
+        parameters (voltage limits) for live tuning.
         """
-        prefix = self.getName() + "/"
-        sd = wpilib.SmartDashboard
-        sd.putNumber(prefix + "position", self.encoder.getPosition())
-        sd.putNumber(prefix + "velocity", self.encoder.getVelocity())
-        sd.putNumber(
-            prefix + "appliedOutput", self.motor.getAppliedOutput()
+        self.nt_position = self.encoder.getPosition()
+        self.nt_velocity = self.encoder.getVelocity()
+        self.nt_applied_output = self.motor.getAppliedOutput()
+        self.nt_current = self.motor.getOutputCurrent()
+        self.nt_bus_voltage = self.motor.getBusVoltage()
+        self.nt_temperature = self.motor.getMotorTemperature()
+        self.nt_target_position = (
+            self._target_position if self._target_position is not None
+            else 0.0
         )
-        sd.putNumber(prefix + "current", self.motor.getOutputCurrent())
-        sd.putNumber(
-            prefix + "busVoltage", self.motor.getBusVoltage()
-        )
-        sd.putNumber(
-            prefix + "temperature", self.motor.getMotorTemperature()
-        )
-        target = self._target_position if self._target_position is not None else 0.0
-        sd.putNumber(prefix + "targetPosition", target)
-        sd.putBoolean(
-            prefix + "atTargetPosition",
-            self._target_position is not None
-        )
+        self.nt_at_target = self._target_position is not None
+
         # Soft limits
         sl = self.motor.configAccessor.softLimit
-        sd.putNumber(prefix + "minSoftLimit", sl.getReverseSoftLimit())
-        sd.putNumber(prefix + "maxSoftLimit", sl.getForwardSoftLimit())
+        self.nt_min_soft_limit = sl.getReverseSoftLimit()
+        self.nt_max_soft_limit = sl.getForwardSoftLimit()
+
         # Limit switches
-        sd.putBoolean(
-            prefix + "forwardLimitHit",
-            self.motor.getForwardLimitSwitch().get()
-        )
-        sd.putBoolean(
-            prefix + "reverseLimitHit",
-            self.motor.getReverseLimitSwitch().get()
-        )
-        # Voltage output limits (read back from dashboard)
-        self._min_output_voltage = sd.getNumber(
-            prefix + "pid/minOutputVoltage", self._min_output_voltage)
-        self._max_output_voltage = sd.getNumber(
-            prefix + "pid/maxOutputVoltage", self._max_output_voltage)
+        self.nt_forward_limit_hit = (
+            self.motor.getForwardLimitSwitch().get())
+        self.nt_reverse_limit_hit = (
+            self.motor.getReverseLimitSwitch().get())
+
+        # Voltage limits (read back from NT for live tuning)
+        self._min_output_voltage = self.nt_min_output_voltage
+        self._max_output_voltage = self.nt_max_output_voltage
+
+        # Feedforward gains (live-tunable in both modes)
+        self._kS = self.nt_kS
+
+        # Profiled-mode-only tuning
+        if self._use_profiled_pid:
+            self._kV = self.nt_kV
+            new_vel = self.nt_max_velocity
+            new_accel = self.nt_max_acceleration
+            if new_vel != self._max_velocity or new_accel != self._max_acceleration:
+                self._max_velocity = new_vel
+                self._max_acceleration = new_accel
+                self.controller.setConstraints(
+                    TrapezoidProfile.Constraints(new_vel, new_accel))
+
         # Calibration telemetry (delegated)
+        prefix = self.getName() + "/"
         self.calibration.update_telemetry(prefix)
+
         # Mechanism2d visualization
         self.mech_current_arm.setAngle(self.encoder.getPosition())
+        self.mech_min_limit_arm.setAngle(self.calibration.min_soft_limit)
+        self.mech_max_limit_arm.setAngle(self.calibration.max_soft_limit)
         self.mech_target_arm.setAngle(
             self._target_position if self._target_position is not None
             else 0.0

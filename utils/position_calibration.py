@@ -21,6 +21,7 @@ _VALID_CALLBACKS = {
     'save_config', 'restore_config',
     'get_forward_limit_switch', 'get_reverse_limit_switch',
     'on_limit_detected',
+    'set_conversion_factor',
 }
 
 # Callbacks that must always be set before homing or calibration
@@ -74,6 +75,7 @@ class PositionCalibration:
     | `save_config` | `() -> Any` | Snapshot motor config before homing |
     | `restore_config` | `(Any) -> None` | Restore snapshot after homing |
     | `on_limit_detected` | `(pos, dir) -> None` | Fires when a hard limit is found |
+    | `set_conversion_factor` | `(float) -> None` | Apply new encoder conversion factor |
 
     Use ``get_callbacks()`` to inspect the current callback dict (returns
     ``None`` for any callback that has not been set).
@@ -136,6 +138,7 @@ class PositionCalibration:
     _cb_get_forward_limit_switch: Optional[Callable[[], bool]]
     _cb_get_reverse_limit_switch: Optional[Callable[[], bool]]
     _cb_on_limit_detected: Optional[Callable[[float, str], None]]
+    _cb_set_conversion_factor: Optional[Callable[[float], None]]
 
     def __init__(
         self,
@@ -345,7 +348,9 @@ class PositionCalibration:
         max_homing_time: float,
         homing_forward: bool,
         min_velocity: float = None,
-        home_position: float = 0.0
+        home_position: float = 0.0,
+        max_travel_degrees: Optional[float] = None,
+        min_trigger_travel: float = 0.0,
     ) -> None:
         """
         Initialize the sensorless or sensor homing routine.
@@ -363,6 +368,13 @@ class PositionCalibration:
                 Defaults to 5% of soft limit range over 2 seconds.
             home_position: encoder value to set when the hard stop is
                 found (default 0.0)
+            max_travel_degrees: abort if encoder travels more than this
+                from the start position (overtravel guard). None disables
+                the check — useful when the mechanical range is unknown.
+            min_trigger_travel: minimum encoder travel required before a
+                limit switch trigger is trusted. If the switch fires before
+                this much movement, abort with a stuck-switch alert.
+                0.0 disables the check (default).
         """
         # Validate callbacks before starting
         self._validate_homing(homing_forward)
@@ -394,6 +406,14 @@ class PositionCalibration:
         self._min_velocity = min_velocity
         self._max_homing_time = max_homing_time
         self._home_position = home_position
+        self._max_travel_degrees = max_travel_degrees
+        self._min_trigger_travel = min_trigger_travel
+
+        # Capture start position for travel tracking (requires get_position)
+        if self._cb_get_position is not None:
+            self._homing_start_pos = self._cb_get_position()
+        else:
+            self._homing_start_pos = None
 
         # Set homing state
         self._is_homing = True
@@ -424,7 +444,9 @@ class PositionCalibration:
         max_power_pct: float,
         max_homing_time: float,
         min_velocity: float = None,
-        known_range: float = None
+        known_range: float = None,
+        max_travel_degrees: Optional[float] = None,
+        min_trigger_travel: float = 0.0,
     ) -> None:
         """
         Start a calibration routine that discovers the mechanical range.
@@ -442,6 +464,13 @@ class PositionCalibration:
             min_velocity: stall detection threshold in user units/second
             known_range: if provided, skip phase 2 and use this as the
                 full mechanical range from the zero point
+            max_travel_degrees: abort a homing phase if encoder travels
+                more than this from its phase start position. Defaults to
+                110% of the current soft limit range — a reasonable bound
+                when the expected range is known. Pass None to disable.
+            min_trigger_travel: minimum travel required before a limit
+                switch trigger is trusted per phase. Guards against a
+                stuck-closed switch firing immediately. 0.0 disables.
         """
         # Validate callbacks before starting
         self._validate_calibration()
@@ -456,12 +485,23 @@ class PositionCalibration:
         if self._cb_disable_soft_limits is not None:
             self._cb_disable_soft_limits(True, True)
 
+        # Default max travel: 110% of expected range (known from soft limits).
+        # This is a meaningful bound for calibration since we know the
+        # approximate range. Each phase homes one direction, so the full
+        # range is the per-phase ceiling.
+        if max_travel_degrees is None:
+            expected_range = abs(self._max_soft_limit - self._min_soft_limit)
+            if expected_range > 0:
+                max_travel_degrees = expected_range * 1.1
+
         # Store calibration parameters for phase transitions
         self._cal_max_current = max_current
         self._cal_max_power_pct = max_power_pct
         self._cal_max_homing_time = max_homing_time
         self._cal_min_velocity = min_velocity
         self._cal_known_range = known_range
+        self._cal_max_travel_degrees = max_travel_degrees
+        self._cal_min_trigger_travel = min_trigger_travel
 
         self._is_calibrating = True
         self._calibration_phase = 1
@@ -469,7 +509,9 @@ class PositionCalibration:
         # Start phase 1: home negative
         self.homing_init(
             max_current, max_power_pct, max_homing_time,
-            homing_forward=False, min_velocity=min_velocity
+            homing_forward=False, min_velocity=min_velocity,
+            max_travel_degrees=max_travel_degrees,
+            min_trigger_travel=min_trigger_travel,
         )
 
         self._cal_status_alert = wpilib.Alert(
@@ -515,6 +557,134 @@ class PositionCalibration:
         if self._cb_set_soft_limits is not None:
             self._cb_set_soft_limits(
                 self._min_soft_limit, self._max_soft_limit)
+
+    def compute_conversion_factor(
+        self,
+        current_factor: float,
+        desired_min: float,
+        desired_max: float,
+    ) -> float:
+        """
+        Compute a corrected encoder conversion factor after calibration.
+
+        After a full calibration discovers the raw mechanical range, this
+        method computes the conversion factor needed so that the measured
+        range maps to [desired_min, desired_max].
+
+        For example, if calibration measured 500 encoder-units of travel
+        with the initial conversion factor, and you want -90 to 90 (180°),
+        the corrected factor scales the encoder so that full travel equals
+        180°.
+
+        Args:
+            current_factor: the position conversion factor currently set
+                on the encoder (degrees per motor rotation)
+            desired_min: the desired minimum position in user units
+            desired_max: the desired maximum position in user units
+
+        Returns:
+            The corrected conversion factor to apply to the encoder
+
+        Raises:
+            RuntimeError: if calibration has not been completed
+        """
+        if not self._is_calibrated:
+            raise RuntimeError(
+                f"{self._name}: cannot compute conversion factor "
+                "before calibration is complete"
+            )
+        measured_range = self._hard_limit_max - self._hard_limit_min
+        if measured_range == 0:
+            raise RuntimeError(
+                f"{self._name}: measured range is zero, "
+                "calibration data invalid"
+            )
+        desired_range = desired_max - desired_min
+        return current_factor * (desired_range / measured_range)
+
+    def apply_conversion_factor(
+        self,
+        current_factor: float,
+        desired_min: float,
+        desired_max: float,
+    ) -> float:
+        """
+        Compute and apply a corrected encoder conversion factor.
+
+        Calls compute_conversion_factor() to determine the corrected
+        value, then applies it via the set_conversion_factor callback.
+        Also resets the encoder position to desired_min (the new zero
+        reference) and updates the internal hard/soft limits to match
+        the desired range.
+
+        **Important:** This should only be called immediately after a
+        full calibration completes (which homes to the reverse hard
+        stop and sets the encoder to 0). If the mechanism has moved
+        since calibration, the encoder position will not have correct
+        units after the conversion factor change.
+
+        TODO(hardware): Verify on real hardware that encoder position
+        reads correctly after apply_conversion_factor. The relative
+        encoder resets to desired_min here, so the mechanism must be
+        at the reverse hard stop when this is called.
+
+        Args:
+            current_factor: the position conversion factor currently set
+                on the encoder (degrees per motor rotation)
+            desired_min: the desired minimum position in user units
+            desired_max: the desired maximum position in user units
+
+        Returns:
+            The corrected conversion factor that was applied
+
+        Raises:
+            RuntimeError: if calibration has not been completed or
+                mechanism is not at the zeroed position
+            ValueError: if set_conversion_factor callback is not set
+        """
+        if self._cb_set_conversion_factor is None:
+            raise ValueError(
+                "set_conversion_factor callback not set"
+            )
+
+        if not self.is_zeroed:
+            raise RuntimeError(
+                f"{self._name}: cannot apply conversion factor "
+                "before homing to zero position"
+            )
+
+        # Guard: only allow immediately after calibration when the
+        # mechanism is at the reverse hard stop (position ~0).
+        if self._cb_get_position is not None:
+            pos = abs(self._cb_get_position())
+            full_range = self._max_soft_limit - self._min_soft_limit
+            tolerance = abs(full_range) * 0.05
+            if pos > tolerance:
+                raise RuntimeError(
+                    f"{self._name}: mechanism is not at the zero "
+                    f"position (current: {pos:.1f}, tolerance: "
+                    f"{tolerance:.1f}). Home the mechanism before "
+                    "applying a new conversion factor"
+                )
+
+        new_factor = self.compute_conversion_factor(
+            current_factor, desired_min, desired_max
+        )
+
+        # Apply the new conversion factor to the encoder
+        self._cb_set_conversion_factor(new_factor)
+
+        # Reset encoder to the min position (we calibrated from the
+        # reverse hard stop, so current position is the minimum)
+        self._cb_set_position(desired_min)
+
+        # Update internal limits to the desired range
+        self._hard_limit_min = desired_min
+        self._hard_limit_max = desired_max
+        self.set_soft_limit_margin(self._soft_limit_margin)
+        self._save_to_nt()
+
+        return new_factor
 
     def update_telemetry(self, prefix: str) -> None:
         """
@@ -602,6 +772,20 @@ class PositionCalibration:
             self._homing_end(abort=True)
             return True
 
+        # Overtravel guard: abort if encoder has moved more than expected.
+        # Catches a stuck-open limit switch that never triggers.
+        if (self._max_travel_degrees is not None
+                and self._homing_start_pos is not None
+                and self._cb_get_position is not None):
+            travel = abs(self._cb_get_position() - self._homing_start_pos)
+            if travel > self._max_travel_degrees:
+                self._homing_error_alert.setText(
+                    f"{self._name}: homing aborted - overtravel "
+                    f"({travel:.1f} > {self._max_travel_degrees:.1f})"
+                )
+                self._homing_end(abort=True)
+                return True
+
         # Check hard limit switch in homing direction (if callback exists)
         limit_hit = False
         if (self._homing_forward
@@ -619,6 +803,23 @@ class PositionCalibration:
 
         # Check for limit switch hit
         if limit_hit:
+            # Stuck-closed guard: if the switch fired before we've moved
+            # enough to be credible, treat it as a false trigger and abort.
+            if (self._min_trigger_travel > 0.0
+                    and self._homing_start_pos is not None
+                    and self._cb_get_position is not None):
+                travel = abs(
+                    self._cb_get_position() - self._homing_start_pos)
+                if travel < self._min_trigger_travel:
+                    self._homing_error_alert.setText(
+                        f"{self._name}: homing aborted - limit switch "
+                        f"triggered after only {travel:.1f} of "
+                        f"{self._min_trigger_travel:.1f} min travel "
+                        "(may be stuck closed)"
+                    )
+                    self._homing_end(abort=True)
+                    return True
+
             home_position = self._home_position
             self._cb_set_position(home_position)
             if self._cb_on_limit_detected is not None:
@@ -730,7 +931,9 @@ class PositionCalibration:
                             self._cal_max_power_pct,
                             self._cal_max_homing_time,
                             homing_forward=True,
-                            min_velocity=self._cal_min_velocity
+                            min_velocity=self._cal_min_velocity,
+                            max_travel_degrees=self._cal_max_travel_degrees,
+                            min_trigger_travel=self._cal_min_trigger_travel,
                         )
                 else:
                     # Homing failed (timeout) - abort calibration

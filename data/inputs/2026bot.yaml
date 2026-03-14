@@ -33,6 +33,24 @@ actions:
       input_type: button
       trigger_mode: on_true
 
+  turret:
+    calibrate:
+      description: Hold to run turret calibration with endstops
+      input_type: button
+      trigger_mode: while_true
+    set_30:
+      description: Set turret to 30 degrees
+      input_type: button
+      trigger_mode: on_true
+    set_180:
+      description: Set turret to 180 degrees
+      input_type: button
+      trigger_mode: on_true
+    set_330:
+      description: Set turret to 330 degrees
+      input_type: button
+      trigger_mode: on_true
+
 controllers:
   0:
     name: Driver
@@ -45,3 +63,8 @@ controllers:
       y_button: [drivetrain.speed_toggle]
   1:
     name: Operator
+    bindings:
+      a_button: [turret.calibrate]
+      x_button: [turret.set_30]
+      y_button: [turret.set_180]
+      b_button: [turret.set_330]

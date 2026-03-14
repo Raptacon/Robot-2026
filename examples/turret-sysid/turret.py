@@ -166,7 +166,7 @@ class Turret(Subsystem):
         Returns:
             None
         """
-        if self._is_homing or self._is_calibrating:
+        if self._is_homing or self._is_calibrating or not self._is_calibrated:
             return
         self.motor.setVoltage(output)
 

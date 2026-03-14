@@ -14,12 +14,13 @@ import os
 from pathlib import Path
 from typing import Callable
 
-import wpimath
-
 # Internal imports
 from data.telemetry import Telemetry
 from commands.default_swerve_drive import DefaultDrive
+from commands.turret_controls import register_test_controls
+from config import TurretConfig
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
+from subsystem.mechanisms.turret import Turret
 from utils.input import InputFactory
 
 # Third-party imports
@@ -40,6 +41,9 @@ class RobotSwerve:
 
         # Subsystem instantiation
         self.drivetrain = SwerveDrivetrain()
+
+        # Turret subsystem
+        self.turret = Turret.from_config(TurretConfig())
 
         # Alliance instantiation
         self.updateAlliance()
@@ -148,13 +152,16 @@ class RobotSwerve:
         self.drivetrain.setDefaultCommand(
             DefaultDrive(
                 self.drivetrain,
-                lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftY(), 0.06),
-                lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftX(), 0.06),
-                lambda: wpimath.applyDeadband(-1 * self.driver_controller.getRightX(), 0.1),
-                lambda: not self.driver_controller.getRightBumperButton()
+                self.translate_x,
+                self.translate_y,
+                self.rotate,
+                lambda: not self.robot_relative_btn()
             )
         )
         commands2.cmd.run(lambda: self.drivetrain.drive(2, 0, 0, False), self.drivetrain).withTimeout(5).schedule()
+
+        # Turret test controls (controller 1: A=calibrate, X=30°, Y=180°, B=330°)
+        register_test_controls(self.turret, self.factory)
 
     def testPeriodic(self):
         pass

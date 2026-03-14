@@ -505,6 +505,7 @@ class TestPositionCalibrationCallbacks(unittest.TestCase):
         self._saved = None
         self._restored = None
         self._limit_detected_calls = []
+        self._conversion_factor = None
 
     def _make_callbacks(self, **overrides):
         """Build a full set of mock callbacks with optional overrides."""
@@ -522,6 +523,7 @@ class TestPositionCalibrationCallbacks(unittest.TestCase):
             'save_config': self._save_config,
             'restore_config': self._restore_config,
             'on_limit_detected': self._on_limit_detected,
+            'set_conversion_factor': self._set_conversion_factor,
         }
         cbs.update(overrides)
         return cbs
@@ -555,6 +557,9 @@ class TestPositionCalibrationCallbacks(unittest.TestCase):
 
     def _on_limit_detected(self, position, direction):
         self._limit_detected_calls.append((position, direction))
+
+    def _set_conversion_factor(self, factor):
+        self._conversion_factor = factor
 
     # ---- Construction tests ----
 
@@ -1114,6 +1119,7 @@ class TestPositionCalibrationCallbacks(unittest.TestCase):
             'save_config', 'restore_config',
             'get_forward_limit_switch', 'get_reverse_limit_switch',
             'on_limit_detected',
+            'set_conversion_factor',
         }
         self.assertEqual(_VALID_CALLBACKS, expected)
 
