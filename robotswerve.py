@@ -159,6 +159,9 @@ class RobotSwerve:
         self.driver_controller.a().onTrue(
             commands2.cmd.runOnce(lambda: self.shooter.setRPM(3000), self.shooter)
         )
+        self.driver_controller.a().onFalse(
+            commands2.cmd.runOnce(lambda: self.shooter.setRPM(0), self.shooter)
+        )
         self.driver_controller.b().onTrue(
             commands2.cmd.runOnce(self.shooter.setIntakeActive, self.shooter)
         )
