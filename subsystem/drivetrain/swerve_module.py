@@ -190,8 +190,7 @@ class SwerveModuleMk4iSparkMaxNeoCanCoder:
         self.apply_motor_config(to_drive=True, burn_flash=True)
 
         # Baseline relative encoders
-        # UNCOMMENT THIS BEFORE DPELOYING TO ROBOT
-        # self.baseline_relative_encoders()
+        self.baseline_relative_encoders()
 
     def instantiate_steer_config(self, invert: bool) -> None:
         """
