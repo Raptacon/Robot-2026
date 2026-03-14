@@ -20,6 +20,7 @@ import wpimath
 from data.telemetry import Telemetry
 from commands.default_swerve_drive import DefaultDrive
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
+from subsystem.nfc_battery_tracker import NfcBatteryTracker
 from utils.input import InputFactory
 
 # Third-party imports
@@ -40,6 +41,7 @@ class RobotSwerve:
 
         # Subsystem instantiation
         self.drivetrain = SwerveDrivetrain()
+        self.nfc_battery_tracker = NfcBatteryTracker()
 
         # Alliance instantiation
         self.updateAlliance()
@@ -108,6 +110,7 @@ class RobotSwerve:
         self.updateAlliance()
         self.drivetrain.set_motor_stop_modes(to_drive=True, to_break=True, all_motor_override=True, burn_flash=False)
         self.drivetrain.stop_driving()
+        self.nfc_battery_tracker.onDisabledInit()
 
     def disabledPeriodic(self):
         pass

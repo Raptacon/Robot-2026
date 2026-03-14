@@ -49,6 +49,14 @@ class OperatorRobotConfig:
     # max angular velocity (dps), max angular acceleration (dps^2).
     teleop_pathplan_constraints: Tuple[float] = (2.5, 2.0, 360.0, 360.0)
 
+class NfcBatteryTrackerConfig:
+    # Serial port for PN532 NFC reader.
+    # Default COM12 for dev/sim. roboRIO port TBD when hardware is wired.
+    nfc_serial_port: str = 'COM12'
+    nfc_baud_rate: int = 115200
+    nfc_poll_interval_disabled: float = 1.0   # seconds between polls when disabled
+
+
 class ShooterConfig:
     # Configs for shooter
     shooterFeedMotorPIDF = (0, 0, 0, 1 / 473)
