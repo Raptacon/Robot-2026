@@ -15,6 +15,9 @@ from utils.input import InputFactory
 _CALIBRATION_CURRENT_LIMIT = 10  # amps
 _CALIBRATION_POWER_PCT = 0.15    # 15% power
 _CALIBRATION_TIMEOUT = 10        # seconds per phase
+# Minimum travel before a limit switch trigger is trusted (stuck-closed guard).
+# If the switch fires before this many degrees of movement, abort with an alert.
+_CALIBRATION_MIN_TRIGGER_TRAVEL = 10.0  # degrees (~3% of 360° range)
 
 
 def register_test_controls(turret: Turret, factory: InputFactory) -> None:
@@ -33,6 +36,7 @@ def register_test_controls(turret: Turret, factory: InputFactory) -> None:
                 max_current=_CALIBRATION_CURRENT_LIMIT,
                 max_power_pct=_CALIBRATION_POWER_PCT,
                 max_homing_time=_CALIBRATION_TIMEOUT,
+                min_trigger_travel=_CALIBRATION_MIN_TRIGGER_TRAVEL,
             ),
             turret,
         )

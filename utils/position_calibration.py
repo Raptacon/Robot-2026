@@ -348,7 +348,9 @@ class PositionCalibration:
         max_homing_time: float,
         homing_forward: bool,
         min_velocity: float = None,
-        home_position: float = 0.0
+        home_position: float = 0.0,
+        max_travel_degrees: Optional[float] = None,
+        min_trigger_travel: float = 0.0,
     ) -> None:
         """
         Initialize the sensorless or sensor homing routine.
@@ -366,6 +368,13 @@ class PositionCalibration:
                 Defaults to 5% of soft limit range over 2 seconds.
             home_position: encoder value to set when the hard stop is
                 found (default 0.0)
+            max_travel_degrees: abort if encoder travels more than this
+                from the start position (overtravel guard). None disables
+                the check — useful when the mechanical range is unknown.
+            min_trigger_travel: minimum encoder travel required before a
+                limit switch trigger is trusted. If the switch fires before
+                this much movement, abort with a stuck-switch alert.
+                0.0 disables the check (default).
         """
         # Validate callbacks before starting
         self._validate_homing(homing_forward)
@@ -397,6 +406,14 @@ class PositionCalibration:
         self._min_velocity = min_velocity
         self._max_homing_time = max_homing_time
         self._home_position = home_position
+        self._max_travel_degrees = max_travel_degrees
+        self._min_trigger_travel = min_trigger_travel
+
+        # Capture start position for travel tracking (requires get_position)
+        if self._cb_get_position is not None:
+            self._homing_start_pos = self._cb_get_position()
+        else:
+            self._homing_start_pos = None
 
         # Set homing state
         self._is_homing = True
@@ -427,7 +444,9 @@ class PositionCalibration:
         max_power_pct: float,
         max_homing_time: float,
         min_velocity: float = None,
-        known_range: float = None
+        known_range: float = None,
+        max_travel_degrees: Optional[float] = None,
+        min_trigger_travel: float = 0.0,
     ) -> None:
         """
         Start a calibration routine that discovers the mechanical range.
@@ -445,6 +464,13 @@ class PositionCalibration:
             min_velocity: stall detection threshold in user units/second
             known_range: if provided, skip phase 2 and use this as the
                 full mechanical range from the zero point
+            max_travel_degrees: abort a homing phase if encoder travels
+                more than this from its phase start position. Defaults to
+                110% of the current soft limit range — a reasonable bound
+                when the expected range is known. Pass None to disable.
+            min_trigger_travel: minimum travel required before a limit
+                switch trigger is trusted per phase. Guards against a
+                stuck-closed switch firing immediately. 0.0 disables.
         """
         # Validate callbacks before starting
         self._validate_calibration()
@@ -459,12 +485,23 @@ class PositionCalibration:
         if self._cb_disable_soft_limits is not None:
             self._cb_disable_soft_limits(True, True)
 
+        # Default max travel: 110% of expected range (known from soft limits).
+        # This is a meaningful bound for calibration since we know the
+        # approximate range. Each phase homes one direction, so the full
+        # range is the per-phase ceiling.
+        if max_travel_degrees is None:
+            expected_range = abs(self._max_soft_limit - self._min_soft_limit)
+            if expected_range > 0:
+                max_travel_degrees = expected_range * 1.1
+
         # Store calibration parameters for phase transitions
         self._cal_max_current = max_current
         self._cal_max_power_pct = max_power_pct
         self._cal_max_homing_time = max_homing_time
         self._cal_min_velocity = min_velocity
         self._cal_known_range = known_range
+        self._cal_max_travel_degrees = max_travel_degrees
+        self._cal_min_trigger_travel = min_trigger_travel
 
         self._is_calibrating = True
         self._calibration_phase = 1
@@ -472,7 +509,9 @@ class PositionCalibration:
         # Start phase 1: home negative
         self.homing_init(
             max_current, max_power_pct, max_homing_time,
-            homing_forward=False, min_velocity=min_velocity
+            homing_forward=False, min_velocity=min_velocity,
+            max_travel_degrees=max_travel_degrees,
+            min_trigger_travel=min_trigger_travel,
         )
 
         self._cal_status_alert = wpilib.Alert(
@@ -733,6 +772,20 @@ class PositionCalibration:
             self._homing_end(abort=True)
             return True
 
+        # Overtravel guard: abort if encoder has moved more than expected.
+        # Catches a stuck-open limit switch that never triggers.
+        if (self._max_travel_degrees is not None
+                and self._homing_start_pos is not None
+                and self._cb_get_position is not None):
+            travel = abs(self._cb_get_position() - self._homing_start_pos)
+            if travel > self._max_travel_degrees:
+                self._homing_error_alert.setText(
+                    f"{self._name}: homing aborted - overtravel "
+                    f"({travel:.1f} > {self._max_travel_degrees:.1f})"
+                )
+                self._homing_end(abort=True)
+                return True
+
         # Check hard limit switch in homing direction (if callback exists)
         limit_hit = False
         if (self._homing_forward
@@ -750,6 +803,23 @@ class PositionCalibration:
 
         # Check for limit switch hit
         if limit_hit:
+            # Stuck-closed guard: if the switch fired before we've moved
+            # enough to be credible, treat it as a false trigger and abort.
+            if (self._min_trigger_travel > 0.0
+                    and self._homing_start_pos is not None
+                    and self._cb_get_position is not None):
+                travel = abs(
+                    self._cb_get_position() - self._homing_start_pos)
+                if travel < self._min_trigger_travel:
+                    self._homing_error_alert.setText(
+                        f"{self._name}: homing aborted - limit switch "
+                        f"triggered after only {travel:.1f} of "
+                        f"{self._min_trigger_travel:.1f} min travel "
+                        "(may be stuck closed)"
+                    )
+                    self._homing_end(abort=True)
+                    return True
+
             home_position = self._home_position
             self._cb_set_position(home_position)
             if self._cb_on_limit_detected is not None:
@@ -861,7 +931,9 @@ class PositionCalibration:
                             self._cal_max_power_pct,
                             self._cal_max_homing_time,
                             homing_forward=True,
-                            min_velocity=self._cal_min_velocity
+                            min_velocity=self._cal_min_velocity,
+                            max_travel_degrees=self._cal_max_travel_degrees,
+                            min_trigger_travel=self._cal_min_trigger_travel,
                         )
                 else:
                     # Homing failed (timeout) - abort calibration
