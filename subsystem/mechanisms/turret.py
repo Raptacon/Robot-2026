@@ -149,6 +149,7 @@ class Turret(Subsystem):
         super().__init__()
         self.motor = motor
         self.encoder = self.motor.getEncoder()
+        self.position_conversion_factor = position_conversion_factor
         self._use_profiled_pid = use_profiled_pid
         self._max_velocity = 180.0    # deg/s
         self._max_acceleration = 360.0  # deg/s²

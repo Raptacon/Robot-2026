@@ -45,7 +45,7 @@ class PhysicsEngine:
         # NEO free speed ~5676 RPM × pos_conv_factor / 60 s/min
         _NEO_FREE_SPEED_RPM = 5676.0
         _turret = robot.container.turret
-        _pos_conv = _turret.encoder.getPositionConversionFactor()
+        _pos_conv = _turret.position_conversion_factor
         self._turret_max_speed_deg_s = _NEO_FREE_SPEED_RPM / 60.0 * _pos_conv
         self._turret_vel_conv = _pos_conv / 60.0  # deg/s per native RPM
         self._turret_min = _turret.min_soft_limit
