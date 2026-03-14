@@ -14,8 +14,6 @@ import os
 from pathlib import Path
 from typing import Callable
 
-import wpimath
-
 # Internal imports
 from data.telemetry import Telemetry
 from commands.default_swerve_drive import DefaultDrive
@@ -154,10 +152,10 @@ class RobotSwerve:
         self.drivetrain.setDefaultCommand(
             DefaultDrive(
                 self.drivetrain,
-                lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftY(), 0.06),
-                lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftX(), 0.06),
-                lambda: wpimath.applyDeadband(-1 * self.driver_controller.getRightX(), 0.1),
-                lambda: not self.driver_controller.getRightBumperButton()
+                self.translate_x,
+                self.translate_y,
+                self.rotate,
+                lambda: not self.robot_relative_btn()
             )
         )
         commands2.cmd.run(lambda: self.drivetrain.drive(2, 0, 0, False), self.drivetrain).withTimeout(5).schedule()

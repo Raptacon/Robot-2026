@@ -41,6 +41,23 @@ class PhysicsEngine:
     def __init__(self, physics_controller: PhysicsInterface, robot: "MyRobot") -> None:
         self.physics_controller = physics_controller
 
+        # Turret physics — no-delay model matching the swerve approach.
+        # NEO free speed ~5676 RPM × pos_conv_factor / 60 s/min
+        _NEO_FREE_SPEED_RPM = 5676.0
+        _turret = robot.container.turret
+        _pos_conv = _turret.encoder.getPositionConversionFactor()
+        self._turret_max_speed_deg_s = _NEO_FREE_SPEED_RPM / 60.0 * _pos_conv
+        self._turret_vel_conv = _pos_conv / 60.0  # deg/s per native RPM
+        self._turret_min = _turret.min_soft_limit
+        self._turret_max = _turret.max_soft_limit
+        self._turret_motor = _turret.motor
+        self.turret_sim = rev.SparkSim(self._turret_motor, DCMotor.NEO())
+        self._turret_enc = self.turret_sim.getRelativeEncoderSim()
+        self._turret_fwd_ls = self.turret_sim.getForwardLimitSwitchSim()
+        self._turret_rev_ls = self.turret_sim.getReverseLimitSwitchSim()
+        self._turret_enc.setPosition(0.0)
+        self._turret_enc.setVelocity(0.0)
+
         modules = robot.container.drivetrain.swerve_modules
         self.modules = modules
         self.drive_sims = [
@@ -146,6 +163,35 @@ class PhysicsEngine:
             module_states.append(
                 SwerveModuleState(velocity, Rotation2d.fromDegrees(angle_deg))
             )
+
+        # Turret physics — no-delay model: applied output × free speed.
+        # iterate() must be called each cycle so getAppliedOutput() reflects
+        # the current motor.set() / motor.setVoltage() command.
+        # Velocity arg is native motor RPM (undo the position conversion factor).
+        current_vel_rpm = self._turret_enc.getVelocity() / self._turret_vel_conv
+        self.turret_sim.iterate(current_vel_rpm, 12.0, tm_diff)
+
+        turret_output = self.turret_sim.getAppliedOutput()
+        turret_velocity = turret_output * self._turret_max_speed_deg_s
+        new_position = self._turret_enc.getPosition() + turret_velocity * tm_diff
+
+        # Simulate hard limits — trip limit switches and clamp position
+        if new_position >= self._turret_max:
+            new_position = self._turret_max
+            turret_velocity = 0.0
+            self._turret_fwd_ls.setPressed(True)
+            self._turret_rev_ls.setPressed(False)
+        elif new_position <= self._turret_min:
+            new_position = self._turret_min
+            turret_velocity = 0.0
+            self._turret_fwd_ls.setPressed(False)
+            self._turret_rev_ls.setPressed(True)
+        else:
+            self._turret_fwd_ls.setPressed(False)
+            self._turret_rev_ls.setPressed(False)
+
+        self._turret_enc.setVelocity(turret_velocity)
+        self._turret_enc.setPosition(new_position)
 
         # Integrate chassis speeds into robot pose.
         speeds = self.kinematics.toChassisSpeeds(tuple(module_states))

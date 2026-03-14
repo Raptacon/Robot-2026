@@ -52,27 +52,46 @@ class MyRobot(TimedCommandRobot):
         self.sysId = SysIdRoutine(sysIdConfig, sysIdMechanism)
 
     def teleopInit(self) -> None:
+        # SysId workflow:
+        # 1. Press Start to run calibration (homes to both hard stops, sets soft limits).
+        # 2. Wait for calibration to complete (isCalibrated = True on dashboard).
+        # 3. Use A/B (quasistatic) and X/Y (dynamic) to collect SysId data.
+        # SysId buttons are disabled until calibration has completed.
         self.controller = CommandXboxController(0)
 
-        # A/B: Quasistatic forward/reverse
-        self.controller.a().whileTrue(
+        calibrated = commands2.button.Trigger(lambda: self.turret._is_calibrated)
+
+        # Start: run full two-phase calibration
+        self.controller.start().onTrue(
+            commands2.cmd.runOnce(
+                lambda: self.turret.calibrationInit(
+                    max_current=10,
+                    max_power_pct=0.15,
+                    max_homing_time=10,
+                ),
+                self.turret,
+            )
+        )
+
+        # A/B: Quasistatic forward/reverse (gated on calibration)
+        self.controller.a().and_(calibrated).whileTrue(
             self.turret.sysIdQuasistaticCommand(
                 SysIdRoutine.Direction.kForward, self.sysId
             )
         )
-        self.controller.b().whileTrue(
+        self.controller.b().and_(calibrated).whileTrue(
             self.turret.sysIdQuasistaticCommand(
                 SysIdRoutine.Direction.kReverse, self.sysId
             )
         )
 
-        # X/Y: Dynamic forward/reverse
-        self.controller.x().whileTrue(
+        # X/Y: Dynamic forward/reverse (gated on calibration)
+        self.controller.x().and_(calibrated).whileTrue(
             self.turret.sysIdDynamicCommand(
                 SysIdRoutine.Direction.kForward, self.sysId
             )
         )
-        self.controller.y().whileTrue(
+        self.controller.y().and_(calibrated).whileTrue(
             self.turret.sysIdDynamicCommand(
                 SysIdRoutine.Direction.kReverse, self.sysId
             )
