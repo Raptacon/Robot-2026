@@ -180,10 +180,10 @@ class RobotSwerve:
 
         # Intake Telopinit
         Trigger(self.intakeController.getYButtonPressed).onTrue(
-            commands2.cmd.run(self.intake.stowIntake, self.intake)
+            commands2.cmd.runOnce(self.intake.stowIntake, self.intake)
         )
         Trigger(self.intakeController.getAButtonPressed).onTrue(
-            commands2.cmd.run(self.intake.deployIntake, self.intake)
+            commands2.cmd.runOnce(self.intake.deployIntake, self.intake)
         )
         Trigger(self.intakeController.getXButtonPressed).onTrue(
             commands2.cmd.runOnce(self.intake.deactivateRoller, self.intake)

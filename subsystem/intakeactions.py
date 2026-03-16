@@ -72,7 +72,7 @@ class IntakeSubsystem(commands2.SubsystemBase):
         self.rollerSensor = 0 #Leave at 0, ensures that the rollers are stopped only once, preventing obstruction of manual controls
         
         self.jamDetected = False #Leave at False
-        self.intakeMotorPositions = arr.array('f', [0,0,0,0,0]) #Leave with all zeros, for checking if intake motor stopped during deployment/stowing
+        self.intakeMotorPositions = arr.array('f', [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]) #Leave with all zeros, for checking if intake motor stopped during deployment/stowing
 
     def deployIntake(self):
     #     #Check Sensor for deployment, if not, deploy it.
