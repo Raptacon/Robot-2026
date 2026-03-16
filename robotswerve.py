@@ -63,8 +63,8 @@ class RobotSwerve:
         self._drive_scale_fast = 1
         self._drive_is_slow = False
 
-        self.driver_controller = commands2.button.CommandXboxController(2)
-        self.mech_controller = commands2.button.CommandXboxController(1)
+        self.driver_controller = commands2.button.CommandXboxController(1)
+        self.mech_controller = commands2.button.CommandXboxController(0)
 
         # TODO: Move input retrieval and binding into commands/{subsystem}_controls.py
         # files as part of the subsystem registry refactor. Each subsystem's controls
@@ -108,8 +108,6 @@ class RobotSwerve:
 
         # Initialize Intake
         self.intake = IntakeSubsystem()
-
-        self.intakeController = wpilib.XboxController(0)
 
         wpilib.SmartDashboard.putNumber("Intake Velocity", 0.3)
         wpilib.SmartDashboard.putNumber("Roller Velocity", 0.3)
@@ -179,19 +177,19 @@ class RobotSwerve:
         )
 
         # Intake Telopinit
-        Trigger(self.intakeController.getYButtonPressed).onTrue(
+        Trigger(self.driver_controller.getYButtonPressed).onTrue(
             commands2.cmd.run(self.intake.stowIntake, self.intake)
         )
-        Trigger(self.intakeController.getAButtonPressed).onTrue(
+        Trigger(self.driver_controller.getAButtonPressed).onTrue(
             commands2.cmd.run(self.intake.deployIntake, self.intake)
         )
-        Trigger(self.intakeController.getXButtonPressed).onTrue(
+        Trigger(self.driver_controller.getXButtonPressed).onTrue(
             commands2.cmd.runOnce(self.intake.deactivateRoller, self.intake)
         )
-        Trigger(self.intakeController.getBButtonPressed).onTrue(
+        Trigger(self.driver_controller.getBButtonPressed).onTrue(
             commands2.cmd.runOnce(self.intake.activateRoller, self.intake)
         )
-        Trigger(self.intakeController.getStartButtonPressed).onTrue(
+        Trigger(self.driver_controller.getStartButtonPressed).onTrue(
             commands2.cmd.run(self.intake.rampIntake, self.intake)
         )
 
