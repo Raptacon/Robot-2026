@@ -28,7 +28,7 @@ class IntakeSubsystem(commands2.SubsystemBase):
         self.tuningMotors()
 
 
-        self.rollerMotor = rev.SparkMax(intakeConsts.kRollerMotorCanId, rev.SparkLowLevel.MotorType.kBrushless)
+        self.rollerMotor = rev.SparkFlex(intakeConsts.kRollerMotorCanId, rev.SparkLowLevel.MotorType.kBrushless)
         self.rollerMotorEncoder = self.rollerMotor.getEncoder()
         self.rollerMotorVelocity = self.rollerMotorEncoder.getVelocity()
 
@@ -132,6 +132,7 @@ class IntakeSubsystem(commands2.SubsystemBase):
 
     def jamDetection(self):
         if not self.jamDetected:
+            self.rollerSensor = 0
             if self.rollerMotorEncoder.getVelocity() <= self.jamThreshold and self.rollerCondition == 1:
                 if self.jamOccurence == 0:
                     self.baselineJam = time.perf_counter()
@@ -151,6 +152,7 @@ class IntakeSubsystem(commands2.SubsystemBase):
                     self.rollerMotor.disable()
                 if self.rollerSensor == 0:
                     self.deactivateRoller()
+                    self.rollerSensor = 1
                 else:
                     self.rollerCondition = 1
                     self.jamOccurence = 0
