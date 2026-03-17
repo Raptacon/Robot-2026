@@ -123,6 +123,8 @@ class RobotSwerve:
         for motor in ["feed", "lead", "follower"]:
             self.shooter.setMotorVoltage(motor, 0)
 
+        self.hopper.zeroHopperVelocity()
+
     def disabledPeriodic(self):
         pass
 
@@ -153,7 +155,7 @@ class RobotSwerve:
         )
 
         self.driver_controller.povUp().onTrue(commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(ShooterConfig.shooterOffsetDelta), self.shooter))
-        self.driver_controller.povUp().onTrue(commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(ShooterConfig.shooterOffsetDelta), self.shooter))
+        self.driver_controller.povDown().onTrue(commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(-ShooterConfig.shooterOffsetDelta), self.shooter))
         self.driver_controller.y().onTrue(
             commands2.cmd.runOnce(self.shooter.resetOffset, self.shooter)
         )
@@ -162,8 +164,28 @@ class RobotSwerve:
         )
 
         # hopper controller commands
-        self.mech_controller.x().toggleOnTrue(self.hopper.hex_shaft_generator(BallpitConstants.motorGo).andThen(self.hopper.hex_shaft_generator(BallpitConstants.motorStop)))
-        self.mech_controller.y().onTrue(self.hopper.unjamHopper(BallpitConstants.motorOsc))
+        # self.mech_controller.x().toggleOnTrue(self.hopper.hex_shaft_generator(BallpitConstants.motorGo).andThen(self.hopper.hex_shaft_generator(BallpitConstants.motorStop)))
+        # self.mech_controller.x().onTrue(commands2.cmd.runOnce(lambda: self.hopper.setHexShaftSpeed(BallpitConstants.motorGo), self.hopper))
+        # self.mech_controller.x().onFalse(commands2.cmd.runOnce(lambda: self.hopper.setHexShaftSpeed(BallpitConstants.motorStop), self.hopper))
+
+        self.hopper.setDefaultCommand(self.hopper.hex_shaft_generator(BallpitConstants.motorStop))
+        self.mech_controller.x().toggleOnTrue(
+            self.hopper.hex_shaft_generator(BallpitConstants.motorGo)
+        )
+        self.mech_controller.y().toggleOnTrue(
+            commands2.DeferredCommand(lambda: self.hopper.unjamHopper(BallpitConstants.motorOsc, BallpitConstants.repeat, BallpitConstants.duration), self.hopper)
+        )
+        # self.mech_controller.y().toggleOnTrue(
+        #     commands2.cmd.sequence(
+        #         commands2.cmd.repeatingSequence(
+        #             commands2.cmd.runOnce(lambda: self.hopper.hex_shaft_generator(-BallpitConstants.motorOsc), self.hopper),
+        #             commands2.cmd.waitSeconds(BallpitConstants.duration),
+        #             commands2.cmd.runOnce(lambda: self.hopper.hex_shaft_generator(BallpitConstants.motorOsc), self.hopper),
+        #             commands2.cmd.waitSeconds(BallpitConstants.duration),
+        #         ).withTimeout(BallpitConstants.repeat * (BallpitConstants.duration * 2)),
+        #         commands2.cmd.runOnce(lambda: self.hopper.hex_shaft_generator(BallpitConstants.motorStop), self.hopper),
+        #     )
+        # )
 
     def teleopPeriodic(self):
         pass
@@ -178,7 +200,7 @@ class RobotSwerve:
                 lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftY(), 0.06),
                 lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftX(), 0.06),
                 lambda: wpimath.applyDeadband(-1 * self.driver_controller.getRightX(), 0.1),
-                lambda: not self.driver_controller.getRightBumperButton()
+                lambda: not self.driver_controller.getHID().getRightBumperButton()
             )
         )
         commands2.cmd.run(lambda: self.drivetrain.drive(2, 0, 0, False), self.drivetrain).withTimeout(5).schedule()

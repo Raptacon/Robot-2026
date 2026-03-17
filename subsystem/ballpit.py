@@ -1,5 +1,6 @@
 import commands2
 import rev
+import wpilib
 
 class BallPitHopper(commands2.Subsystem):
     def __init__(self) -> None:
@@ -10,34 +11,44 @@ class BallPitHopper(commands2.Subsystem):
             None - class initialization executed upon construction
         """
         self.hopperMotor = rev.SparkMax(40, rev.SparkLowLevel.MotorType.kBrushless)
+        self.hopperConfig = rev.SparkBaseConfig()
+        self.hopperConfig.closedLoop.pidf(0, 0, 0, 1/473, rev.ClosedLoopSlot.kSlot0)
+        self.hopperMotorPIDF = self.hopperMotor.getClosedLoopController()
+        self.hopperMotor.configure(self.hopperConfig, rev.ResetMode.kResetSafeParameters, rev.PersistMode.kPersistParameters)
         self.lastSpeed = 0
 
-    def setHexShaftSpeed(self, percent : float):
+    def setHexShaftSpeed(self, velocity : float):
         """
-        Sets the motor percentage for use elsewhere
+        Sets the motor velocity for use elsewhere
         
         Args: 
-            percent: speed of the hopper motor from -1.0 - 1.0
+            velocity: speed of the hopper motor from -2000 to 2000
 
         Returns: 
             None - function to be used elsewhere
         """
-        self.lastSpeed = percent
+        self.lastSpeed = velocity
 
-    def unjamHopper(self, percent, duration = 0.5, repeat = 1):
-        self.pre_unjamSpeed = self.lastSpeed
+    def zeroHopperVelocity(self):
+        self.setHexShaftSpeed(0)
+
+    def getLastSpeed(self):
+        return self.lastSpeed
+
+    def unjamHopper(self, velocity, repeat, duration):
+        pre_unjamSpeed = self.getLastSpeed()
         return commands2.cmd.sequence(
             commands2.cmd.repeatingSequence(
-                commands2.cmd.runOnce(lambda: self.setHexShaftSpeed(-percent), self),
-                commands2.cmd.waitSeconds(duration),
-                commands2.cmd.runOnce(lambda: self.setHexShaftSpeed(percent), self),
-                commands2.cmd.waitSeconds(duration)
+                self.hex_shaft_generator(-velocity).withTimeout(duration),
+                self.hex_shaft_generator(velocity).withTimeout(duration),
             ).withTimeout(repeat * (duration * 2)),
-            commands2.cmd.runOnce(lambda: self.setHexShaftSpeed(self.pre_unjamSpeed), self)
+            self.hex_shaft_generator(pre_unjamSpeed)
         )
     
-    def hex_shaft_generator(self, percent):
-        return commands2.cmd.runOnce(lambda: self.setHexShaftSpeed(percent), self)
+    def hex_shaft_generator(self, velocity):
+        return commands2.cmd.run(lambda: self.setHexShaftSpeed(velocity), self)
+        # self.setHexShaftSpeed(velocity)
     
     def periodic(self):
-        commands2.cmd.print_(self.lastSpeed)
+        self.hopperMotorPIDF.setReference(self.lastSpeed, rev.SparkLowLevel.ControlType.kVelocity, rev.ClosedLoopSlot.kSlot0)
+        wpilib.SmartDashboard.putNumber("lastspeed hopper", self.lastSpeed)
