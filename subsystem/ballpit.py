@@ -20,11 +20,11 @@ class BallPitHopper(commands2.Subsystem):
     def setHexShaftSpeed(self, velocity : float):
         """
         Sets the motor velocity for use elsewhere
-        
-        Args: 
+
+        Args:
             velocity: speed of the hopper motor from -2000 to 2000
 
-        Returns: 
+        Returns:
             None - function to be used elsewhere
         """
         self.lastSpeed = velocity
@@ -48,7 +48,7 @@ class BallPitHopper(commands2.Subsystem):
     def hex_shaft_generator(self, velocity):
         return commands2.cmd.run(lambda: self.setHexShaftSpeed(velocity), self)
         # self.setHexShaftSpeed(velocity)
-    
+
     def periodic(self):
         self.hopperMotorPIDF.setReference(self.lastSpeed, rev.SparkLowLevel.ControlType.kVelocity, rev.ClosedLoopSlot.kSlot0)
         wpilib.SmartDashboard.putNumber("lastspeed hopper", self.lastSpeed)
