@@ -22,7 +22,6 @@ from commands.default_swerve_drive import DefaultDrive
 from config import ShooterConfig
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
 from subsystem.shooter import Shooter
-from utils.input import InputFactory
 
 # Third-party imports
 import commands2
@@ -134,6 +133,7 @@ class RobotSwerve:
         pass
 
     def teleopInit(self):
+        commands2.CommandScheduler.getInstance().getDefaultButtonLoop().clear()
         self.updateAlliance()
         if self.auto_command:
             self.auto_command.cancel()
@@ -148,13 +148,23 @@ class RobotSwerve:
             )
         )
 
-        self.driver_controller.povUp().onTrue(commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(ShooterConfig.shooterOffsetDelta), self.shooter))
-        self.driver_controller.povUp().onTrue(commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(ShooterConfig.shooterOffsetDelta), self.shooter))
-        self.driver_controller.y().onTrue(
+        # TODO: Get odometry from drivetrain and calculate range
+        # Will start shooter motors upon enabling
+        self.shooter.setDefaultCommand(commands2.cmd.run(lambda: self.shooter.setRpmUsingLookup(1), self.shooter))
+
+        self.mech_controller.povUp().onTrue(commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(ShooterConfig.shooterOffsetDelta), self.shooter))
+        self.mech_controller.povDown().onTrue(commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(-ShooterConfig.shooterOffsetDelta), self.shooter))
+        self.mech_controller.y().onTrue(
             commands2.cmd.runOnce(self.shooter.resetOffset, self.shooter)
         )
-        self.driver_controller.a().onTrue(
+        self.mech_controller.a().onTrue(
             commands2.cmd.runOnce(lambda: self.shooter.setRPM(3000), self.shooter)
+        )
+        self.mech_controller.x().onTrue(
+            commands2.cmd.runOnce(lambda: self.shooter.setRPM(0), self.shooter)
+        )
+        self.mech_controller.b().onTrue(
+            commands2.cmd.runOnce(self.shooter.toggleFeedActive, self.shooter)
         )
 
     def teleopPeriodic(self):
