@@ -203,33 +203,33 @@ class IntakeSubsystem(commands2.SubsystemBase):
 
     def motorChecks(self):
         #Check if intake deployment motor is deploying without limits
-        if self.intakeMotorEncoder.getPosition() >= self.intakeDeployed + 15 and self.intakeCondition >= 0:
-            wpilib.Alert("INTAKE ERR122: Intake Motor appears to be deploying outside of limits! Motor has been disabled.", wpilib.Alert.AlertType.kError)
-            self.intakeMotor.disable()
+        # if self.intakeMotorEncoder.getPosition() >= self.intakeDeployed + 15 and self.intakeCondition >= 0:
+        #     wpilib.Alert("INTAKE ERR122: Intake Motor appears to be deploying outside of limits! Motor has been disabled.", wpilib.Alert.AlertType.kError)
+        #     self.intakeMotor.disable()
 
-        if self.intakeMotorEncoder.getPosition() <= self.intakeStowed - 15 and self.intakeCondition <= 0:
-            wpilib.Alert("INTAKE ERR122: Intake Motor appears to be stowing outside of limits! Motor has been disabled.", wpilib.Alert.AlertType.kError)
-            self.intakeMotor.disable()
-
-        
-        #Stop intake deployment motor if it reaches limits
-        if self.intakeMotorEncoder.getPosition() >= self.intakeDeployed and self.intakeCondition >= 0:
-            self.intakeCondition = 0
-        if self.intakeMotorEncoder.getPosition() <= self.intakeStowed and self.intakeCondition <= 0:
-            self.intakeCondition = 0
+        # if self.intakeMotorEncoder.getPosition() <= self.intakeStowed - 15 and self.intakeCondition <= 0:
+        #     wpilib.Alert("INTAKE ERR122: Intake Motor appears to be stowing outside of limits! Motor has been disabled.", wpilib.Alert.AlertType.kError)
+        #     self.intakeMotor.disable()
 
         
-        #Stop intake deployment motor if it's position does not change even when it is supposed to be moving
-        self.intakeMotorPositions.pop(0)
-        self.intakeMotorPositions.append(self.intakeMotorEncoder.getPosition())
-        if not self.intakeMotorEncoder.getPosition() <= self.intakeStowed and not self.intakeMotorEncoder.getPosition() >= self.intakeDeployed:
-            if self.intakeMotorPositions.count(self.intakeMotorEncoder.getPosition()) == 5:
-                    if self.intakeCondition == -1:
-                        self.intakeStowed = self.intakeMotorEncoder.getPosition() + 1
-                        self.intakeCondition = 0
-                    elif self.intakeCondition == 1:
-                        self.intakeDeployed = self.intakeMotorEncoder.getPosition() - 1
-                        self.intakeCondition = 0
+        # #Stop intake deployment motor if it reaches limits
+        # if self.intakeMotorEncoder.getPosition() >= self.intakeDeployed and self.intakeCondition >= 0:
+        #     self.intakeCondition = 0
+        # if self.intakeMotorEncoder.getPosition() <= self.intakeStowed and self.intakeCondition <= 0:
+        #     self.intakeCondition = 0
+
+        
+        # #Stop intake deployment motor if it's position does not change even when it is supposed to be moving
+        # self.intakeMotorPositions.pop(0)
+        # self.intakeMotorPositions.append(self.intakeMotorEncoder.getPosition())
+        # if not self.intakeMotorEncoder.getPosition() <= self.intakeStowed and not self.intakeMotorEncoder.getPosition() >= self.intakeDeployed:
+        #     if self.intakeMotorPositions.count(self.intakeMotorEncoder.getPosition()) == 5:
+        #             if self.intakeCondition == -1:
+        #                 self.intakeStowed = self.intakeMotorEncoder.getPosition() + 1
+        #                 self.intakeCondition = 0
+        #             elif self.intakeCondition == 1:
+        #                 self.intakeDeployed = self.intakeMotorEncoder.getPosition() - 1
+        #                 self.intakeCondition = 0
 
         if self.intakeCondition == 0:
             self.intakeVelocity = 0
@@ -239,33 +239,38 @@ class IntakeSubsystem(commands2.SubsystemBase):
             self.intakeCondition * self.intakeVelocity, rev.SparkLowLevel.ControlType.kVelocity, rev.ClosedLoopSlot.kSlot0
         )
 
-        # Stop intake deployment motor if it is being ramped
-        if self.intakeRampStatus == 1:
-            if self.intakeRamped == 1:
-                    if self.intakeMotorEncoder.getPosition() >= self.intakeRamp:
-                        self.intakeRamped = 0
-                        self.intakeCondition = 0
-                        self.intakeRampedCondition = True
-            if self.intakeRamped == -1:
-                    if self.intakeMotorEncoder.getPosition() <= self.intakeRamp:
-                        self.intakeRamped = 0
-                        self.intakeCondition = 0
-                        self.intakeRampedCondition = True
+        # # Stop intake deployment motor if it is being ramped
+        # if self.intakeRampStatus == 1:
+        #     if self.intakeRamped == 1:
+        #             if self.intakeMotorEncoder.getPosition() >= self.intakeRamp:
+        #                 self.intakeRamped = 0
+        #                 self.intakeCondition = 0
+        #                 self.intakeRampedCondition = True
+        #     if self.intakeRamped == -1:
+        #             if self.intakeMotorEncoder.getPosition() <= self.intakeRamp:
+        #                 self.intakeRamped = 0
+        #                 self.intakeCondition = 0
+        #                 self.intakeRampedCondition = True
         
-        #Allows intake to be ramped even from deployed/stowed position
-        if self.intakeMotorEncoder.getPosition() >= self.intakeDeployed:
-            self.intakeRamped = 0
-        if self.intakeMotorEncoder.getPosition() <= self.intakeStowed:
-            self.intakeRamped = 0
+        # #Allows intake to be ramped even from deployed/stowed position
+        # if self.intakeMotorEncoder.getPosition() >= self.intakeDeployed:
+        #     self.intakeRamped = 0
+        # if self.intakeMotorEncoder.getPosition() <= self.intakeStowed:
+        #     self.intakeRamped = 0
 
-        if self.intakeCondition != 0:
-            self.intakeRampedCondition = False
+        # if self.intakeCondition != 0:
+        #     self.intakeRampedCondition = False
 
     def tuningMotors(self):
         (
             self.intakeMotorConfig.closedLoop
             .setFeedbackSensor(rev.FeedbackSensor.kPrimaryEncoder)
-            .pidf(*OperatorRobotConfig.intake_roller_pid)
+            .pidf(*OperatorRobotConfig.intake_pivot_pid)
+        )
+
+        (
+            self.intakeMotorConfig.encoder
+            .velocityConversionFactor(1/375)
         )
 
         self.intakeMotor.configure(
@@ -299,6 +304,7 @@ class IntakeSubsystem(commands2.SubsystemBase):
         wpilib.SmartDashboard.putBoolean("Roller Jam", self.jamDetected)
         wpilib.SmartDashboard.putNumber("Actual Roller Velocity", self.rollerMotorEncoder.getVelocity())
         wpilib.SmartDashboard.putNumber("Baseline Detected Jam", self.baselineDetectedJam)
+        wpilib.SmartDashboard.putNumber("Intake Condition * Velocity", self.intakeCondition * self.intakeVelocity)
         
         self.motorChecks()
         # self.automaticRollerActivation()
