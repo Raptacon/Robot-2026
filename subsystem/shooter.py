@@ -20,6 +20,7 @@ class Shooter(Subsystem):
     def __init__(self):
         super().__init__()
         self.offsetAmount = 0
+        self.offsetDelta = 0
         self.RPM = 0
         self.intakeActive = False
 
@@ -175,7 +176,8 @@ class Shooter(Subsystem):
         Returns:
             None
         """
-        self.offsetAmount = self.offsetAmount + offsetDelta
+        self.offsetDelta = offsetDelta
+        self.offsetAmount = self.offsetAmount + self.offsetDelta
 
     def resetOffset(self):
         """
@@ -201,7 +203,7 @@ class Shooter(Subsystem):
         """
         return self.offsetAmount
 
-    def setIntakeActive(self):
+    def toggleIntakeActive(self):
         self.intakeActive = not self.intakeActive
 
     def periodic(self):
@@ -218,3 +220,5 @@ class Shooter(Subsystem):
         wpilib.SmartDashboard.putNumber("Shooter_RPM", newRPM)
         wpilib.SmartDashboard.putNumber("Shooter_Feed_RPM", feedRPM)
         wpilib.SmartDashboard.putNumber("Shooter_Offset", self.offsetAmount)
+        wpilib.SmartDashboard.putNumber("Offset_Delta", self.offsetDelta)
+        wpilib.SmartDashboard.putBoolean("Intake_Active", self.intakeActive)

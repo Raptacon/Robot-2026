@@ -134,6 +134,7 @@ class RobotSwerve:
         pass
 
     def teleopInit(self):
+        commands2.CommandScheduler.getInstance().getDefaultButtonLoop().clear()
         self.updateAlliance()
         if self.auto_command:
             self.auto_command.cancel()
@@ -149,7 +150,7 @@ class RobotSwerve:
         )
 
         # TODO: Get odometry from drivetrain and calculate range
-        self.shooter.setDefaultCommand(commands2.cmd.run(lambda: self.shooter.setRpmUsingLookup(1), self.shooter))
+        # self.shooter.setDefaultCommand(commands2.cmd.run(lambda: self.shooter.setRpmUsingLookup(1), self.shooter))
 
         self.driver_controller.povUp().onTrue(commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(ShooterConfig.shooterOffsetDelta), self.shooter))
         self.driver_controller.povDown().onTrue(commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(-ShooterConfig.shooterOffsetDelta), self.shooter))
@@ -159,11 +160,11 @@ class RobotSwerve:
         self.driver_controller.a().onTrue(
             commands2.cmd.runOnce(lambda: self.shooter.setRPM(3000), self.shooter)
         )
-        self.driver_controller.a().onFalse(
+        self.driver_controller.x().onTrue(
             commands2.cmd.runOnce(lambda: self.shooter.setRPM(0), self.shooter)
         )
         self.driver_controller.b().onTrue(
-            commands2.cmd.runOnce(self.shooter.setIntakeActive, self.shooter)
+            commands2.cmd.runOnce(self.shooter.toggleIntakeActive, self.shooter)
         )
 
     def teleopPeriodic(self):
