@@ -164,7 +164,7 @@ class RobotSwerve:
             commands2.cmd.runOnce(lambda: self.shooter.setRPM(0), self.shooter)
         )
         self.driver_controller.b().onTrue(
-            commands2.cmd.runOnce(self.shooter.toggleIntakeActive, self.shooter)
+            commands2.cmd.runOnce(self.shooter.toggleFeedActive, self.shooter)
         )
 
     def teleopPeriodic(self):
