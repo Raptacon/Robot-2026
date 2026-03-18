@@ -64,7 +64,7 @@ class RobotSwerve:
         self._drive_is_slow = False
 
         self.driver_controller = commands2.button.CommandXboxController(2)
-        self.mech_controller = commands2.button.CommandXboxController(1)
+        self.mech_controller = commands2.button.CommandXboxController(0)
 
         # TODO: Move input retrieval and binding into commands/{subsystem}_controls.py
         # files as part of the subsystem registry refactor. Each subsystem's controls
@@ -109,7 +109,7 @@ class RobotSwerve:
         # Initialize Intake
         self.intake = IntakeSubsystem()
 
-        self.intakeController = wpilib.XboxController(0)
+        self.intakeController = wpilib.XboxController(1)
 
         wpilib.SmartDashboard.putNumber("Intake Velocity", 0.3)
         wpilib.SmartDashboard.putNumber("Roller Velocity", 0.3)
