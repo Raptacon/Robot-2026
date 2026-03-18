@@ -22,7 +22,6 @@ from commands.default_swerve_drive import DefaultDrive
 from config import ShooterConfig
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
 from subsystem.shooter import Shooter
-from utils.input import InputFactory
 
 # Third-party imports
 import commands2
@@ -150,7 +149,8 @@ class RobotSwerve:
         )
 
         # TODO: Get odometry from drivetrain and calculate range
-        # self.shooter.setDefaultCommand(commands2.cmd.run(lambda: self.shooter.setRpmUsingLookup(1), self.shooter))
+        # Will start shooter motors upon enabling
+        self.shooter.setDefaultCommand(commands2.cmd.run(lambda: self.shooter.setRpmUsingLookup(1), self.shooter))
 
         self.driver_controller.povUp().onTrue(commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(ShooterConfig.shooterOffsetDelta), self.shooter))
         self.driver_controller.povDown().onTrue(commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(-ShooterConfig.shooterOffsetDelta), self.shooter))
