@@ -173,29 +173,13 @@ class RobotSwerve:
             commands2.cmd.runOnce(self.shooter.toggleFeedActive, self.shooter)
         )
 
-        # hopper controller commands
-        # self.mech_controller.x().toggleOnTrue(self.hopper.hex_shaft_generator(BallpitConstants.motorGo).andThen(self.hopper.hex_shaft_generator(BallpitConstants.motorStop)))
-        # self.mech_controller.x().onTrue(commands2.cmd.runOnce(lambda: self.hopper.setHexShaftSpeed(BallpitConstants.motorGo), self.hopper))
-        # self.mech_controller.x().onFalse(commands2.cmd.runOnce(lambda: self.hopper.setHexShaftSpeed(BallpitConstants.motorStop), self.hopper))
-
         self.hopper.setDefaultCommand(self.hopper.hex_shaft_generator(BallpitConstants.motorStop))
-        self.mech_controller.x().toggleOnTrue(
+        self.mech_controller.leftBumper().toggleOnTrue(
             self.hopper.hex_shaft_generator(BallpitConstants.motorGo)
         )
-        self.mech_controller.y().toggleOnTrue(
+        self.mech_controller.rightBumper().toggleOnTrue(
             commands2.DeferredCommand(lambda: self.hopper.unjamHopper(BallpitConstants.motorOsc, BallpitConstants.repeat, BallpitConstants.duration), self.hopper)
         )
-        # self.mech_controller.y().toggleOnTrue(
-        #     commands2.cmd.sequence(
-        #         commands2.cmd.repeatingSequence(
-        #             commands2.cmd.runOnce(lambda: self.hopper.hex_shaft_generator(-BallpitConstants.motorOsc), self.hopper),
-        #             commands2.cmd.waitSeconds(BallpitConstants.duration),
-        #             commands2.cmd.runOnce(lambda: self.hopper.hex_shaft_generator(BallpitConstants.motorOsc), self.hopper),
-        #             commands2.cmd.waitSeconds(BallpitConstants.duration),
-        #         ).withTimeout(BallpitConstants.repeat * (BallpitConstants.duration * 2)),
-        #         commands2.cmd.runOnce(lambda: self.hopper.hex_shaft_generator(BallpitConstants.motorStop), self.hopper),
-        #     )
-        # )
 
     def teleopPeriodic(self):
         pass
