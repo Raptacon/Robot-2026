@@ -22,6 +22,8 @@ from commands.default_swerve_drive import DefaultDrive
 from config import ShooterConfig
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
 from subsystem.shooter import Shooter
+from subsystem.ballpit import BallPitHopper as Hopper
+from constants import BallpitConstants
 
 # Third-party imports
 import commands2
@@ -33,6 +35,7 @@ from pathplannerlib.auto import AutoBuilder
 class RobotSwerve:
     # forward declare critical types for editors
     drivetrain: SwerveDrivetrain
+    hopper: Hopper
 
     def __init__(self, is_disabled: Callable[[], bool]) -> None:
         # networktables setup
@@ -42,6 +45,7 @@ class RobotSwerve:
         # Subsystem instantiation
         self.drivetrain = SwerveDrivetrain()
         self.shooter = Shooter()
+        self.hopper = Hopper()
 
         # Alliance instantiation
         self.updateAlliance()
@@ -118,6 +122,8 @@ class RobotSwerve:
         for motor in ["feed", "lead", "follower"]:
             self.shooter.setMotorVoltage(motor, 0)
 
+        self.hopper.zeroHopperVelocity()
+
     def disabledPeriodic(self):
         pass
 
@@ -167,6 +173,14 @@ class RobotSwerve:
             commands2.cmd.runOnce(self.shooter.toggleFeedActive, self.shooter)
         )
 
+        self.hopper.setDefaultCommand(self.hopper.hex_shaft_generator(BallpitConstants.motorStop))
+        self.mech_controller.leftBumper().toggleOnTrue(
+            self.hopper.hex_shaft_generator(BallpitConstants.motorGo)
+        )
+        self.mech_controller.rightBumper().toggleOnTrue(
+            commands2.DeferredCommand(lambda: self.hopper.unjamHopper(BallpitConstants.motorOsc, BallpitConstants.repeat, BallpitConstants.duration), self.hopper)
+        )
+
     def teleopPeriodic(self):
         pass
 
@@ -180,7 +194,7 @@ class RobotSwerve:
                 lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftY(), 0.06),
                 lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftX(), 0.06),
                 lambda: wpimath.applyDeadband(-1 * self.driver_controller.getRightX(), 0.1),
-                lambda: not self.driver_controller.getRightBumperButton()
+                lambda: not self.driver_controller.getHID().getRightBumperButton()
             )
         )
         commands2.cmd.run(lambda: self.drivetrain.drive(2, 0, 0, False), self.drivetrain).withTimeout(5).schedule()
