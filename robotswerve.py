@@ -152,18 +152,18 @@ class RobotSwerve:
         # Will start shooter motors upon enabling
         self.shooter.setDefaultCommand(commands2.cmd.run(lambda: self.shooter.setRpmUsingLookup(1), self.shooter))
 
-        self.driver_controller.povUp().onTrue(commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(ShooterConfig.shooterOffsetDelta), self.shooter))
-        self.driver_controller.povDown().onTrue(commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(-ShooterConfig.shooterOffsetDelta), self.shooter))
-        self.driver_controller.y().onTrue(
+        self.mech_controller.povUp().onTrue(commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(ShooterConfig.shooterOffsetDelta), self.shooter))
+        self.mech_controller.povDown().onTrue(commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(-ShooterConfig.shooterOffsetDelta), self.shooter))
+        self.mech_controller.y().onTrue(
             commands2.cmd.runOnce(self.shooter.resetOffset, self.shooter)
         )
-        self.driver_controller.a().onTrue(
+        self.mech_controller.a().onTrue(
             commands2.cmd.runOnce(lambda: self.shooter.setRPM(3000), self.shooter)
         )
-        self.driver_controller.x().onTrue(
+        self.mech_controller.x().onTrue(
             commands2.cmd.runOnce(lambda: self.shooter.setRPM(0), self.shooter)
         )
-        self.driver_controller.b().onTrue(
+        self.mech_controller.b().onTrue(
             commands2.cmd.runOnce(self.shooter.toggleFeedActive, self.shooter)
         )
 
