@@ -23,7 +23,7 @@ from config import ShooterConfig
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
 from subsystem.shooter import Shooter
 from subsystem.ballpit import BallPitHopper as Hopper
-from constants import BallpitConstants
+from constants.swerve_constants import BallpitConstants
 
 # Third-party imports
 import commands2
