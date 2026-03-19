@@ -252,7 +252,7 @@ class IntakeSubsystem(commands2.SubsystemBase):
                 if self.intakeMotorEncoder.getPosition() >= self.intakeRamp:
                     self.intakeRamped = 0
                     self.intakeCondition = 0
-                    self.intakeRampedCondition = True 
+                    self.intakeRampedCondition = True
             if self.intakeRamped == -1:
                 if self.intakeMotorEncoder.getPosition() <= self.intakeRamp:
                     self.intakeRamped = 0
