@@ -26,7 +26,7 @@ class IntakeSubsystem(commands2.SubsystemBase):
         self.intakeMotorPosition = self.intakeMotorEncoder.getPosition()
         self.intakeMotorConfig = rev.SparkMaxConfig()
         self.intakeMotorEncoder.setPosition(0)
-        self.tuningMotors()
+        # self.tuningMotors()
 
 
         self.rollerMotor = rev.SparkFlex(intakeConsts.kRollerMotorCanId, rev.SparkLowLevel.MotorType.kBrushless)
@@ -242,10 +242,10 @@ class IntakeSubsystem(commands2.SubsystemBase):
             self.intakeVelocity = 0
         self.rollerMotor.set(self.rollerCondition * self.rollerVelocity)
         
-        # self.intakeMotor.set(self.intakeCondition * self.intakeVelocity)
-        self.intakeMotorPID.setReference(
-            self.intakeCondition * self.intakeVelocity, rev.SparkLowLevel.ControlType.kVelocity, rev.ClosedLoopSlot.kSlot0
-        )
+        self.intakeMotor.set(self.intakeCondition * self.intakeVelocity)
+        # self.intakeMotorPID.setReference(
+        #     self.intakeCondition * self.intakeVelocity, rev.SparkLowLevel.ControlType.kVelocity, rev.ClosedLoopSlot.kSlot0
+        # )
 
         # Stop intake deployment motor if it is being ramped
         if self.intakeRampStatus == 1:
