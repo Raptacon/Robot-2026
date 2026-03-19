@@ -46,6 +46,7 @@ class RobotSwerve:
         self.drivetrain = SwerveDrivetrain()
         self.shooter = Shooter()
         self.hopper = Hopper()
+        self.intake = IntakeSubsystem()
 
         # Alliance instantiation
         self.updateAlliance()
@@ -63,7 +64,7 @@ class RobotSwerve:
         self._drive_scale_fast = 1
         self._drive_is_slow = False
 
-        self.driver_controller = commands2.button.CommandXboxController(2)
+        self.driver_controller = commands2.button.CommandXboxController(0)
         self.mech_controller = commands2.button.CommandXboxController(1)
 
         # TODO: Move input retrieval and binding into commands/{subsystem}_controls.py
@@ -106,11 +107,7 @@ class RobotSwerve:
             )
         )
 
-        # Initialize Intake
-        self.intake = IntakeSubsystem()
-
-        self.intakeController = wpilib.XboxController(0)
-
+        #Initialize Intake Values
         wpilib.SmartDashboard.putNumber("Intake Velocity", 0.3)
         wpilib.SmartDashboard.putNumber("Roller Velocity", 0.3)
 
@@ -200,19 +197,19 @@ class RobotSwerve:
         )
 
         # Intake Telopinit
-        Trigger(self.intakeController.getYButtonPressed).onTrue(
+        self.driver_controller.y().onTrue(
             commands2.cmd.runOnce(self.intake.stowIntake, self.intake)
         )
-        Trigger(self.intakeController.getAButtonPressed).onTrue(
+        self.driver_controller.a().onTrue(
             commands2.cmd.runOnce(self.intake.deployIntake, self.intake)
         )
-        Trigger(self.intakeController.getXButtonPressed).onTrue(
+        self.driver_controller.x().onTrue(
             commands2.cmd.runOnce(self.intake.deactivateRoller, self.intake)
         )
-        Trigger(self.intakeController.getBButtonPressed).onTrue(
+        self.driver_controller.b().onTrue(
             commands2.cmd.runOnce(self.intake.activateRoller, self.intake)
         )
-        Trigger(self.intakeController.getStartButtonPressed).onTrue(
+        self.driver_controller.start().onTrue(
             commands2.cmd.run(self.intake.rampIntake, self.intake)
         )
 

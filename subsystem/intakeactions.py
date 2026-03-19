@@ -25,7 +25,8 @@ class IntakeSubsystem(commands2.SubsystemBase):
         self.intakeMotorEncoder = self.intakeMotor.getEncoder()
         self.intakeMotorPosition = self.intakeMotorEncoder.getPosition()
         self.intakeMotorConfig = rev.SparkMaxConfig()
-        # self.tuningMotors()
+        self.intakeMotorEncoder.setPosition(0)
+        self.tuningMotors()
 
 
         self.rollerMotor = rev.SparkFlex(intakeConsts.kRollerMotorCanId, rev.SparkLowLevel.MotorType.kBrushless)
@@ -41,8 +42,8 @@ class IntakeSubsystem(commands2.SubsystemBase):
         # self.HallEffectSensor = wpilib.DigitalInput(intakeConsts.kHallEffectSensor)
 
         #Set Variables
-        self.intakeDeployed = 145 #Minimum amount of rotations before assuming intake is deployed
-        self.intakeStowed = -10 #Maximum amount of rotations before assuming intake is stowed
+        self.intakeDeployed = 155 #Minimum amount of rotations before assuming intake is deployed
+        self.intakeStowed = 0 #Maximum amount of rotations before assuming intake is stowed
         self.intakeFaultThreshold = 2 #Amount of time spent trying to deploy/stow intake before fault condition is triggered
         # self.intakeMagnetFaultThreshold = 2 #Amount of time before magnets need to have stopped tripping hall effects sensor or fault condition is triggered
         self.rollerFaultThreshold = 2 #Amount of time spent trying to operate rollers before fault condition is triggered
@@ -241,10 +242,10 @@ class IntakeSubsystem(commands2.SubsystemBase):
             self.intakeVelocity = 0
         self.rollerMotor.set(self.rollerCondition * self.rollerVelocity)
         
-        self.intakeMotor.set(self.intakeCondition * self.intakeVelocity)
-        # self.intakeMotorPID.setReference(
-        #     self.intakeCondition * self.intakeVelocity, rev.SparkLowLevel.ControlType.kVelocity, rev.ClosedLoopSlot.kSlot0
-        # )
+        # self.intakeMotor.set(self.intakeCondition * self.intakeVelocity)
+        self.intakeMotorPID.setReference(
+            self.intakeCondition * self.intakeVelocity, rev.SparkLowLevel.ControlType.kVelocity, rev.ClosedLoopSlot.kSlot0
+        )
 
         # Stop intake deployment motor if it is being ramped
         if self.intakeRampStatus == 1:
@@ -277,7 +278,7 @@ class IntakeSubsystem(commands2.SubsystemBase):
 
         (
             self.intakeMotorConfig.encoder
-            .velocityConversionFactor(1/375)
+            .velocityConversionFactor(18)
         )
 
         self.intakeMotor.configure(
