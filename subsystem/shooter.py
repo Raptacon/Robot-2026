@@ -20,7 +20,9 @@ class Shooter(Subsystem):
     def __init__(self):
         super().__init__()
         self.offsetAmount = 0
+        self.offsetDelta = 0
         self.RPM = 0
+        self.feedActive = False
 
         # Create lookup table (distance, RPM)
         self.lookupTable = [
@@ -174,7 +176,8 @@ class Shooter(Subsystem):
         Returns:
             None
         """
-        self.offsetAmount = self.offsetAmount + offsetDelta
+        self.offsetDelta = offsetDelta
+        self.offsetAmount = self.offsetAmount + self.offsetDelta
 
     def resetOffset(self):
         """
@@ -200,13 +203,22 @@ class Shooter(Subsystem):
         """
         return self.offsetAmount
 
+    def toggleFeedActive(self):
+        self.feedActive = not self.feedActive
+
     def periodic(self):
         newRPM = self.RPM + self.offsetAmount
-        feedRPM = int(newRPM * ShooterConfig.shooterFeedPercentOfFlywheel)
+        if self.feedActive:
+            feedRPM = int(newRPM * ShooterConfig.shooterFeedPercentOfFlywheel)
+            self.setMotorReference(ShooterMotorNames.FEED, feedRPM)
+        else:
+            feedRPM = 0
+            self.setMotorVoltage(ShooterMotorNames.FEED, 0)
 
-        self.setMotorReference(ShooterMotorNames.FEED, feedRPM)
         self.setMotorReference(ShooterMotorNames.LEAD_FLYWHEEL, newRPM)
 
         wpilib.SmartDashboard.putNumber("Shooter_RPM", newRPM)
         wpilib.SmartDashboard.putNumber("Shooter_Feed_RPM", feedRPM)
         wpilib.SmartDashboard.putNumber("Shooter_Offset", self.offsetAmount)
+        wpilib.SmartDashboard.putNumber("Offset_Delta", self.offsetDelta)
+        wpilib.SmartDashboard.putBoolean("Feed_Active", self.feedActive)

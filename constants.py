@@ -139,3 +139,15 @@ class CaptainPlanetConsts:
         DONOTHING = 1
         TOFRONT = 2
         TOBACK = 3
+
+class BallpitConstants:
+    # RPM
+    motorStop = 0
+    motorGo = 2000
+    motorOsc = 2000
+    # Seconds
+    duration = 0.5
+    #No Units
+    repeat = 1
+    # list of constants for the ocalation constants for the addition area
+    # ocs_consts =

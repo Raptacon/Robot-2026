@@ -22,9 +22,8 @@ from commands.default_swerve_drive import DefaultDrive
 from config import ShooterConfig
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
 from subsystem.shooter import Shooter
-from utils.input import InputFactory
-from config import ShooterConfig
-from subsystem.shooter import Shooter
+from subsystem.ballpit import BallPitHopper as Hopper
+from constants import BallpitConstants
 
 # Third-party imports
 import commands2
@@ -37,6 +36,7 @@ from pathplannerlib.path import PathPlannerPath
 class RobotSwerve:
     # forward declare critical types for editors
     drivetrain: SwerveDrivetrain
+    hopper: Hopper
 
     def __init__(self, is_disabled: Callable[[], bool]) -> None:
         # networktables setup
@@ -46,6 +46,7 @@ class RobotSwerve:
         # Subsystem instantiation
         self.drivetrain = SwerveDrivetrain()
         self.shooter = Shooter()
+        self.hopper = Hopper()
 
         # Alliance instantiation
         self.updateAlliance()
@@ -140,6 +141,8 @@ class RobotSwerve:
         for motor in ["feed", "lead", "follower"]:
             self.shooter.setMotorVoltage(motor, 0)
 
+        self.hopper.zeroHopperVelocity()
+
     def disabledPeriodic(self):
         pass
 
@@ -155,6 +158,7 @@ class RobotSwerve:
         pass
 
     def teleopInit(self):
+        commands2.CommandScheduler.getInstance().getDefaultButtonLoop().clear()
         self.updateAlliance()
         if self.auto_command:
             self.auto_command.cancel()
@@ -169,13 +173,31 @@ class RobotSwerve:
             )
         )
 
-        self.driver_controller.povUp().onTrue(commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(ShooterConfig.shooterOffsetDelta), self.shooter))
-        self.driver_controller.povUp().onTrue(commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(ShooterConfig.shooterOffsetDelta), self.shooter))
-        self.driver_controller.y().onTrue(
+        # TODO: Get odometry from drivetrain and calculate range
+        # Will start shooter motors upon enabling
+        self.shooter.setDefaultCommand(commands2.cmd.run(lambda: self.shooter.setRpmUsingLookup(1), self.shooter))
+
+        self.mech_controller.povUp().onTrue(commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(ShooterConfig.shooterOffsetDelta), self.shooter))
+        self.mech_controller.povDown().onTrue(commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(-ShooterConfig.shooterOffsetDelta), self.shooter))
+        self.mech_controller.y().onTrue(
             commands2.cmd.runOnce(self.shooter.resetOffset, self.shooter)
         )
-        self.driver_controller.a().onTrue(
+        self.mech_controller.a().onTrue(
             commands2.cmd.runOnce(lambda: self.shooter.setRPM(3000), self.shooter)
+        )
+        self.mech_controller.x().onTrue(
+            commands2.cmd.runOnce(lambda: self.shooter.setRPM(0), self.shooter)
+        )
+        self.mech_controller.b().onTrue(
+            commands2.cmd.runOnce(self.shooter.toggleFeedActive, self.shooter)
+        )
+
+        self.hopper.setDefaultCommand(self.hopper.hex_shaft_generator(BallpitConstants.motorStop))
+        self.mech_controller.leftBumper().toggleOnTrue(
+            self.hopper.hex_shaft_generator(BallpitConstants.motorGo)
+        )
+        self.mech_controller.rightBumper().toggleOnTrue(
+            commands2.DeferredCommand(lambda: self.hopper.unjamHopper(BallpitConstants.motorOsc, BallpitConstants.repeat, BallpitConstants.duration), self.hopper)
         )
 
         # Intake Telopinit
@@ -208,7 +230,7 @@ class RobotSwerve:
                 lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftY(), 0.06),
                 lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftX(), 0.06),
                 lambda: wpimath.applyDeadband(-1 * self.driver_controller.getRightX(), 0.1),
-                lambda: not self.driver_controller.getRightBumperButton()
+                lambda: not self.driver_controller.getHID().getRightBumperButton()
             )
         )
         commands2.cmd.run(lambda: self.drivetrain.drive(2, 0, 0, False), self.drivetrain).withTimeout(5).schedule()
