@@ -30,7 +30,7 @@ import commands2
 import wpilib
 from commands2.button import Trigger
 from pathplannerlib.auto import AutoBuilder
-
+from subsystem.intakeactions import IntakeSubsystem
 
 class RobotSwerve:
     # forward declare critical types for editors
@@ -46,6 +46,7 @@ class RobotSwerve:
         self.drivetrain = SwerveDrivetrain()
         self.shooter = Shooter()
         self.hopper = Hopper()
+        self.intake = IntakeSubsystem()
 
         # Alliance instantiation
         self.updateAlliance()
@@ -106,11 +107,25 @@ class RobotSwerve:
             )
         )
 
+        #Initialize Intake Values
+        wpilib.SmartDashboard.putNumber("Intake Velocity", 0.3)
+        wpilib.SmartDashboard.putNumber("Roller Velocity", 0.3)
+
+        self.intakeVelocity = 0
+        self.rollerVelocity = 0
+
     def robotPeriodic(self):
         if self.enableTelemetry and self.telemetry:
             self.telemetry.runDefaultDataCollections()
 
         self.field.setRobotPose(self.drivetrain.current_pose())
+
+        # Intake Robot Periodic
+        self.intakeVelocity = wpilib.SmartDashboard.getNumber("Intake Velocity", 0.3)
+        self.rollerVelocity = wpilib.SmartDashboard.getNumber("Roller Velocity", 0.3)
+
+        self.intake.updateIntake(self.intakeVelocity)
+        self.intake.updateRoller(self.rollerVelocity)
 
     def disabledInit(self):
         self.updateAlliance()
@@ -179,6 +194,23 @@ class RobotSwerve:
         )
         self.mech_controller.rightBumper().toggleOnTrue(
             commands2.DeferredCommand(lambda: self.hopper.unjamHopper(BallpitConstants.motorOsc, BallpitConstants.repeat, BallpitConstants.duration), self.hopper)
+        )
+
+        # Intake Telopinit
+        self.driver_controller.y().onTrue(
+            commands2.cmd.runOnce(self.intake.stowIntake, self.intake)
+        )
+        self.driver_controller.a().onTrue(
+            commands2.cmd.runOnce(self.intake.deployIntake, self.intake)
+        )
+        self.driver_controller.x().onTrue(
+            commands2.cmd.runOnce(self.intake.deactivateRoller, self.intake)
+        )
+        self.driver_controller.b().onTrue(
+            commands2.cmd.runOnce(self.intake.activateRoller, self.intake)
+        )
+        self.driver_controller.start().onTrue(
+            commands2.cmd.run(self.intake.rampIntake, self.intake)
         )
 
     def teleopPeriodic(self):
