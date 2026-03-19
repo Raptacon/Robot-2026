@@ -32,7 +32,6 @@ import wpilib
 from commands2.button import Trigger
 from pathplannerlib.auto import AutoBuilder
 from subsystem.intakeactions import IntakeSubsystem
-from pathplannerlib.path import PathPlannerPath
 
 class RobotSwerve:
     # forward declare critical types for editors

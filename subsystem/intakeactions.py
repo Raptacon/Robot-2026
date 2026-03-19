@@ -77,8 +77,8 @@ class IntakeSubsystem(commands2.SubsystemBase):
     def deployIntake(self):
         #Check Sensor for deployment, if not, deploy it.
         if self.intakeCondition <= 0 and self.intakeMotorEncoder.getPosition() <= self.intakeDeployed:
-                self.baselineFault = time.perf_counter()
-                self.intakeCondition = 1
+            self.baselineFault = time.perf_counter()
+            self.intakeCondition = 1
         if self.intakeCondition >= 0:
             # if self.HallEffectSensor.get() == False:
             #     self.intakeDeployed = self.intakeMotorEncoder.getPosition()
@@ -116,8 +116,8 @@ class IntakeSubsystem(commands2.SubsystemBase):
 
     def stowIntake(self):
         if self.intakeCondition >= 0 and self.intakeMotorEncoder.getPosition() >= self.intakeStowed:
-                self.baselineFault = time.perf_counter()
-                self.intakeCondition = -1
+            self.baselineFault = time.perf_counter()
+            self.intakeCondition = -1
         if self.intakeCondition <= 0:
             if self.intakeMotorEncoder.getPosition() <= self.intakeStowed:
                 self.intakeCondition = 0
@@ -202,10 +202,10 @@ class IntakeSubsystem(commands2.SubsystemBase):
                     self.intakeRampStatus = 1
             elif self.intakeMotorEncoder.getPosition() >= self.intakeRamp:
                 if self.intakeRamped >= 0:
-                        self.baselineFault = time.perf_counter()
-                        self.intakeRamped = -1
-                        self.intakeCondition = -1
-                        self.intakeRampStatus = 1
+                    self.baselineFault = time.perf_counter()
+                    self.intakeRamped = -1
+                    self.intakeCondition = -1
+                    self.intakeRampStatus = 1
 
     def motorChecks(self):
         # Check if intake deployment motor is deploying without limits
@@ -230,12 +230,12 @@ class IntakeSubsystem(commands2.SubsystemBase):
         self.intakeMotorPositions.append(self.intakeMotorEncoder.getPosition())
         if not self.intakeMotorEncoder.getPosition() <= self.intakeStowed and not self.intakeMotorEncoder.getPosition() >= self.intakeDeployed:
             if self.intakeMotorPositions.count(self.intakeMotorEncoder.getPosition()) == 5:
-                    if self.intakeCondition == -1:
-                        self.intakeStowed = self.intakeMotorEncoder.getPosition() + 1
-                        self.intakeCondition = 0
-                    elif self.intakeCondition == 1:
-                        self.intakeDeployed = self.intakeMotorEncoder.getPosition() - 1
-                        self.intakeCondition = 0
+                if self.intakeCondition == -1:
+                    self.intakeStowed = self.intakeMotorEncoder.getPosition() + 1
+                    self.intakeCondition = 0
+                elif self.intakeCondition == 1:
+                    self.intakeDeployed = self.intakeMotorEncoder.getPosition() - 1
+                    self.intakeCondition = 0
 
         if self.intakeCondition == 0:
             self.intakeVelocity = 0
@@ -249,15 +249,15 @@ class IntakeSubsystem(commands2.SubsystemBase):
         # Stop intake deployment motor if it is being ramped
         if self.intakeRampStatus == 1:
             if self.intakeRamped == 1:
-                    if self.intakeMotorEncoder.getPosition() >= self.intakeRamp:
-                        self.intakeRamped = 0
-                        self.intakeCondition = 0
-                        self.intakeRampedCondition = True
+                if self.intakeMotorEncoder.getPosition() >= self.intakeRamp:
+                    self.intakeRamped = 0
+                    self.intakeCondition = 0
+                    self.intakeRampedCondition = True 
             if self.intakeRamped == -1:
-                    if self.intakeMotorEncoder.getPosition() <= self.intakeRamp:
-                        self.intakeRamped = 0
-                        self.intakeCondition = 0
-                        self.intakeRampedCondition = True
+                if self.intakeMotorEncoder.getPosition() <= self.intakeRamp:
+                    self.intakeRamped = 0
+                    self.intakeCondition = 0
+                    self.intakeRampedCondition = True
         
         #Allows intake to be ramped even from deployed/stowed position
         if self.intakeMotorEncoder.getPosition() >= self.intakeDeployed:
