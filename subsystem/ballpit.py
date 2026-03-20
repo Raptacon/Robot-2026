@@ -1,6 +1,7 @@
 import commands2
 import rev
 import wpilib
+from constants.swerve_constants import BallpitConstants
 
 class BallPitHopper(commands2.Subsystem):
     def __init__(self) -> None:
@@ -10,7 +11,7 @@ class BallPitHopper(commands2.Subsystem):
         Returns:
             None - class initialization executed upon construction
         """
-        self.hopperMotor = rev.SparkMax(40, rev.SparkLowLevel.MotorType.kBrushless)
+        self.hopperMotor = rev.SparkMax(BallpitConstants.hopperCanId, rev.SparkLowLevel.MotorType.kBrushless)
         self.hopperConfig = rev.SparkBaseConfig()
         self.hopperConfig.closedLoop.pidf(0, 0, 0, 1/473, rev.ClosedLoopSlot.kSlot0)
         self.hopperMotorPIDF = self.hopperMotor.getClosedLoopController()

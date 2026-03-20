@@ -154,3 +154,4 @@ class BallpitConstants:
     repeat = 1
     # list of constants for the ocalation constants for the addition area
     # ocs_consts =
+    hopperCanId = 40
