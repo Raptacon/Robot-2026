@@ -2,7 +2,7 @@ import wpilib
 import commands2
 import rev
 import time
-import array as arr
+import array
 
 from constants import CaptainPlanetConsts as intakeConsts
 from config import OperatorRobotConfig
