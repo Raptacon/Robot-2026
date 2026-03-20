@@ -153,7 +153,6 @@ class RobotSwerve:
         )
 
         # TODO: Get odometry from drivetrain and calculate range
-        # Will start shooter motors upon enabling
         self.shooter.setDefaultCommand(commands2.cmd.select(
             {
                 "autoRPM": commands2.cmd.run(lambda: self.shooter.setRpmUsingLookup(1), self.shooter),
