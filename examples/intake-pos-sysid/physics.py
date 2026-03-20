@@ -99,12 +99,13 @@ class PhysicsEngine:
         self.arm_sim.setInputVoltage(applied_voltage)
         self.arm_sim.update(tm_diff)
 
-        # Push velocity and current back to the encoder sim.
-        # Use iterate() instead of setPosition() so that calibration's
-        # encoder.setPosition(0) zero-setting is respected — iterate()
-        # integrates forward from the current encoder position rather than
-        # overwriting it, so calibration zeroing sticks between cycles.
+        # Push velocity and position back to the encoder sim.
+        # setVelocity() updates encoder.getVelocity() so calibration stall
+        # detection works correctly.  iterate() integrates from the current
+        # encoder position (rather than overwriting it), so calibration's
+        # encoder.setPosition(0) zero-setting is preserved between cycles.
         arm_velocity_deg_s = math.degrees(self.arm_sim.getVelocity())
+        self.enc_sim.setVelocity(arm_velocity_deg_s)
         self.enc_sim.iterate(arm_velocity_deg_s, tm_diff)
         self.motor_sim.setMotorCurrent(self.arm_sim.getCurrentDraw())
 
