@@ -2,7 +2,7 @@ import wpilib
 import commands2
 import rev
 import time
-import array
+import array as arr
 
 from constants import CaptainPlanetConsts as intakeConsts
 from config import OperatorRobotConfig
@@ -38,8 +38,8 @@ class IntakeSubsystem(commands2.SubsystemBase):
         self.jamThreshold = 10 #Maximum sustained rpm before assuming a ball inside the rollers has gotten stuck
         self.jamReversalTime = 3 #Amount of time to have motors reverse when a ball inside the intake has gotten stuck
         self.unjam = 1500 #Minimum sustained rpm before assuming rollers have been unjammed
-        self.pivotVelocity = 0.3
-        self.rollerVelocity = 0.3
+        self.pivotVelocity = 0.3 #Velocity intake moves upon deploying/stow
+        self.rollerVelocity = 0.3 #Velocity rollers move upon activation
 
         self.pivotCondition = 0 #Leave at 0, provides reference to code on current intake status
         self.pivotRamped = 0 #Leave at 0, provides reference to code on ramping intake status
