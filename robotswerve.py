@@ -83,8 +83,8 @@ class RobotSwerve:
         if self.enableTelemetry:
             self.telemetry = Telemetry(
                 driveTrain=self.drivetrain,
-                driverController=self.driver_controller,
-                mechController=self.mech_controller,
+                driverController=self.factory.getController(0),                
+                mechController=self.factory.getController(1),
             )
 
         wpilib.SmartDashboard.putString("Robot Version", self.getDeployInfo("git-hash"))
@@ -107,25 +107,12 @@ class RobotSwerve:
             )
         )
 
-        #Initialize Intake Values
-        wpilib.SmartDashboard.putNumber("Intake Velocity", 0.3)
-        wpilib.SmartDashboard.putNumber("Roller Velocity", 0.3)
-
-        self.intakeVelocity = 0
-        self.rollerVelocity = 0
 
     def robotPeriodic(self):
         if self.enableTelemetry and self.telemetry:
             self.telemetry.runDefaultDataCollections()
 
         self.field.setRobotPose(self.drivetrain.current_pose())
-
-        # Intake Robot Periodic
-        self.intakeVelocity = wpilib.SmartDashboard.getNumber("Intake Velocity", 0.3)
-        self.rollerVelocity = wpilib.SmartDashboard.getNumber("Roller Velocity", 0.3)
-
-        self.intake.updateIntake(self.intakeVelocity)
-        self.intake.updateRoller(self.rollerVelocity)
 
     def disabledInit(self):
         self.updateAlliance()
@@ -162,10 +149,10 @@ class RobotSwerve:
         self.drivetrain.setDefaultCommand(
             DefaultDrive(
                 self.drivetrain,
-                lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftY(), 0.06),
-                lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftX(), 0.06),
-                lambda: wpimath.applyDeadband(-1 * self.driver_controller.getRightX(), 0.1),
-                lambda: not self.driver_controller.getHID().getRightBumperButton()
+                self.translate_x,
+                self.translate_y,
+                self.rotate,
+                lambda: not self.robot_relative_btn()
             )
         )
 
@@ -193,7 +180,7 @@ class RobotSwerve:
             self.hopper.hex_shaft_generator(BallpitConstants.motorGo)
         )
         self.mech_controller.rightBumper().toggleOnTrue(
-            commands2.DeferredCommand(lambda: self.hopper.unjamHopper(BallpitConstants.motorOsc, BallpitConstants.repeat, BallpitConstants.duration), self.hopper)
+            commands2.DeferredCommand(lambda: self.hopper.unjamHopper(BallpitConstants.motorOsc, BallpitConstants.repeat, BallpitConstants.oscillationduration_s), self.hopper)
         )
 
         # Intake Telopinit
