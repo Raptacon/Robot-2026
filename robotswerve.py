@@ -35,6 +35,10 @@ class RobotSwerve:
         # Vision setup
         self.localization = Localization()
         self.localization.new_target_pose = 0
+        self.localization.robotInit()
+        self.localization.teleopPeriodic()
+        self.localization.__init__()
+        self.localization.periodic()
 
         # Subsystem instantiation
         self.drivetrain = SwerveDrivetrain()
