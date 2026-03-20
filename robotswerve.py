@@ -17,6 +17,7 @@ from typing import Callable
 import wpimath
 
 # Internal imports
+from config import ShooterConfig
 from data.telemetry import Telemetry
 from commands.default_swerve_drive import DefaultDrive
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
@@ -137,9 +138,6 @@ class RobotSwerve:
         pass
 
     def teleopInit(self):
-        # TODO: getDefaultButtonLoop().clear() should not be needed — investigate
-        # what is relying on it and remove the dependency.
-        commands2.CommandScheduler.getInstance().getDefaultButtonLoop().clear()
         self.updateAlliance()
         if self.auto_command:
             self.auto_command.cancel()
@@ -154,29 +152,20 @@ class RobotSwerve:
             )
         )
 
+        # TODO: Get odometry from drivetrain and calculate range
+        # Will start shooter motors upon enabling
+        self.shooter.setDefaultCommand(commands2.cmd.select(
+            {
+                "autoRPM": commands2.cmd.run(lambda: self.shooter.setRpmUsingLookup(1), self.shooter),
+                "fixedRPM": commands2.cmd.run(lambda: self.shooter.setRPM(ShooterConfig.shooterFixedRPM), self.shooter)
+            },
+            self.shooter.getFlywheelMode
+        ))
+            
+
         # TODO: Convert all subsystem bindings below to use InputFactory.
         # Add actions to data/inputs/2026bot.yaml and use self.factory.getButton()
         # to wire them. See _configure_controls() for examples.
-
-        # TODO: Get odometry from drivetrain and calculate range
-        # Will start shooter motors upon enabling
-        # self.shooter.setDefaultCommand(commands2.cmd.run(lambda: self.shooter.setRpmUsingLookup(1), self.shooter))
-
-        # Shooter bindings (mech_controller port 1)
-        # self.mech_controller.povUp().onTrue(commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(ShooterConfig.shooterOffsetDelta), self.shooter))
-        # self.mech_controller.povDown().onTrue(commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(-ShooterConfig.shooterOffsetDelta), self.shooter))
-        # self.mech_controller.y().onTrue(
-        #     commands2.cmd.runOnce(self.shooter.resetOffset, self.shooter)
-        # )
-        # self.mech_controller.a().onTrue(
-        #     commands2.cmd.runOnce(lambda: self.shooter.setRPM(3000), self.shooter)
-        # )
-        # self.mech_controller.x().onTrue(
-        #     commands2.cmd.runOnce(lambda: self.shooter.setRPM(0), self.shooter)
-        # )
-        # self.mech_controller.b().onTrue(
-        #     commands2.cmd.runOnce(self.shooter.toggleFeedActive, self.shooter)
-        # )
 
         # Hopper bindings (mech_controller port 1)
         # self.hopper.setDefaultCommand(self.hopper.hex_shaft_generator(BallpitConstants.motorStop))
@@ -249,6 +238,26 @@ class RobotSwerve:
         # Speed toggle: Y button switches between slow and fast scale
         self.factory.getButton("drivetrain.speed_toggle").onTrue(
             commands2.cmd.runOnce(self._toggle_drive_scale)
+        )
+
+        # Shooter inputs
+        self.increment_shooter_offset = self.factory.getButton("shooter.increment_RPM").onTrue(
+            commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(ShooterConfig.shooterOffsetDelta), self.shooter)
+        )
+        self.decrement_shooter_offset = self.factory.getButton("shooter.decrement_RPM").onTrue(
+            commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(-ShooterConfig.shooterOffsetDelta), self.shooter)
+        )
+        self.reset_shooter_offset = self.factory.getButton("shooter.reset_RPM_offset").onTrue(
+            commands2.cmd.runOnce(self.shooter.resetOffset, self.shooter)
+        )
+        self.shooter_cycle_flywheel_mode = self.factory.getButton("shooter.cycle_flywheel_mode").onTrue(
+            commands2.cmd.runOnce(self.shooter.cycleFlywheelMode, self.shooter)
+        )
+        self.toggle_shooter_flywheel = self.factory.getButton("shooter.toggle_flywheel").onTrue(
+            commands2.cmd.runOnce(self.shooter.toggleFlywheelActive, self.shooter)
+        )
+        self.toggle_shooter_feed = self.factory.getButton("shooter.toggle_feed").onTrue(
+            commands2.cmd.runOnce(self.shooter.toggleFeedActive, self.shooter)
         )
 
         # Map all drive axes' scale to a shared SmartDashboard entry.

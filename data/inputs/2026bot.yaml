@@ -32,6 +32,31 @@ actions:
       description: Toggle between slow (0.25) and fast (0.8) drive scale
       input_type: button
       trigger_mode: on_true
+  shooter:
+    increment_RPM:
+      description: Manually increase the RPM on the flywheel by a small amount
+      input_type: button
+      trigger_mode: on_true
+    decrement_RPM:
+      description: Manually decrease the RPM on the flywheel by a small amount
+      input_type: button
+      trigger_mode: on_true
+    reset_RPM_offset:
+      description: Set the manual flywheel RPM adjustment back to zero
+      input_type: button
+      trigger_mode: on_true
+    cycle_flywheel_mode:
+      description: Switch the mode in which the RPM for the flywhel is determined
+      input_type: button
+      trigger_mode: on_true
+    toggle_flywheel:
+      description: Turn the flywheel on or off
+      input_type: button
+      trigger_mode: on_true
+    toggle_feed:
+      description: Turn the feed motor on or off
+      input_type: button
+      trigger_mode: on_true
 
 controllers:
   0:
@@ -45,3 +70,10 @@ controllers:
       y_button: [drivetrain.speed_toggle]
   1:
     name: Operator
+    bindings:
+      pov_up: [shooter.increment_RPM]
+      pov_down: [shooter.decrement_RPM]
+      y_button: [shooter.reset_RPM_offset]
+      a_button: [shooter.cycle_flywheel_mode]
+      x_button: [shooter.toggle_flywheel]
+      b_button: [shooter.toggle_feed]

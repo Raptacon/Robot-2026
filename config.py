@@ -60,3 +60,4 @@ class ShooterConfig:
     shooterRangeInterval = 0.2
     shooterOffsetDelta = 100
     shooterFeedPercentOfFlywheel = 0.9
+    shooterFixedRPM = 3000
