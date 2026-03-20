@@ -2,9 +2,10 @@ from config import ShooterConfig
 import rev
 import wpilib
 from commands2 import Subsystem
-from typing import Dict
+from typing import Dict, Callable
 from enum import StrEnum
 import numpy as np
+from wpimath.geometry import Pose2d, Translation2d
 
 class ShooterMotorNames(StrEnum):
     """
@@ -23,6 +24,13 @@ class Shooter(Subsystem):
         self.offsetDelta = 0
         self.RPM = 0
         self.feedActive = False
+        # Coordinates are in meters
+        self.blueHubCords = Translation2d(4.034536, 4.625594)
+        self.redHubCords = Translation2d(4.034536, 11.915394)
+        self.bottomLeftTarget = Translation2d(1, 1)
+        self.bottomRightTarget = Translation2d(1, 15.540988)
+        self.topLeftTarget = Translation2d(7.069326, 1)
+        self.topRightTarget = Translation2d(7.069326, 15.540988)
 
         # Create lookup table (distance, RPM)
         self.lookupTable = [
@@ -205,6 +213,24 @@ class Shooter(Subsystem):
 
     def toggleFeedActive(self):
         self.feedActive = not self.feedActive
+
+    def calculateRangeFromOdometry(self, odometry: Callable[[],Pose2d], alliance: wpilib.DriverStation.Alliance):
+        self.odometryTranslation = odometry().translation()
+        if alliance == wpilib.DriverStation.Alliance.kRed:
+            if self.odometryTranslation.Y() > self.redHubCords[1]:
+                range = self.odometryTranslation.distance(self.redHubCords)
+            elif self.odometryTranslation.X() < self.redHubCords[0]:
+                range = self.odometryTranslation.distance(self.bottomRightTarget)
+            else:
+                range = self.odometryTranslation.distance(self.topRightTarget)
+        else:
+            if self.odometryTranslation.Y() < self.blueHubCords[1]:
+                range = self.odometryTranslation.distance(self.blueHubCords)
+            elif self.odometryTranslation.X() < self.blueHubCords[0]:
+                range = self.odometryTranslation.distance(self.bottomLeftTarget)
+            else:
+                range = self.odometryTranslation.distance(self.topLeftTarget)
+        return abs(range)
 
     def periodic(self):
         newRPM = self.RPM + self.offsetAmount
