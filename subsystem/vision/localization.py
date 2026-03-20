@@ -27,14 +27,22 @@ class Localization(commands2.Subsystem):
     def robotInit(self):
         self.counter = nt.getTable("MyRobot").getEntry("Counter")
         
-        self.target_pose = wpimath.geometry.Pose3d( #sets the position of the desired targeted pose
-            Translation3d(4.625594, 4.034663, 1.8288), #Currently set the center point of the red hub
-            Rotation3d.fromDegrees(0.0, 0.0, 0.0),
-            )
+        # self.target_pose = wpimath.geometry.Pose3d( #sets the position of the desired targeted pose
+        #     Translation3d(4.625594, 4.034663, 1.8288), #Currently set the center point of the red hub
+        #     Rotation3d.fromDegrees(0.0, 0.0, 0.0),
+        #     )
 
         self.counter.setInteger(0)
         #self.networkTargetX  = nt.getDoubleTopic("MyRobot").getEntry("targetX")
-        self.new_target_pose = 0
+        self.new_target_pose = 0.0
+        self.target_pose_front = wpimath.geometry.Pose3d( #sets the position of the desired targeted pose
+            Translation3d(0.0, 0.0, 0.0), #Currently set the center point of the red hub
+            Rotation3d.fromDegrees(0.0, 0.0, 0.0),
+            )
+        self.target_pose_back = wpimath.geometry.Pose3d( #sets the position of the desired targeted pose
+            Translation3d(0.0, 0.0, 0.0), #Currently set the center point of the red hub
+            Rotation3d.fromDegrees(0.0, 0.0, 0.0),
+            )
         #self.networkTargetX_Back = nt.getTable("MyRobot").getEntry("targetX_Back")
         field = AprilTagFieldLayout.loadField(AprilTagField.kDefaultField)
         Camera_Front_ToRobot = wpimath.geometry.Transform3d( #Sets the offset for the center of the robot to targeted cam
@@ -72,7 +80,7 @@ class Localization(commands2.Subsystem):
 
         # if wpilib.DriverStation.getAlliance() == wpilib.DriverStation.Alliance.kBlue:
         self.target_pose = wpimath.geometry.Pose3d( #sets the position of the desired targeted pose
-            Translation3d(11.915394, 4.034663, 1.8288), #Currently set the center point of the red hub
+            Translation3d(4.625594, 4.034663, 1.8288), #Currently set the center point of the red hub
             Rotation3d.fromDegrees(0.0, 0.0, 0.0),
             )
 
@@ -83,16 +91,16 @@ class Localization(commands2.Subsystem):
         #     )
         
 
-        FrontPipe = self.camera.getAllUnreadResults()
-        if len(FrontPipe) > 0: #If the camera sees an apriltag
-            results = FrontPipe[-1]  # take the most recent result the camera had
+        Frontpipe = self.camera.getAllUnreadResults()
+        if len(Frontpipe) > 0: #If the camera sees an apriltag
+            results = Frontpipe[-1]  # take the most recent result the camera had
             camEstPose = self.camPoseEst.estimateCoprocMultiTagPose(results)
             if camEstPose is None:
                 camEstPose = self.camPoseEst.estimateLowestAmbiguityPose(results)
             if camEstPose is not None:
                 self.target_pose_front = self.target_pose - camEstPose.estimatedPose #sets the new target pose based off where the robot is and where the previously defined pose is
-                # self.target_pose_front = self.target_pose_front.X()
-                # self.target_pose_front = math.degrees(self.target_pose_front) /360 /2
+                # self.new_target_pose = self.target_pose_front.X()
+                # self.new_target_pose = math.degrees(self.new_target_pose) /360 /2
 
         self.field = Field2d()
         SmartDashboard.putData("Field", self.field) #Puts an image of the field into the SmartDashboard (from the wpilib library)
@@ -108,31 +116,33 @@ class Localization(commands2.Subsystem):
             if camEstPose_Back is None:
                 camEstPose_Back = self.camPoseEst_Back.estimateLowestAmbiguityPose(result)
             if camEstPose_Back is not None:
-                target_pose_back = self.target_pose - camEstPose_Back.estimatedPose #sets the new target pose based off where the robot is and where the previously defined pose is
+                self.target_pose_back = self.target_pose - camEstPose_Back.estimatedPose #sets the new target pose based off where the robot is and where the previously defined pose is
 
 
-        if len(BackPipe) != 0 or len(FrontPipe) != 0:
-            if len(BackPipe) == len(FrontPipe): #If both cameras see the same number of apriltags, it averages the two pose estimates
-                self.new_target_pose = (self.target_pose_front + target_pose_back) / 2
+        if len(BackPipe) != 0 or len(Frontpipe) != 0:
+            if len(BackPipe) == len(Frontpipe): #If both cameras see the same number of apriltags, it averages the two pose estimates
+                self.new_target_pose = (self.target_pose_front + self.target_pose_back) / 2
                 self.new_target_pose = self.new_target_pose.X() #Takes only the X value of the transform3D
                 self.new_target_pose = math.degrees(self.new_target_pose) / 360 / 2 #Turns that value into degrees (That the turret can read)
         
-            elif len(BackPipe) > len(FrontPipe): #If the back camera sees more apriltags than the front camera, it takes the pose estimate from the back camera
-                self.new_target_pose = target_pose_back
-                self.new_target_pose = self.new_target_pose.X() #Takes only the X value of the transform3D
-                self.new_target_pose = math.degrees(self.new_target_pose) / 360 / 2 #Turns that value into degrees (That the turret can read)
+            elif len(BackPipe) > len(Frontpipe): #If the back camera sees more apriltags than the front camera, it takes the pose estimate from the back camera
+                self.new_target_pose = self.target_pose_back
+                if self.new_target_pose != 0:
+                    self.new_target_pose = self.new_target_pose.X() #Takes only the X value of the transform3D
+                    self.new_target_pose = math.degrees(self.new_target_pose) / 360 / 2 #Turns that value into degrees (That the turret can read)
         
-            elif len(BackPipe) < len(FrontPipe): #If the front camera sees more apriltags than the back camera, it takes the pose estimate from the front camera
+            elif len(BackPipe) < len(Frontpipe): #If the front camera sees more apriltags than the back camera, it takes the pose estimate from the front camera
                 self.new_target_pose = self.target_pose_front
-                self.new_target_pose = self.new_target_pose.X() #Takes only the X value of the transform3D
-                self.new_target_pose = math.degrees(self.new_target_pose) / 360 / 2 #Turns that value into degrees (That the turret can read)
+                if self.new_target_pose != 0:
+                    self.new_target_pose = self.new_target_pose.X() #Takes only the X value of the transform3D
+                    self.new_target_pose = math.degrees(self.new_target_pose) / 360 / 2 #Turns that value into degrees (That the turret can read)
 
-        elif len(BackPipe) and len(FrontPipe) == 0:
-            self.new_target_pose = 0
+        elif len(BackPipe) == 0 and len(Frontpipe) == 0:
+            self.new_target_pose = 0.0
 
 
     def getTargetpose(self):
-        return self.new_target_pose
+        return self.target_pose_front
 
 """
 Code that may be useful later for improvement:

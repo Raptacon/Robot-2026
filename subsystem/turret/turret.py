@@ -182,8 +182,8 @@ class Turret(Subsystem):
         Returns:
             None
         """
-        self._target_position = position_degrees
-
+        position_degrees = self._target_position
+        return
         if self._is_homing or self._is_calibrating:
             return
         clamped = max(

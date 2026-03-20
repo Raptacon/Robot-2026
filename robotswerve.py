@@ -36,9 +36,7 @@ class RobotSwerve:
         self.localization = Localization()
         self.localization.new_target_pose = 0
         self.localization.robotInit()
-        self.localization.teleopPeriodic()
         self.localization.__init__()
-        self.localization.periodic()
 
         # Subsystem instantiation
         self.drivetrain = SwerveDrivetrain()
@@ -144,7 +142,10 @@ class RobotSwerve:
             commands2.CommandScheduler.getInstance().cancelAll()
         self.speedMultiplier = wpilib.SmartDashboard.getNumber("Drivetrain speed", 1)
         self.drivetrain.setSpeedMultiplier(self.speedMultiplier)
+        self.localization.teleopPeriodic()
+        self.localization.periodic()
         self.turret.setPosition(self.localization.getTargetpose())
+
 
     def testInit(self):
         commands2.CommandScheduler.getInstance().cancelAll()
