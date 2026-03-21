@@ -4,19 +4,19 @@ actions:
     translate_x:
       description: Forward/backward translation
       input_type: analog
-      trigger_mode: raw
+      trigger_mode: scaled
       deadband: 0.06
       inversion: true
     translate_y:
       description: Left/right strafe
       input_type: analog
-      trigger_mode: raw
+      trigger_mode: scaled
       deadband: 0.06
       inversion: true
     rotate:
       description: Rotation
       input_type: analog
-      trigger_mode: raw
+      trigger_mode: scaled
       deadband: 0.1
       inversion: true
     robot_relative:

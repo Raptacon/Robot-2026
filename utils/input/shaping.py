@@ -74,6 +74,19 @@ def build_shaping_pipeline(
     ctx = f" (action '{action_name}')" if action_name else ""
     # RAW — true passthrough, no shaping at all
     if trigger_mode == EventTriggerMode.RAW:
+        ignored = []
+        if deadband > 0:
+            ignored.append(f"deadband={deadband}")
+        if inversion:
+            ignored.append("inversion=True")
+        if scale != 1.0:
+            ignored.append(f"scale={scale}")
+        if ignored:
+            log.warning(
+                "RAW trigger mode ignores all shaping%s — "
+                "the following settings have no effect: %s. "
+                "Use 'scaled' trigger mode to apply them.",
+                ctx, ", ".join(ignored))
         return lambda raw: raw
 
     # Pre-resolve curve data so closures don't re-lookup each cycle
