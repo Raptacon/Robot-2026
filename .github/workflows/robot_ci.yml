@@ -59,15 +59,20 @@ jobs:
     - name: Sim smoke test (headless, 5s)
       timeout-minutes: 1
       run: |
-        timeout 5 python -m robotpy sim --nogui || code=$?
-        # timeout exits 124 when it kills the process — that means sim survived 5s
-        if [ "${code:-0}" -eq 124 ]; then
-          echo "Sim ran for 5s without error — OK"
-          exit 0
-        else
-          echo "Sim exited early with code ${code:-0}"
-          exit 1
-        fi
+        python -c "
+        import subprocess, sys, time
+        proc = subprocess.Popen([sys.executable, '-m', 'robotpy', 'sim', '--nogui'],
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        time.sleep(5)
+        if proc.poll() is not None:
+            out = proc.stdout.read()
+            print(out)
+            print(f'Sim exited early with code {proc.returncode}')
+            sys.exit(1)
+        proc.terminate()
+        proc.wait(timeout=5)
+        print('Sim ran for 5s without error — OK')
+        "
 
   StaticCritical:
     name: Critical Static Analysis
