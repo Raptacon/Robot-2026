@@ -56,6 +56,19 @@ jobs:
       run: |
         python -m robotpy coverage test
 
+    - name: Sim smoke test (headless, 5s)
+      timeout-minutes: 1
+      run: |
+        timeout 5 python -m robotpy sim --nogui || code=$?
+        # timeout exits 124 when it kills the process — that means sim survived 5s
+        if [ "${code:-0}" -eq 124 ]; then
+          echo "Sim ran for 5s without error — OK"
+          exit 0
+        else
+          echo "Sim exited early with code ${code:-0}"
+          exit 1
+        fi
+
   StaticCritical:
     name: Critical Static Analysis
     runs-on: ubuntu-latest
