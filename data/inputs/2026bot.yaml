@@ -1,4 +1,4 @@
-version: "1.0.0"
+version: 1.0.0
 actions:
   drivetrain:
     translate_x:
@@ -21,27 +21,33 @@ actions:
       inversion: true
     robot_relative:
       description: Hold for robot-relative driving
-      input_type: button
       trigger_mode: while_true
     cancel_all:
       description: Emergency cancel all commands
       input_type: boolean_trigger
-      trigger_mode: on_true
-      threshold: 0.5
     speed_toggle:
       description: Toggle between slow (0.25) and fast (0.8) drive scale
-      input_type: button
-      trigger_mode: on_true
-
+  test:
+    smoke_test_confirmation:
+      description: Pressing the button will confirm current test when running smoke
+        tests.
 controllers:
   0:
     name: Driver
     bindings:
-      left_stick_y: [drivetrain.translate_x]
-      left_stick_x: [drivetrain.translate_y]
-      right_stick_x: [drivetrain.rotate]
-      right_bumper: [drivetrain.robot_relative]
-      left_trigger: [drivetrain.cancel_all]
-      y_button: [drivetrain.speed_toggle]
+      left_stick_y:
+      - drivetrain.translate_x
+      left_stick_x:
+      - drivetrain.translate_y
+      right_stick_x:
+      - drivetrain.rotate
+      right_bumper:
+      - drivetrain.robot_relative
+      left_trigger:
+      - drivetrain.cancel_all
+      y_button:
+      - drivetrain.speed_toggle
+      start_button:
+      - test.smoke_test_confirmation
   1:
     name: Operator

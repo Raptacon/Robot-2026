@@ -23,6 +23,7 @@ from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
 from subsystem.shooter import Shooter
 from subsystem.ballpit import BallPitHopper as Hopper
 from utils.input import InputFactory
+from commands.smoke_tests import SmokeTests
 
 # Third-party imports
 import commands2
@@ -209,18 +210,23 @@ class RobotSwerve:
 
     def testInit(self):
         #TODO Move to NT listener on change listener
-        self.updateAlliance()
         commands2.CommandScheduler.getInstance().cancelAll()
-        self.drivetrain.setDefaultCommand(
-            DefaultDrive(
-                self.drivetrain,
-                lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftY(), 0.06),
-                lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftX(), 0.06),
-                lambda: wpimath.applyDeadband(-1 * self.driver_controller.getRightX(), 0.1),
-                lambda: not self.driver_controller.getRightBumperButton()
-            )
+        self.updateAlliance()
+        self.SmokeCommand = SmokeTests(self.drivetrain)
+        # self.drivetrain.setDefaultCommand(
+        #     DefaultDrive(
+        #         self.drivetrain,
+        #         lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftY(), 0.06),
+        #         lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftX(), 0.06),
+        #         lambda: wpimath.applyDeadband(-1 * self.driver_controller.getRightX(), 0.1),
+        #         lambda: not self.driver_controller.getRightBumperButton()
+        #     )
+        # )
+        # commands2.cmd.run(lambda: self.drivetrain.drive(2, 0, 0, False), self.drivetrain).withTimeout(5).schedule()
+        self.SmokeCommand.schedule()
+        self.factory.getButton("test.smoke_test_confirmation").onTrue(
+            commands2.cmd.runOnce(lambda: self.SmokeCommand.advance(True))
         )
-        commands2.cmd.run(lambda: self.drivetrain.drive(2, 0, 0, False), self.drivetrain).withTimeout(5).schedule()
 
     def testPeriodic(self):
         pass
