@@ -57,6 +57,37 @@ actions:
       description: Turn the feed motor on or off
       input_type: button
       trigger_mode: on_true
+  hopper:
+    toggle_hopper: 
+      description: Turn the hopper on or off
+      input_type: button
+      trigger_mode: toggle_on_true
+    unjam_hopper:
+      description: Spin the hopper back and forth
+      input_type: button
+      trigger_mode: toggle_on_true
+  intake:
+    stow_intake:
+      description: Stow intake back into robot
+      input_type: button
+      trigger_mode: on_true
+    deploy_intake:
+      description: Deploy intake
+      input_type: button
+      trigger_mode: on_true
+    deactivate_roller:
+      description: Turns off the intake
+      input_type: button
+      trigger_mode: on_true
+    activate_roller:
+      description: Turns on the intake
+      input_type: button
+      trigger_mode: on_true
+    ramp_intake:
+      description: Hold the intake halfway between being deployed and stowed
+      input_type: button
+      trigger_mode: on_true
+
 
 controllers:
   0:
@@ -68,6 +99,12 @@ controllers:
       right_bumper: [drivetrain.robot_relative]
       left_trigger: [drivetrain.cancel_all]
       y_button: [drivetrain.speed_toggle]
+      right_trigger: [intake.stow_intake]
+      left_bumper: [intake.deploy_intake]
+      x_button: [intake.deactivate_roller]
+      b_button: [intake.activate_roller]
+      a_button: [intake.ramp_intake]
+
   1:
     name: Operator
     bindings:
@@ -77,3 +114,5 @@ controllers:
       a_button: [shooter.cycle_flywheel_mode]
       x_button: [shooter.toggle_flywheel]
       b_button: [shooter.toggle_feed]
+      left_bumper: [hopper.toggle_hopper]
+      right_bumper: [hopper.unjam_hopper]

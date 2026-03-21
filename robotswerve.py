@@ -18,6 +18,7 @@ import wpimath
 
 # Internal imports
 from config import ShooterConfig
+from constants.swerve_constants import BallpitConstants
 from data.telemetry import Telemetry
 from commands.default_swerve_drive import DefaultDrive
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
@@ -202,10 +203,10 @@ class RobotSwerve:
         self.drivetrain.setDefaultCommand(
             DefaultDrive(
                 self.drivetrain,
-                lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftY(), 0.06),
-                lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftX(), 0.06),
-                lambda: wpimath.applyDeadband(-1 * self.driver_controller.getRightX(), 0.1),
-                lambda: not self.driver_controller.getRightBumperButton()
+                self.translate_x,
+                self.translate_y,
+                self.rotate,
+                lambda: not self.robot_relative_btn()
             )
         )
         commands2.cmd.run(lambda: self.drivetrain.drive(2, 0, 0, False), self.drivetrain).withTimeout(5).schedule()
@@ -257,6 +258,31 @@ class RobotSwerve:
         )
         self.toggle_shooter_feed = self.factory.getButton("shooter.toggle_feed").onTrue(
             commands2.cmd.runOnce(self.shooter.toggleFeedActive, self.shooter)
+        )
+
+        # Hopper inputs
+        self.toggle_hopper = self.factory.getButton("hopper.toggle_hopper").toggleOnTrue(
+            self.hopper.hex_shaft_generator(BallpitConstants.motorGo)
+        )
+        self.unjam_hopper = self.factory.getButton("hopper.unjam_hopper").toggleOnTrue(
+            commands2.DeferredCommand(lambda: self.hopper.unjamHopper(BallpitConstants.motorOsc, BallpitConstants.repeat, BallpitConstants.oscillationduration_s), self.hopper)
+        )
+
+        # Intake inputs
+        self.stow_intake = self.factory.getButton("intake.stow_intake").onTrue(
+            commands2.cmd.runOnce(self.intake.stowIntake, self.intake)
+        )
+        self.deploy_intake = self.factory.getButton("intake.deploy_intake").onTrue(
+            commands2.cmd.runOnce(self.intake.deployIntake, self.intake)
+        )
+        self.deactivate_roller = self.factory.getButton("intake.deactivate_roller").onTrue(
+            commands2.cmd.runOnce(self.intake.deactivateRoller, self.intake)
+        )
+        self.activate_roller = self.factory.getButton("intake.activate_roller").onTrue(
+            commands2.cmd.runOnce(self.intake.activateRoller, self.intake)
+        )
+        self.ramp_intake = self.factory.getButton("intake.ramp_intake").onTrue(
+            commands2.cmd.run(self.intake.rampIntake, self.intake)
         )
 
         # Map all drive axes' scale to a shared SmartDashboard entry.
