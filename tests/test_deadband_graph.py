@@ -6,6 +6,8 @@ Skipped by default (addopts = -m 'not graph'). Run explicitly with:
 
 Or directly:
     python tests/test_deadband_graph.py
+
+Requires matplotlib (not in CI): pip install matplotlib
 """
 
 import sys
@@ -13,16 +15,7 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-import hal  # noqa: E402 — must init before wpilib
-hal.initialize(500, 0)
-
 import pytest  # noqa: E402
-import matplotlib  # noqa: E402
-matplotlib.use("Agg")  # Non-interactive backend for file output
-import matplotlib.pyplot as plt  # noqa: E402
-
-import wpilib  # noqa: E402
-import wpilib.simulation  # noqa: E402
 
 from utils.input.shaping import build_shaping_pipeline  # noqa: E402
 from utils.controller.model import (  # noqa: E402
@@ -32,12 +25,29 @@ from utils.controller.model import (  # noqa: E402
     FullConfig,
     InputType,
 )
-from utils.input import InputFactory  # noqa: E402
+
+
+def _setup_plot():
+    """Import matplotlib with non-interactive backend. Returns (plt, module)."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    return plt
+
+
+def _init_hal():
+    """Initialize HAL for sim joystick access. Idempotent."""
+    import hal
+    try:
+        hal.initialize(500, 0)
+    except Exception:
+        pass  # Already initialized
 
 
 @pytest.mark.graph
 def test_deadband_sweep():
     """Sweep input from -1 to 1 in 0.05 steps, graph input vs shaped output."""
+    plt = _setup_plot()
     deadband = 0.1
     scale = 1.0
 
@@ -107,6 +117,11 @@ def test_deadband_sweep_sim_joystick():
     Axes: left_stick_x (0), left_stick_y (1), right_stick_x (2), right_stick_y (3)
     Y axes are inverted (wpilib convention: pushing forward = negative).
     """
+    plt = _setup_plot()
+    _init_hal()
+    import wpilib.simulation  # noqa: E402
+    from utils.input import InputFactory
+
     scale = 1.0
 
     # Config: 4 actions with different deadbands, each on a different axis
