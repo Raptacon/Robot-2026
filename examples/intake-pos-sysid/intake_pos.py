@@ -214,20 +214,30 @@ class IntakePos(Subsystem):
     def _configure_mechanism2d(self) -> None:
         """Publish a Mechanism2d widget for intake arm visualization.
 
-        Simple formula: display_angle = 90 + encoder_position
-          encoder   0°  (stowed/cal zero) → 90°  (straight up)
-          encoder  60°  (mid)             → 150° (upper left)
-          encoder 120°  (deployed)        → 210° (lower left)
+        display_angle = 90 + encoder_position  (CCW sweep as arm deploys)
+          encoder   0°  → 90°  (straight up, stowed reference)
+          encoder  60°  → 150° (upper left)
+          encoder 120°  → 210° (lower left, deployed)
 
         Canvas 300x250, pivot at (200, 80) — right side so CCW sweep is visible.
-        Blue  = stowed/min limit (straight up at 90°)
-        Orange = deployed/max limit (lower-left at 210°)
+        Grey  = structural reference bars (vertical and horizontal)
+        Blue  = stowed/min soft limit
+        Orange = deployed/max soft limit
         Red   = current arm position (updates in updateTelemetry)
         Yellow = target position (hidden until setPosition() is called)
         """
         self.mech2d = wpilib.Mechanism2d(300, 250)
         pivot = self.mech2d.getRoot("intake_pivot", 200, 80)
-        # Static limit bars — angles based on kMinSoftLimit/kMaxSoftLimit
+        # Grey reference bars — vertical (90°) and horizontal (0°)
+        pivot.appendLigament(
+            "ref_vertical", 80, 90, 1,
+            wpilib.Color8Bit(wpilib.Color.kGray)
+        )
+        pivot.appendLigament(
+            "ref_horizontal", 80, 180, 1,
+            wpilib.Color8Bit(wpilib.Color.kGray)
+        )
+        # Static limit bars — angles based on constructor soft limits
         self.mech_min_limit_arm = pivot.appendLigament(
             "stowed_limit", 80, 90 + self.min_soft_limit, 4,
             wpilib.Color8Bit(0, 0, 255)
@@ -331,7 +341,7 @@ class IntakePos(Subsystem):
             self.calibration.periodic()
             if not self.calibration.is_busy:
                 # Calibration just finished
-                self._is_calibrated = True
+                self._is_calibrated = self.calibration.is_calibrated
         elif self._target_position is not None:
             position = self.encoder.getPosition()
             pid_output = self.controller.calculate(position, self._target_position)

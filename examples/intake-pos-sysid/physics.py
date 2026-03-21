@@ -10,7 +10,9 @@ from wpimath.system.plant import DCMotor
 # Arm geometry / inertia (update these to match the real mechanism)
 # -------------------------------------------------------------------------
 kGearRatio = 10.0        # 10:1 reduction
-kArmMassKg = 0.9         # ~2 lbs — update with actual mass
+# 0.9 kg (~2 lbs) exceeds the 5%-power torque budget at horizontal; use 0.3 kg
+# so calibration can reach the deployed hard stop in simulation.
+kArmMassKg = 0.3
 kArmLengthM = 0.3        # ~12 inches — update with actual length
 # Moment of inertia for a thin rod rotating about one end: (1/3) * m * L^2
 kArmMOI = (1.0 / 3.0) * kArmMassKg * kArmLengthM ** 2
@@ -86,14 +88,21 @@ class PhysicsEngine:
         # Debug telemetry — visible in SmartDashboard under /PhysicsSim/
         self._nt_applied_v = wpilib.SmartDashboard.getEntry("PhysicsSim/appliedVoltage")
         self._nt_arm_angle = wpilib.SmartDashboard.getEntry("PhysicsSim/armAngleDeg")
+        self._nt_raw_setpoint = wpilib.SmartDashboard.getEntry("PhysicsSim/rawSetpoint")
+        self._nt_enc_pos = wpilib.SmartDashboard.getEntry("PhysicsSim/encoderPosDeg")
+        self._nt_enc_vel = wpilib.SmartDashboard.getEntry("PhysicsSim/encoderVelDegS")
+        self._prev_setpoint = 0.0
 
     def update_sim(self, now: float, tm_diff: float) -> None:
         # Read what the robot code commanded.
-        # getAppliedOutput() does not reflect setVoltage() calls in simulation —
         # getSetpoint() returns the raw value passed to setVoltage(v) (volts)
-        # or set(pct) (duty-cycle fraction).  Since this subsystem exclusively
-        # uses setVoltage(), getSetpoint() returns volts directly.
-        applied_voltage = self.motor_sim.getSetpoint()
+        # or set(pct) (duty-cycle fraction, |value| <= 1.0).
+        # Scale duty-cycle setpoints to voltage; leave voltage calls as-is.
+        setpoint = self.motor_sim.getSetpoint()
+        if abs(setpoint) <= 1.0:
+            applied_voltage = setpoint * 12.0
+        else:
+            applied_voltage = setpoint
 
         # Step the physics simulation
         self.arm_sim.setInputVoltage(applied_voltage)
@@ -111,3 +120,6 @@ class PhysicsEngine:
 
         self._nt_applied_v.setDouble(applied_voltage)
         self._nt_arm_angle.setDouble(math.degrees(self.arm_sim.getAngle()))
+        self._nt_raw_setpoint.setDouble(setpoint)
+        self._nt_enc_pos.setDouble(self.enc_sim.getPosition())
+        self._nt_enc_vel.setDouble(arm_velocity_deg_s)

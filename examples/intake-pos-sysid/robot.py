@@ -22,7 +22,7 @@ kPositionConversionFactor = 360.0 / 10.0  # degrees per motor rotation
 
 # Arm travel range in degrees.  Set these to the expected mechanical limits.
 # Calibration will discover the actual hard stops and update soft limits.
-kMinSoftLimit = 0.0    # degrees — stowed position
+kMinSoftLimit = -15.0  # degrees — stowed position (15° CW past vertical)
 kMaxSoftLimit = 120.0  # degrees — fully deployed
 
 # -------------------------------------------------------------------------

@@ -485,12 +485,19 @@ class PositionCalibration:
         if self._cb_disable_soft_limits is not None:
             self._cb_disable_soft_limits(True, True)
 
-        # Default max travel: 110% of expected range (known from soft limits).
-        # This is a meaningful bound for calibration since we know the
-        # approximate range. Each phase homes one direction, so the full
-        # range is the per-phase ceiling.
+        # Default max travel: 110% of expected range.
+        # Use the hard limit range when known (e.g. loaded from a prior
+        # calibration), because soft limits already have a margin inset and
+        # would set max_travel below the actual mechanical range.
+        # Fall back to soft limit range when hard limits are not yet known.
         if max_travel_degrees is None:
-            expected_range = abs(self._max_soft_limit - self._min_soft_limit)
+            if (self._hard_limit_min is not None
+                    and self._hard_limit_max is not None):
+                expected_range = abs(
+                    self._hard_limit_max - self._hard_limit_min)
+            else:
+                expected_range = abs(
+                    self._max_soft_limit - self._min_soft_limit)
             if expected_range > 0:
                 max_travel_degrees = expected_range * 1.1
 
