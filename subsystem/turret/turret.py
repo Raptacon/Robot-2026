@@ -182,7 +182,7 @@ class Turret(Subsystem):
         Returns:
             None
         """
-        position_degrees = self._target_position
+        self._target_position = position_degrees
         return
         if self._is_homing or self._is_calibrating:
             return
