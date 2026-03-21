@@ -44,4 +44,6 @@ pyfrc.isolated = true
 testpaths = ["tests"]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "graph: marks tests that generate graphs (run with '-m graph')",
 ]
+addopts = "-m 'not graph'"
