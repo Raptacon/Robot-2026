@@ -199,6 +199,7 @@ class RobotSwerve:
         #TODO Move to NT listener on change listener
         self.updateAlliance()
         commands2.CommandScheduler.getInstance().cancelAll()
+        self.driver_controller = wpilib.XboxController(0)
         self.drivetrain.setDefaultCommand(
             DefaultDrive(
                 self.drivetrain,
@@ -208,7 +209,7 @@ class RobotSwerve:
                 lambda: not self.driver_controller.getRightBumperButton()
             )
         )
-        commands2.cmd.run(lambda: self.drivetrain.drive(2, 0, 0, False), self.drivetrain).withTimeout(5).schedule()
+        # commands2.cmd.run(lambda: self.drivetrain.drive(2, 0, 0, False), self.drivetrain).withTimeout(5).schedule()
 
     def testPeriodic(self):
         pass
