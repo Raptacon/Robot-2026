@@ -36,12 +36,10 @@ class Shooter(Subsystem):
         self.feedActive = False
         self.flywheelActive = False
         # Coordinates are in meters
-        self.blueHubCords = Translation2d(4.034536, 4.625594)
-        self.redHubCords = Translation2d(4.034536, 11.915394)
-        self.bottomLeftTarget = Translation2d(1, 1)
-        self.bottomRightTarget = Translation2d(1, 15.540988)
-        self.topLeftTarget = Translation2d(7.069326, 1)
-        self.topRightTarget = Translation2d(7.069326, 15.540988)
+        self.hubCords = Translation2d(4.625594, 4.034536)
+        self.rightTarget = Translation2d(1, 1)
+        self.leftTarget = Translation2d(1, 7.069326)
+
 
         # Create lookup table (distance, RPM)
         self.lookupTable = [
@@ -240,19 +238,19 @@ class Shooter(Subsystem):
     def calculateRangeFromOdometry(self, odometry: Callable[[],Pose2d], alliance: wpilib.DriverStation.Alliance):
         self.odometryTranslation = odometry().translation()
         if alliance == wpilib.DriverStation.Alliance.kRed:
-            if self.odometryTranslation.Y() > self.redHubCords[1]:
-                range = self.odometryTranslation.distance(self.redHubCords)
-            elif self.odometryTranslation.X() < self.redHubCords[0]:
-                range = self.odometryTranslation.distance(self.bottomRightTarget)
+            if self.odometryTranslation.X() < self.hubCords[0]:
+                range = self.odometryTranslation.distance(self.hubCords)
+            elif self.odometryTranslation.Y() > self.hubCords[1]:
+                range = self.odometryTranslation.distance(self.rightTarget)
             else:
-                range = self.odometryTranslation.distance(self.topRightTarget)
+                range = self.odometryTranslation.distance(self.leftTarget)
         else:
-            if self.odometryTranslation.Y() < self.blueHubCords[1]:
-                range = self.odometryTranslation.distance(self.blueHubCords)
-            elif self.odometryTranslation.X() < self.blueHubCords[0]:
-                range = self.odometryTranslation.distance(self.bottomLeftTarget)
+            if self.odometryTranslation.X() < self.hubCords[0]:
+                range = self.odometryTranslation.distance(self.hubCords)
+            elif self.odometryTranslation.Y() < self.hubCords[1]:
+                range = self.odometryTranslation.distance(self.rightTarget)
             else:
-                range = self.odometryTranslation.distance(self.topLeftTarget)
+                range = self.odometryTranslation.distance(self.leftTarget)
         return abs(range)
 
     def periodic(self):
