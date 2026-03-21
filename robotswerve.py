@@ -17,22 +17,26 @@ from typing import Callable
 import wpimath
 
 # Internal imports
+from config import ShooterConfig
+from constants.swerve_constants import BallpitConstants
 from data.telemetry import Telemetry
 from commands.default_swerve_drive import DefaultDrive
-from config import ShooterConfig
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
 from subsystem.shooter import Shooter
+from subsystem.ballpit import BallPitHopper as Hopper
+from utils.input import InputFactory
 
 # Third-party imports
 import commands2
 import wpilib
 from commands2.button import Trigger
 from pathplannerlib.auto import AutoBuilder
-
+from subsystem.intakeactions import IntakeSubsystem
 
 class RobotSwerve:
     # forward declare critical types for editors
     drivetrain: SwerveDrivetrain
+    hopper: Hopper
 
     def __init__(self, is_disabled: Callable[[], bool]) -> None:
         # networktables setup
@@ -42,6 +46,8 @@ class RobotSwerve:
         # Subsystem instantiation
         self.drivetrain = SwerveDrivetrain()
         self.shooter = Shooter()
+        self.hopper = Hopper()
+        self.intake = IntakeSubsystem()
 
         # Alliance instantiation
         self.updateAlliance()
@@ -52,20 +58,17 @@ class RobotSwerve:
 
         # HID setup — config-driven via InputFactory
         wpilib.DriverStation.silenceJoystickConnectionWarning(True)
-        # self.factory = InputFactory(config_path="data/inputs/2026bot.yaml")
+        self.factory = InputFactory(config_path="data/inputs/2026bot.yaml")
 
         # Speed toggle state
         self._drive_scale_slow = 0.25
         self._drive_scale_fast = 1
         self._drive_is_slow = False
 
-        self.driver_controller = commands2.button.CommandXboxController(0)
-        self.mech_controller = commands2.button.CommandXboxController(1)
-
         # TODO: Move input retrieval and binding into commands/{subsystem}_controls.py
         # files as part of the subsystem registry refactor. Each subsystem's controls
         # module should own its own factory.get*() calls and command wiring.
-        # self._configure_controls()
+        self._configure_controls()
 
         # Autonomous setup
         self.auto_command = None
@@ -78,8 +81,8 @@ class RobotSwerve:
         if self.enableTelemetry:
             self.telemetry = Telemetry(
                 driveTrain=self.drivetrain,
-                driverController=self.driver_controller,
-                mechController=self.mech_controller,
+                driverController=self.factory.getController(0),
+                mechController=self.factory.getController(1),
             )
 
         wpilib.SmartDashboard.putString("Robot Version", self.getDeployInfo("git-hash"))
@@ -102,6 +105,7 @@ class RobotSwerve:
             )
         )
 
+
     def robotPeriodic(self):
         if self.enableTelemetry and self.telemetry:
             self.telemetry.runDefaultDataCollections()
@@ -117,6 +121,8 @@ class RobotSwerve:
         self.shooter.resetOffset()
         for motor in ["feed", "lead", "follower"]:
             self.shooter.setMotorVoltage(motor, 0)
+
+        self.hopper.zeroHopperVelocity()
 
     def disabledPeriodic(self):
         pass
@@ -141,35 +147,52 @@ class RobotSwerve:
         self.drivetrain.setDefaultCommand(
             DefaultDrive(
                 self.drivetrain,
-                lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftY(), 0.06),
-                lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftX(), 0.06),
-                lambda: wpimath.applyDeadband(-1 * self.driver_controller.getRightX(), 0.1),
-                lambda: not self.driver_controller.getHID().getRightBumperButton()
+                self.translate_x,
+                self.translate_y,
+                self.rotate,
+                lambda: not self.robot_relative_btn()
             )
         )
 
         # TODO: Get odometry from drivetrain and calculate range
-        # Will start shooter motors upon enabling
-        self.shooter.setDefaultCommand(
-            commands2.cmd.run(
-                lambda: self.shooter.setRpmUsingLookup(
-                    self.shooter.calculateRangeFromOdometry(
-                        self.drivetrain.current_pose, self.alliance)), self.shooter))
+        self.shooter.setDefaultCommand(commands2.cmd.select(
+            {
+                "autoRPM": commands2.cmd.run(lambda: self.shooter.setRpmUsingLookup(1), self.shooter),
+                "fixedRPM": commands2.cmd.run(lambda: self.shooter.setRPM(ShooterConfig.shooterFixedRPM), self.shooter)
+            },
+            self.shooter.getFlywheelMode
+        ))
+            
 
-        self.mech_controller.povUp().onTrue(commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(ShooterConfig.shooterOffsetDelta), self.shooter))
-        self.mech_controller.povDown().onTrue(commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(-ShooterConfig.shooterOffsetDelta), self.shooter))
-        self.mech_controller.y().onTrue(
-            commands2.cmd.runOnce(self.shooter.resetOffset, self.shooter)
-        )
-        self.mech_controller.a().onTrue(
-            commands2.cmd.runOnce(lambda: self.shooter.setRPM(3000), self.shooter)
-        )
-        self.mech_controller.x().onTrue(
-            commands2.cmd.runOnce(lambda: self.shooter.setRPM(0), self.shooter)
-        )
-        self.mech_controller.b().onTrue(
-            commands2.cmd.runOnce(self.shooter.toggleFeedActive, self.shooter)
-        )
+        # TODO: Convert all subsystem bindings below to use InputFactory.
+        # Add actions to data/inputs/2026bot.yaml and use self.factory.getButton()
+        # to wire them. See _configure_controls() for examples.
+
+        # Hopper bindings (mech_controller port 1)
+        # self.hopper.setDefaultCommand(self.hopper.hex_shaft_generator(BallpitConstants.motorStop))
+        # self.mech_controller.leftBumper().toggleOnTrue(
+        #     self.hopper.hex_shaft_generator(BallpitConstants.motorGo)
+        # )
+        # self.mech_controller.rightBumper().toggleOnTrue(
+        #     commands2.DeferredCommand(lambda: self.hopper.unjamHopper(BallpitConstants.motorOsc, BallpitConstants.repeat, BallpitConstants.duration), self.hopper)
+        # )
+
+        # Intake bindings (driver_controller port 0)
+        # self.driver_controller.y().onTrue(
+        #     commands2.cmd.runOnce(self.intake.stowIntake, self.intake)
+        # )
+        # self.driver_controller.a().onTrue(
+        #     commands2.cmd.runOnce(self.intake.deployIntake, self.intake)
+        # )
+        # self.driver_controller.x().onTrue(
+        #     commands2.cmd.runOnce(self.intake.deactivateRoller, self.intake)
+        # )
+        # self.driver_controller.b().onTrue(
+        #     commands2.cmd.runOnce(self.intake.activateRoller, self.intake)
+        # )
+        # self.driver_controller.start().onTrue(
+        #     commands2.cmd.run(self.intake.rampIntake, self.intake)
+        # )
 
     def teleopPeriodic(self):
         pass
@@ -181,10 +204,10 @@ class RobotSwerve:
         self.drivetrain.setDefaultCommand(
             DefaultDrive(
                 self.drivetrain,
-                lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftY(), 0.06),
-                lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftX(), 0.06),
-                lambda: wpimath.applyDeadband(-1 * self.driver_controller.getRightX(), 0.1),
-                lambda: not self.driver_controller.getRightBumperButton()
+                self.translate_x,
+                self.translate_y,
+                self.rotate,
+                lambda: not self.robot_relative_btn()
             )
         )
         commands2.cmd.run(lambda: self.drivetrain.drive(2, 0, 0, False), self.drivetrain).withTimeout(5).schedule()
@@ -216,6 +239,51 @@ class RobotSwerve:
         # Speed toggle: Y button switches between slow and fast scale
         self.factory.getButton("drivetrain.speed_toggle").onTrue(
             commands2.cmd.runOnce(self._toggle_drive_scale)
+        )
+
+        # Shooter inputs
+        self.increment_shooter_offset = self.factory.getButton("shooter.increment_RPM").onTrue(
+            commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(ShooterConfig.shooterOffsetDelta), self.shooter)
+        )
+        self.decrement_shooter_offset = self.factory.getButton("shooter.decrement_RPM").onTrue(
+            commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(-ShooterConfig.shooterOffsetDelta), self.shooter)
+        )
+        self.reset_shooter_offset = self.factory.getButton("shooter.reset_RPM_offset").onTrue(
+            commands2.cmd.runOnce(self.shooter.resetOffset, self.shooter)
+        )
+        self.shooter_cycle_flywheel_mode = self.factory.getButton("shooter.cycle_flywheel_mode").onTrue(
+            commands2.cmd.runOnce(self.shooter.cycleFlywheelMode, self.shooter)
+        )
+        self.toggle_shooter_flywheel = self.factory.getButton("shooter.toggle_flywheel").onTrue(
+            commands2.cmd.runOnce(self.shooter.toggleFlywheelActive, self.shooter)
+        )
+        self.toggle_shooter_feed = self.factory.getButton("shooter.toggle_feed").onTrue(
+            commands2.cmd.runOnce(self.shooter.toggleFeedActive, self.shooter)
+        )
+
+        # Hopper inputs
+        self.toggle_hopper = self.factory.getButton("hopper.toggle_hopper").toggleOnTrue(
+            self.hopper.hex_shaft_generator(BallpitConstants.motorGo)
+        )
+        self.unjam_hopper = self.factory.getButton("hopper.unjam_hopper").toggleOnTrue(
+            commands2.DeferredCommand(lambda: self.hopper.unjamHopper(BallpitConstants.motorOsc, BallpitConstants.repeat, BallpitConstants.oscillationduration_s), self.hopper)
+        )
+
+        # Intake inputs
+        self.stow_intake = self.factory.getButton("intake.stow_intake").onTrue(
+            commands2.cmd.runOnce(self.intake.stowIntake, self.intake)
+        )
+        self.deploy_intake = self.factory.getButton("intake.deploy_intake").onTrue(
+            commands2.cmd.runOnce(self.intake.deployIntake, self.intake)
+        )
+        self.deactivate_roller = self.factory.getButton("intake.deactivate_roller").onTrue(
+            commands2.cmd.runOnce(self.intake.deactivateRoller, self.intake)
+        )
+        self.activate_roller = self.factory.getButton("intake.activate_roller").onTrue(
+            commands2.cmd.runOnce(self.intake.activateRoller, self.intake)
+        )
+        self.ramp_intake = self.factory.getButton("intake.ramp_intake").onTrue(
+            commands2.cmd.run(self.intake.rampIntake, self.intake)
         )
 
         # Map all drive axes' scale to a shared SmartDashboard entry.

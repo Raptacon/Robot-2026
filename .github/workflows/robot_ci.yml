@@ -17,7 +17,7 @@ jobs:
       timeout-minutes: 2
       uses: actions/setup-python@v5
       with:
-        python-version: 3.12.*
+        python-version: 3.14.*
 
     - name: Install dependencies
       timeout-minutes: 5
@@ -36,11 +36,11 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up Python 3.12.* 
+    - name: Set up Python
       timeout-minutes: 2
       uses: actions/setup-python@v5
       with:
-        python-version: 3.12.*
+        python-version: 3.14.*
 
     - name: Lint with flake8 critical
       timeout-minutes: 1
@@ -60,7 +60,7 @@ jobs:
       timeout-minutes: 2
       uses: actions/setup-python@v5
       with:
-        python-version: 3.12.*
+        python-version: 3.14.*
 
     - name: Lint with flake8 extra
       timeout-minutes: 1

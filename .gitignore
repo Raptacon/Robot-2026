@@ -112,6 +112,7 @@ venv*/
 ENV/
 env.bak/
 venv.bak/
+.claude/
 
 # Spyder project settings
 .spyderproject
@@ -161,5 +162,6 @@ controller_maps.py
 # Generated ICO (rebuilt during EXE build)
 images/*.ico
 
-# NetworkTables backup
+# NetworkTables persistence and backup
+networktables.json
 networktables.json.bck

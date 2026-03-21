@@ -17,13 +17,24 @@ class ShooterMotorNames(StrEnum):
     FOLLOWER_FLYWHEEL = "follower"
 
 
+class FlywheelModes(StrEnum):
+    """
+    Create consistent names for flywheel operating modes
+    """
+
+    AUTO_RPM = "autoRPM"
+    FIXED_RPM = "fixedRPM"
+
+
 class Shooter(Subsystem):
     def __init__(self):
         super().__init__()
         self.offsetAmount = 0
         self.offsetDelta = 0
         self.RPM = 0
+        self.flywheelMode = FlywheelModes.AUTO_RPM
         self.feedActive = False
+        self.flywheelActive = False
         # Coordinates are in meters
         self.blueHubCords = Translation2d(4.034536, 4.625594)
         self.redHubCords = Translation2d(4.034536, 11.915394)
@@ -211,6 +222,18 @@ class Shooter(Subsystem):
         """
         return self.offsetAmount
 
+    def getFlywheelMode(self):
+        return self.flywheelMode
+
+    def cycleFlywheelMode(self):
+        if self.flywheelMode == FlywheelModes.AUTO_RPM:
+            self.flywheelMode = FlywheelModes.FIXED_RPM
+        elif self.flywheelMode == FlywheelModes.FIXED_RPM:
+            self.flywheelMode = FlywheelModes.AUTO_RPM
+
+    def toggleFlywheelActive(self):
+        self.flywheelActive = not self.flywheelActive
+
     def toggleFeedActive(self):
         self.feedActive = not self.feedActive
 
@@ -241,10 +264,16 @@ class Shooter(Subsystem):
             feedRPM = 0
             self.setMotorVoltage(ShooterMotorNames.FEED, 0)
 
-        self.setMotorReference(ShooterMotorNames.LEAD_FLYWHEEL, newRPM)
+        if self.flywheelActive:
+            self.setMotorReference(ShooterMotorNames.LEAD_FLYWHEEL, newRPM)
+        else:
+            newRPM = 0
+            self.setMotorVoltage(ShooterMotorNames.LEAD_FLYWHEEL, 0)
 
         wpilib.SmartDashboard.putNumber("Shooter_RPM", newRPM)
         wpilib.SmartDashboard.putNumber("Shooter_Feed_RPM", feedRPM)
         wpilib.SmartDashboard.putNumber("Shooter_Offset", self.offsetAmount)
         wpilib.SmartDashboard.putNumber("Offset_Delta", self.offsetDelta)
         wpilib.SmartDashboard.putBoolean("Feed_Active", self.feedActive)
+        wpilib.SmartDashboard.putBoolean("Flywheel_Active", self.flywheelActive)
+        wpilib.SmartDashboard.putString("Flywheel_Mode", self.flywheelMode)
