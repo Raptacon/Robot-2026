@@ -1,0 +1,14 @@
+# Intake Position Notes
+
+## Current Limits
+Zeroing current limit:      7A
+Runtime stall current:     20A
+
+## Encoder Conversion Factor
+0.02724795640326975476839237057221
+
+## Measured Positions (encoder units)
+Parked:     0
+Vertical:   0.074354
+Horizontal: 0.64815
+Deployed min: 0.812

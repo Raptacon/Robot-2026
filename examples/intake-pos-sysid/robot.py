@@ -164,7 +164,8 @@ class MyRobot(TimedCommandRobot):
                 self.intake,
             )
         self.controller.y().onTrue(_cal_cmd())
-        self.controller.start().onTrue(_cal_cmd())
+        if not wpilib.RobotBase.isSimulation():
+            self.controller.start().onTrue(_cal_cmd())
 
         # Position presets (only useful after calibration)
         self.controller.a().onTrue(

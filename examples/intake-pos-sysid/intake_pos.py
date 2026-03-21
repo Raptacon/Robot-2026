@@ -214,32 +214,36 @@ class IntakePos(Subsystem):
     def _configure_mechanism2d(self) -> None:
         """Publish a Mechanism2d widget for intake arm visualization.
 
-        Coordinate mapping: our arm uses 0 = vertical (straight up in display),
-        but Mechanism2d uses 0 = horizontal-right.  We apply a +90° offset
-        so our 0° displays as pointing straight up:
-          arm   0° → mech2d  90° (pointing straight up)
-          arm -15° → mech2d  75° (slightly past straight up, stowed)
-          arm  90° → mech2d 180° (deployed, pointing left/outward)
-        Pivot is placed near the bottom of the canvas so the arm swings up.
+        Simple formula: display_angle = 90 + encoder_position
+          encoder   0°  (stowed/cal zero) → 90°  (straight up)
+          encoder  60°  (mid)             → 150° (upper left)
+          encoder 120°  (deployed)        → 210° (lower left)
+
+        Canvas 300x250, pivot at (200, 80) — right side so CCW sweep is visible.
+        Blue  = stowed/min limit (straight up at 90°)
+        Orange = deployed/max limit (lower-left at 210°)
+        Red   = current arm position (updates in updateTelemetry)
+        Yellow = target position (hidden until setPosition() is called)
         """
-        self.mech2d = wpilib.Mechanism2d(200, 200)
-        # Pivot near bottom-center; arm swings upward
-        pivot = self.mech2d.getRoot("intake_pivot", 100, 30)
+        self.mech2d = wpilib.Mechanism2d(300, 250)
+        pivot = self.mech2d.getRoot("intake_pivot", 200, 80)
+        # Static limit bars — angles based on kMinSoftLimit/kMaxSoftLimit
+        self.mech_min_limit_arm = pivot.appendLigament(
+            "stowed_limit", 80, 90 + self.min_soft_limit, 4,
+            wpilib.Color8Bit(0, 0, 255)
+        )
+        self.mech_max_limit_arm = pivot.appendLigament(
+            "deployed_limit", 80, 90 + self.max_soft_limit, 4,
+            wpilib.Color8Bit(255, 140, 0)
+        )
+        # Moving bars — angles updated each cycle in updateTelemetry
         self.mech_current_arm = pivot.appendLigament(
-            "current_position", 80, 90, 6,
+            "current", 80, 90 + self.min_soft_limit, 3,
             wpilib.Color8Bit(wpilib.Color.kRed)
         )
         self.mech_target_arm = pivot.appendLigament(
-            "target_position", 80, 90, 4,
-            wpilib.Color8Bit(wpilib.Color.kGreen)
-        )
-        self.mech_min_limit_arm = pivot.appendLigament(
-            "min_limit", 80, self.min_soft_limit + 90, 2,
-            wpilib.Color8Bit(100, 100, 100)
-        )
-        self.mech_max_limit_arm = pivot.appendLigament(
-            "max_limit", 80, self.max_soft_limit + 90, 2,
-            wpilib.Color8Bit(100, 100, 100)
+            "target", 0, 90, 5,
+            wpilib.Color8Bit(wpilib.Color.kYellow)
         )
         wpilib.SmartDashboard.putData(
             self.getName() + "/mechanism", self.mech2d)
@@ -402,14 +406,17 @@ class IntakePos(Subsystem):
         # Calibration telemetry
         self.calibration.update_telemetry(self.getName() + "/")
 
-        # Mechanism2d — apply +90° offset so our 0° (vertical) = mech2d 90° (up)
-        self.mech_current_arm.setAngle(self.encoder.getPosition() + 90)
-        self.mech_min_limit_arm.setAngle(self.calibration.min_soft_limit + 90)
-        self.mech_max_limit_arm.setAngle(self.calibration.max_soft_limit + 90)
-        self.mech_target_arm.setAngle(
-            (self._target_position + 90) if self._target_position is not None
-            else 90
-        )
+        # display_angle = 90 + encoder_position  (CCW sweep as arm deploys)
+        # Limit bars use constructor soft limits (configured range) so they always
+        # show correctly regardless of NT-persisted calibration data.
+        self.mech_current_arm.setAngle(90 + self.encoder.getPosition())
+        self.mech_min_limit_arm.setAngle(90 + self.min_soft_limit)
+        self.mech_max_limit_arm.setAngle(90 + self.max_soft_limit)
+        if self._target_position is not None:
+            self.mech_target_arm.setLength(80)
+            self.mech_target_arm.setAngle(90 + self._target_position)
+        else:
+            self.mech_target_arm.setLength(0)
 
     # -------------------------------------------------------------------------
     # SysId
