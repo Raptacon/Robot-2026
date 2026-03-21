@@ -24,6 +24,7 @@ import yaml
 
 from .model import (
     ActionDefinition,
+    ANALOG_EVENT_TRIGGER_MODES,
     BUTTON_EVENT_TRIGGER_MODES,
     ControllerConfig,
     DEFAULT_CONTROLLER_TYPE,
@@ -42,7 +43,12 @@ _ACTION_DEFAULTS = ActionDefinition(name="")
 
 
 def _action_to_dict(action: ActionDefinition) -> dict:
-    """Serialize an ActionDefinition, omitting fields that match defaults."""
+    """Serialize an ActionDefinition, omitting fields that match defaults.
+
+    Only writes shaping fields (deadband, inversion, scale, slew_rate)
+    when the trigger_mode actually uses them.  RAW mode is a true
+    passthrough so those fields would be misleading if saved.
+    """
     d = {}
     if action.description:
         d["description"] = action.description
@@ -50,16 +56,22 @@ def _action_to_dict(action: ActionDefinition) -> dict:
         d["input_type"] = action.input_type.value
     if action.trigger_mode != _ACTION_DEFAULTS.trigger_mode:
         d["trigger_mode"] = action.trigger_mode.value
-    if action.deadband != _ACTION_DEFAULTS.deadband:
-        d["deadband"] = action.deadband
+
+    # Shaping fields only matter for non-RAW analog modes
+    uses_shaping = (action.trigger_mode in ANALOG_EVENT_TRIGGER_MODES
+                    and action.trigger_mode != EventTriggerMode.RAW)
+    if uses_shaping:
+        if action.deadband != _ACTION_DEFAULTS.deadband:
+            d["deadband"] = action.deadband
+        if action.inversion != _ACTION_DEFAULTS.inversion:
+            d["inversion"] = action.inversion
+        if action.slew_rate != _ACTION_DEFAULTS.slew_rate:
+            d["slew_rate"] = action.slew_rate
+        if action.scale != _ACTION_DEFAULTS.scale:
+            d["scale"] = action.scale
+
     if action.threshold != _ACTION_DEFAULTS.threshold:
         d["threshold"] = action.threshold
-    if action.inversion != _ACTION_DEFAULTS.inversion:
-        d["inversion"] = action.inversion
-    if action.slew_rate != _ACTION_DEFAULTS.slew_rate:
-        d["slew_rate"] = action.slew_rate
-    if action.scale != _ACTION_DEFAULTS.scale:
-        d["scale"] = action.scale
     if action.extra:
         d["extra"] = action.extra
     return d
