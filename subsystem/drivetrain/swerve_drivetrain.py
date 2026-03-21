@@ -513,3 +513,13 @@ class SwerveDrivetrain(Subsystem):
         (disabled, autonomous, teleoperated, test).
         """
         self.update_pose_estimator()
+
+        wpilib.SmartDashboard.putNumber("SD Yaw", self.raw_current_heading().Z())
+        wpilib.SmartDashboard.putNumber("DM Front Left", self.swerve_modules[0].drive_motor_encoder.getPosition())
+        wpilib.SmartDashboard.putNumber("SM Front Left", self.swerve_modules[0].steer_motor_encoder.getPosition())
+        wpilib.SmartDashboard.putNumber("DM Front Right", self.swerve_modules[1].drive_motor_encoder.getPosition())
+        wpilib.SmartDashboard.putNumber("SM Front Right", self.swerve_modules[1].steer_motor_encoder.getPosition())
+        wpilib.SmartDashboard.putNumber("DM Back Left", self.swerve_modules[2].drive_motor_encoder.getPosition())
+        wpilib.SmartDashboard.putNumber("SM Back Left", self.swerve_modules[2].steer_motor_encoder.getPosition())
+        wpilib.SmartDashboard.putNumber("DM Back Right", self.swerve_modules[3].drive_motor_encoder.getPosition())
+        wpilib.SmartDashboard.putNumber("SM Back Right", self.swerve_modules[3].steer_motor_encoder.getPosition())

@@ -40,15 +40,15 @@ class SwerveDriveConsts(RobotConstants):
 
     # inverts if the module or gyro does not rotate counterclockwise positive
     invertGyro: bool = False
-    moduleFrontLeftInvertDrive: bool = True
-    moduleFrontRightInvertDrive: bool = True
-    moduleBackLeftInvertDrive: bool = True
-    moduleBackRightInvertDrive: bool = True
+    moduleFrontLeftInvertDrive: bool = False
+    moduleFrontRightInvertDrive: bool = False
+    moduleBackLeftInvertDrive: bool = False
+    moduleBackRightInvertDrive: bool = False
 
-    moduleFrontLeftInvertSteer: bool = True
-    moduleFrontRightInvertSteer: bool = True
-    moduleBackLeftInvertSteer: bool = True
-    moduleBackRightInvertSteer: bool = True
+    moduleFrontLeftInvertSteer: bool = False
+    moduleFrontRightInvertSteer: bool = False
+    moduleBackLeftInvertSteer: bool = False
+    moduleBackRightInvertSteer: bool = False
 
     maxTranslationMPS: float = 4.6
     maxAngularDPS: float = math.degrees(

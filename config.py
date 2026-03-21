@@ -16,9 +16,17 @@ class OperatorRobotConfig:
     swerve_module_channels: Tuple[int] = (50, 53, 56, 59)
     # Give in front-left, front-right, back-left, back-right order
     # starting rotational position for the absolute encoders
+    # Hail Mary (2025) chassis
     swerve_abs_encoder_calibrations: Tuple[float] = (
-        10.283203125 / 360.0, 323.6148 / 360.0,  347.2737188 / 360.0, 83.2865625 / 360.0
+        18.63288 / 360.0, 152.57808 / 360.0,  332.66592 / 360.0, 23.29092 / 360.0
     )
+
+    # First Pancake (2026) chassis
+    # swerve_abs_encoder_calibrations: Tuple[float] = (
+    #     10.283203125 / 360.0, 323.6148 / 360.0,  347.2737188 / 360.0, 83.2865625 / 360.0
+    # )
+
+    # First Pancake (2026) chassis
     swerve_steer_pid: Tuple[float] = (0.011, 0, 0)
     swerve_drive_pid: Tuple[float] = (0.0021, 0, 0, 0) # TODO: tune PIDs
     pathplanner_translation_pid: Tuple[float] = (4.0, 0.0, 0.0)
