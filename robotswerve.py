@@ -14,8 +14,6 @@ import os
 from pathlib import Path
 from typing import Callable
 
-import wpimath
-
 # Internal imports
 from constants.swerve_constants import BallpitConstants
 from constants.swerve_constants import PancakeShooterConstants
@@ -153,15 +151,22 @@ class RobotSwerve:
             )
         )
 
-        # TODO: Get odometry from drivetrain and calculate range
         self.shooter.setDefaultCommand(commands2.cmd.select(
             {
-                "autoRPM": commands2.cmd.run(lambda: self.shooter.setRpmUsingLookup(1), self.shooter),
-                "fixedRPM": commands2.cmd.run(lambda: self.shooter.setRPM(PancakeShooterConstants.shooterFixedRPM), self.shooter)
+                "autoRPM": commands2.cmd.run(lambda: self.shooter.setRpmUsingLookup(self.shooter.calculateRangeFromOdometry(self.drivetrain.current_pose, self.alliance)), self.shooter),
+                "fixedRPM": commands2.cmd.run(lambda: self.shooter.setRPM(ShooterConfig.shooterFixedRPM), self.shooter)
             },
             self.shooter.getFlywheelMode
         ))
             
+
+        self.hopper.setDefaultCommand(commands2.cmd.select(
+            {
+                "hopperMode": self.hopper.hex_shaft_generator(BallpitConstants.motorGo),
+                "unjamMode": self.hopper.unjamHopper(BallpitConstants.motorOsc, BallpitConstants.repeat, BallpitConstants.oscillationduration_s)
+            },
+            self.hopper.getHopperMode
+        ))
 
         # TODO: Convert all subsystem bindings below to use InputFactory.
         # Add actions to data/inputs/2026bot.yaml and use self.factory.getButton()
@@ -257,15 +262,17 @@ class RobotSwerve:
             commands2.cmd.runOnce(self.shooter.toggleFlywheelActive, self.shooter)
         )
         self.toggle_shooter_feed = self.factory.getButton("shooter.toggle_feed").onTrue(
-            commands2.cmd.runOnce(self.shooter.toggleFeedActive, self.shooter)
-        )
+                commands2.cmd.sequence(
+                    commands2.cmd.runOnce(self.shooter.toggleFeedActive, self.shooter),
+                    commands2.cmd.runOnce(lambda: self.hopper.setHopperToggle(self.shooter.feedActive), self.hopper)
+            ))
 
         # Hopper inputs
-        self.toggle_hopper = self.factory.getButton("hopper.toggle_hopper").toggleOnTrue(
-            self.hopper.hex_shaft_generator(BallpitConstants.motorGo)
+        self.toggle_hopper = self.factory.getButton("hopper.toggle_hopper").onTrue(
+            commands2.cmd.runOnce(self.hopper.toggleHopperMotor, self.hopper)
         )
-        self.unjam_hopper = self.factory.getButton("hopper.unjam_hopper").toggleOnTrue(
-            commands2.DeferredCommand(lambda: self.hopper.unjamHopper(BallpitConstants.motorOsc, BallpitConstants.repeat, BallpitConstants.oscillationduration_s), self.hopper)
+        self.unjam_hopper = self.factory.getButton("hopper.unjam_hopper").onTrue(
+            commands2.cmd.runOnce(lambda: self.hopper.setHopperMode("unjamMode"), self.hopper)
         )
 
         # Intake inputs
