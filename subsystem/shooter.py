@@ -1,4 +1,5 @@
 from config import ShooterConfig
+from constants.field_target_constants import FieldTargets
 import rev
 import wpilib
 from commands2 import Subsystem
@@ -35,13 +36,6 @@ class Shooter(Subsystem):
         self.flywheelMode = FlywheelModes.AUTO_RPM
         self.feedActive = False
         self.flywheelActive = False
-        # Coordinates are in meters
-        self.blueHubCords = Translation2d(4.625594, 4.034536)
-        self.redHubCords = Translation2d(11.915394, 4.034536)
-        self.bottomLeftTarget = Translation2d(1, 1)
-        self.bottomRightTarget = Translation2d(15.540988, 1)
-        self.topLeftTarget = Translation2d(1, 7.069326)
-        self.topRightTarget = Translation2d(15.540988, 7.069326)
 
         # Create lookup table (distance, RPM)
         self.lookupTable = [
@@ -241,19 +235,19 @@ class Shooter(Subsystem):
         self.odometryTranslation = odometry().translation()
         target = Translation2d(8.270494, 4.034536)
         if alliance == wpilib.DriverStation.Alliance.kRed:
-            if self.odometryTranslation.X() > self.redHubCords[0]:
-                target = self.redHubCords
-            elif self.odometryTranslation.Y() < self.redHubCords[1]:
-                target = self.bottomRightTarget
+            if self.odometryTranslation.X() > FieldTargets.redHubTarget[0]: 
+                target = FieldTargets.redHubTarget
+            elif self.odometryTranslation.Y() < FieldTargets.redHubTarget[1]:
+                target = FieldTargets.bottomRightTarget
             else:
-                target = self.topRightTarget
+                target = FieldTargets.topRightTarget
         else:
-            if self.odometryTranslation.X() < self.blueHubCords[0]:
-                target = self.blueHubCords
-            elif self.odometryTranslation.Y() < self.blueHubCords[1]:
-                target = self.bottomLeftTarget
+            if self.odometryTranslation.X() < FieldTargets.blueHubTarget[0]:
+                target = FieldTargets.blueHubTarget
+            elif self.odometryTranslation.Y() < FieldTargets.blueHubTarget[1]:
+                target = FieldTargets.bottomLeftTarget
             else:
-                target = self.topLeftTarget
+                target = FieldTargets.topLeftTarget
         range = self.odometryTranslation.distance(target)
 
         return abs(range)
