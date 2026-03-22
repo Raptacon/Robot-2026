@@ -30,7 +30,7 @@ class SmokeTests(commands2.SequentialCommandGroup):
         # self.angular_velocity = angular_velocity
 
         self.addRequirements(self.drivetrain)
-        for swerve_module, index in enumerate(self.drivetrain.swerve_modules):
+        for index, swerve_module in enumerate(self.drivetrain.swerve_modules):
             if swerve_module == 0:
                 self.addCommands(commands2.cmd.runOnce(self.setMessage(1)))
                 commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False)),
