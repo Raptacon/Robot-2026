@@ -4,6 +4,7 @@ from typing import Callable
 
 # Internal imports
 from config import OperatorRobotConfig
+from constants import SwerveDriveConsts
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
 
 # Third-party imports
@@ -20,6 +21,9 @@ class PIDAlignToTarget(Command):
         self,
         drivetrain: SwerveDrivetrain,
         target_location: Callable[[], Translation2d] | None,
+        velocity_vector_x: Callable[[], float],
+        velocity_vector_y: Callable[[], float],
+        field: Callable[[], bool],
         rotation_pid_config: tuple = OperatorRobotConfig.pid_to_pose_rotation_pid_profile,
         setpoint_tolerances: tuple = OperatorRobotConfig.pid_to_pose_setpoint_tolerances
     ) -> None:
@@ -47,6 +51,9 @@ class PIDAlignToTarget(Command):
 
         self.drivetrain = drivetrain
         self.target_location = target_location
+        self.velocity_vector_x = velocity_vector_x
+        self.velocity_vector_y = velocity_vector_y
+        self.field = field
         self.rotation_pid = ProfiledPIDController(
             *rotation_pid_config[0:3], TrapezoidProfile.Constraints(*rotation_pid_config[3:5])
         )
@@ -72,9 +79,13 @@ class PIDAlignToTarget(Command):
             rotation_error = (self.target_rotation - current_rotation).radians()
             rotation_output = -applyDeadband(self.rotation_pid.calculate(rotation_error, 0), 0.04, inf)
 
-            current_velocities = self.drivetrain.current_robot_relative_speed()
             new_rotation_velocity = ChassisSpeeds.fromFieldRelativeSpeeds(0, 0, rotation_output, current_rotation)
-            self.drivetrain.drive(current_velocities.vx, current_velocities.vy, new_rotation_velocity.omega, False)
+            self.drivetrain.drive(
+                self.velocity_vector_x() * SwerveDriveConsts.maxTranslationMPS,
+                self.velocity_vector_y() * SwerveDriveConsts.maxTranslationMPS,
+                new_rotation_velocity.omega,
+                self.field()
+            )
 
     def end(self, interrupted: bool) -> None:
         """

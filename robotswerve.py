@@ -260,7 +260,10 @@ class RobotSwerve:
         self.factory.getButton("drivetrain.auto_align").whileTrue(
             PIDAlignToTarget(
                 self.drivetrain,
-                lambda: determineShooterTargets2026(self.drivetrain.current_pose, self.alliance)
+                lambda: determineShooterTargets2026(self.drivetrain.current_pose, self.alliance),
+                self.translate_x,
+                self.translate_y,
+                lambda: not self.robot_relative_btn()
             )
         ) 
 
