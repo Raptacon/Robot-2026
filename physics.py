@@ -42,6 +42,11 @@ class PhysicsEngine:
         self.physics_controller = physics_controller
 
         modules = robot.container.drivetrain.swerve_modules
+        if len(modules) != 4:
+            raise RuntimeError(
+                f"PhysicsEngine requires exactly 4 swerve modules, got {len(modules)}. "
+                "CANcoder initialization likely failed — check CAN IDs and phoenix6 sim setup."
+            )
         self.modules = modules
         self.drive_sims = [
             rev.SparkSim(m.drive_motor, DCMotor.NEO()) for m in modules
