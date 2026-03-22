@@ -1,7 +1,7 @@
 from wpimath.geometry import Translation2d
 
 
-class FieldTargets:
+class FieldTargets2026:
     """
     Define targets on the field that a shooter could aim for.
     Coordinates are given in (x, y) translations relative to the origin

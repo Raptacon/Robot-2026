@@ -1,5 +1,5 @@
 from config import ShooterConfig
-from constants.field_target_constants import FieldTargets
+from constants.field_target_constants_2026 import FieldTargets2026
 import rev
 import wpilib
 from commands2 import Subsystem
@@ -235,19 +235,19 @@ class Shooter(Subsystem):
         self.odometryTranslation = odometry().translation()
         target = Translation2d(8.270494, 4.034536)
         if alliance == wpilib.DriverStation.Alliance.kRed:
-            if self.odometryTranslation.X() > FieldTargets.redHubTarget[0]: 
-                target = FieldTargets.redHubTarget
-            elif self.odometryTranslation.Y() < FieldTargets.redHubTarget[1]:
-                target = FieldTargets.bottomRightTarget
+            if self.odometryTranslation.X() > FieldTargets2026.redHubTarget[0]: 
+                target = FieldTargets2026.redHubTarget
+            elif self.odometryTranslation.Y() < FieldTargets2026.redHubTarget[1]:
+                target = FieldTargets2026.bottomRightTarget
             else:
-                target = FieldTargets.topRightTarget
+                target = FieldTargets2026.topRightTarget
         else:
-            if self.odometryTranslation.X() < FieldTargets.blueHubTarget[0]:
-                target = FieldTargets.blueHubTarget
-            elif self.odometryTranslation.Y() < FieldTargets.blueHubTarget[1]:
-                target = FieldTargets.bottomLeftTarget
+            if self.odometryTranslation.X() < FieldTargets2026.blueHubTarget[0]:
+                target = FieldTargets2026.blueHubTarget
+            elif self.odometryTranslation.Y() < FieldTargets2026.blueHubTarget[1]:
+                target = FieldTargets2026.bottomLeftTarget
             else:
-                target = FieldTargets.topLeftTarget
+                target = FieldTargets2026.topLeftTarget
         range = self.odometryTranslation.distance(target)
 
         return abs(range)
