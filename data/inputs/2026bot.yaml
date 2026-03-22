@@ -28,6 +28,11 @@ actions:
       input_type: boolean_trigger
       trigger_mode: on_true
       threshold: 0.5
+    auto_align:
+      description: Automatically align the robot to a target rotation
+      input_type: boolean_trigger
+      trigger_mode: while_true
+      threshold: 0.25
     speed_toggle:
       description: Toggle between slow (0.25) and fast (0.8) drive scale
       input_type: button
@@ -107,9 +112,10 @@ controllers:
       right_stick_x: [drivetrain.rotate]
       right_bumper: [drivetrain.robot_relative]
       left_trigger: [drivetrain.cancel_all]
+      right_trigger: [drivetrain.auto_align]
       y_button: [drivetrain.speed_toggle]
-      right_trigger: [intake.stow_intake]
-      left_bumper: [intake.deploy_intake]
+      pov_up: [intake.stow_intake]
+      pov_down: [intake.deploy_intake]
       x_button: [intake.deactivate_roller]
       b_button: [intake.activate_roller]
       a_button: [intake.ramp_intake]

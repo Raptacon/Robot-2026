@@ -277,26 +277,12 @@ class Shooter(Subsystem):
     def toggleFeedActive(self):
         self.feedActive = not self.feedActive
 
-    def calculateRangeFromOdometry(self, odometry: Callable[[],Pose2d], alliance: wpilib.DriverStation.Alliance):
-        self.odometryTranslation = odometry().translation()
-        target = Translation2d(8.270494, 4.034536)
-        if alliance == wpilib.DriverStation.Alliance.kRed:
-            if self.odometryTranslation.X() > self.redHubCords[0]:
-                target = self.redHubCords
-            elif self.odometryTranslation.Y() < self.redHubCords[1]:
-                target = self.bottomRightTarget
-            else:
-                target = self.topRightTarget
-        else:
-            if self.odometryTranslation.X() < self.blueHubCords[0]:
-                target = self.blueHubCords
-            elif self.odometryTranslation.Y() < self.blueHubCords[1]:
-                target = self.bottomLeftTarget
-            else:
-                target = self.topLeftTarget
-        range = self.odometryTranslation.distance(target)
-
-        return abs(range)
+    def calculateRangeFromOdometry(
+        self,
+        odometry: Callable[[],Pose2d],
+        targetLocation: Callable[[],Translation2d]
+    ):
+        return abs(odometry().translation().distance(targetLocation()))
 
     def periodic(self):
         newRPM = self.RPM + self.offsetAmount
