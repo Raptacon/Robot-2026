@@ -1,7 +1,7 @@
 # Native imports
 from enum import StrEnum
 import numpy as np
-from typing import Dict
+from typing import Dict, Callable
 
 # Internal imports
 from config import ShooterConfig
@@ -11,10 +11,6 @@ from constants.swerve_constants import PancakeShooterConstants
 from commands2 import Subsystem
 import rev
 import wpilib
-from commands2 import Subsystem
-from typing import Dict, Callable
-from enum import StrEnum
-import numpy as np
 from wpimath.geometry import Pose2d, Translation2d
 
 class ShooterMotorNames(StrEnum):
