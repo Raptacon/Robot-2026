@@ -25,7 +25,7 @@ class IntakeSubsystem(commands2.SubsystemBase):
         # self.frontBeamBroken = not self.frontBreakbeam.get()
         # self.backBeamBroken = not self.backBreakbeam.get()
 
-        # self.HallEffectSensor = wpilib.DigitalInput(intakeConsts.kHallEffectSensor)
+        self.HallEffectSensor = wpilib.DigitalInput(intakeConsts.kHallEffectSensor)
 
         #Set Variables
         self.pivotDeployed = 155 #Minimum amount of rotations before assuming intake is deployed

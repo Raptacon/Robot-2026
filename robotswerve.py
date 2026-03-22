@@ -212,7 +212,7 @@ class RobotSwerve:
         #TODO Move to NT listener on change listener
         commands2.CommandScheduler.getInstance().cancelAll()
         self.updateAlliance()
-        self.SmokeCommand = SmokeTests(self.drivetrain)
+        self.SmokeCommand = SmokeTests(self.drivetrain, self.intake, self.hopper, self.shooter)
         # self.drivetrain.setDefaultCommand(
         #     DefaultDrive(
         #         self.drivetrain,
