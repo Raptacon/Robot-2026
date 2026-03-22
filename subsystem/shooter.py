@@ -1,11 +1,16 @@
-from config import ShooterConfig
-from constants.field_target_constants_2026 import FieldTargets2026
-import rev
-import wpilib
-from commands2 import Subsystem
-from typing import Dict, Callable
+# Native imports
 from enum import StrEnum
 import numpy as np
+from typing import Dict, Callable
+
+# Internal imports
+from config import ShooterConfig
+from constants.swerve_constants import PancakeShooterConstants
+
+# Third-party imports
+from commands2 import Subsystem
+import rev
+import wpilib
 from wpimath.geometry import Pose2d, Translation2d
 
 class ShooterMotorNames(StrEnum):
@@ -53,14 +58,14 @@ class Shooter(Subsystem):
         self.lookupShooterRpms = np.array([r for _, r in self.lookupTable])
 
         # Instantiate motors
-        self.feedMotor = rev.SparkMax(30, rev.SparkLowLevel.MotorType.kBrushless)
-        self.leadFlywheelMotor = rev.SparkFlex(32, rev.SparkLowLevel.MotorType.kBrushless)
-        self.followerFlywheelMotor = rev.SparkFlex(33, rev.SparkLowLevel.MotorType.kBrushless)
+        self.feedMotor = rev.SparkMax(PancakeShooterConstants.feedMotorId, rev.SparkLowLevel.MotorType.kBrushless)
+        self.leadFlywheelMotor = rev.SparkFlex(PancakeShooterConstants.leadMotorId, rev.SparkLowLevel.MotorType.kBrushless)
+        self.followerFlywheelMotor = rev.SparkFlex(PancakeShooterConstants.followerMotorId, rev.SparkLowLevel.MotorType.kBrushless)
 
         # Set up configs for each motor
-        self.configureMotor(self.feedMotor, ShooterConfig.shooterFeedMotorPIDF, ShooterConfig.shooterInverted[0])
-        self.configureMotor(self.leadFlywheelMotor, ShooterConfig.shooterFlywheelMotorPIDF, ShooterConfig.shooterInverted[1])
-        self.configureMotor(self.followerFlywheelMotor, ShooterConfig.shooterFlywheelMotorPIDF, ShooterConfig.shooterInverted[2], self.leadFlywheelMotor)
+        self.configureMotor(self.feedMotor, ShooterConfig.shooterFeedMotorPIDF, PancakeShooterConstants.shooterInverted[0])
+        self.configureMotor(self.leadFlywheelMotor, ShooterConfig.shooterFlywheelMotorPIDF, PancakeShooterConstants.shooterInverted[1])
+        self.configureMotor(self.followerFlywheelMotor, ShooterConfig.shooterFlywheelMotorPIDF, PancakeShooterConstants.shooterInverted[2], self.leadFlywheelMotor)
 
         self.motors: Dict[str, rev.SparkFlex | rev.SparkMax] = {
             ShooterMotorNames.FEED: self.feedMotor,
@@ -241,7 +246,7 @@ class Shooter(Subsystem):
     def periodic(self):
         newRPM = self.RPM + self.offsetAmount
         if self.feedActive:
-            feedRPM = int(newRPM * ShooterConfig.shooterFeedPercentOfFlywheel)
+            feedRPM = int(newRPM * PancakeShooterConstants.shooterFeedPercentOfFlywheel)
             self.setMotorReference(ShooterMotorNames.FEED, feedRPM)
         else:
             feedRPM = 0

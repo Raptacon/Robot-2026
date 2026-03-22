@@ -15,8 +15,8 @@ from pathlib import Path
 from typing import Callable
 
 # Internal imports
-from config import ShooterConfig
 from constants.swerve_constants import BallpitConstants
+from constants.swerve_constants import PancakeShooterConstants
 from data.telemetry import Telemetry
 from commands.auto.pid_to_angle import PIDAlignToTarget
 from commands.default_swerve_drive import DefaultDrive
@@ -165,7 +165,7 @@ class RobotSwerve:
                     ),
                     self.shooter
                 ),
-                "fixedRPM": commands2.cmd.run(lambda: self.shooter.setRPM(ShooterConfig.shooterFixedRPM), self.shooter)
+                "fixedRPM": commands2.cmd.run(lambda: self.shooter.setRPM(PancakeShooterConstants.shooterFixedRPM), self.shooter)
             },
             self.shooter.getFlywheelMode
         ))
@@ -269,10 +269,10 @@ class RobotSwerve:
 
         # Shooter inputs
         self.increment_shooter_offset = self.factory.getButton("shooter.increment_RPM").onTrue(
-            commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(ShooterConfig.shooterOffsetDelta), self.shooter)
+            commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(PancakeShooterConstants.shooterOffsetDelta), self.shooter)
         )
         self.decrement_shooter_offset = self.factory.getButton("shooter.decrement_RPM").onTrue(
-            commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(-ShooterConfig.shooterOffsetDelta), self.shooter)
+            commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(-PancakeShooterConstants.shooterOffsetDelta), self.shooter)
         )
         self.reset_shooter_offset = self.factory.getButton("shooter.reset_RPM_offset").onTrue(
             commands2.cmd.runOnce(self.shooter.resetOffset, self.shooter)
