@@ -29,7 +29,6 @@ from utils.odometry_logic_2026 import determineShooterTargets2026
 # Third-party imports
 import commands2
 import wpilib
-from wpimath.geometry import Rotation2d
 from commands2.button import Trigger
 from pathplannerlib.auto import AutoBuilder
 from subsystem.intakeactions import IntakeSubsystem
@@ -265,7 +264,7 @@ class RobotSwerve:
                 self.translate_y,
                 lambda: not self.robot_relative_btn()
             )
-        ) 
+        )
 
         # Shooter inputs
         self.increment_shooter_offset = self.factory.getButton("shooter.increment_RPM").onTrue(
