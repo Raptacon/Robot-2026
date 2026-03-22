@@ -156,7 +156,15 @@ class RobotSwerve:
 
         self.shooter.setDefaultCommand(commands2.cmd.select(
             {
-                "autoRPM": commands2.cmd.run(lambda: self.shooter.setRpmUsingLookup(self.shooter.calculateRangeFromOdometry(self.drivetrain.current_pose, self.alliance)), self.shooter),
+                "autoRPM": commands2.cmd.run(
+                    lambda: self.shooter.setRpmUsingLookup(
+                        self.shooter.calculateRangeFromOdometry(
+                            self.drivetrain.current_pose,
+                            lambda: determineShooterTargets2026(self.drivetrain.current_pose, self.alliance)
+                        )
+                    ),
+                    self.shooter
+                ),
                 "fixedRPM": commands2.cmd.run(lambda: self.shooter.setRPM(ShooterConfig.shooterFixedRPM), self.shooter)
             },
             self.shooter.getFlywheelMode
