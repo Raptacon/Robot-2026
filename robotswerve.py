@@ -223,13 +223,13 @@ class RobotSwerve:
         #     )
         # )
         # commands2.cmd.run(lambda: self.drivetrain.drive(2, 0, 0, False), self.drivetrain).withTimeout(5).schedule()
-        self.SmokeCommand.schedule()
         self.factory.getButton("test.smoke_test_confirmation").onTrue(
             commands2.cmd.runOnce(lambda: self.SmokeCommand.advance(True))
         )
+        self.SmokeCommand.schedule()
 
     def testPeriodic(self):
-        pass
+        self.SmokeCommand.updateMessage()
 
     def _configure_controls(self) -> None:
         """Retrieve managed inputs from the factory and wire command bindings.
