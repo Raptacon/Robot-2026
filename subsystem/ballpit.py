@@ -23,6 +23,7 @@ class BallPitHopper(commands2.Subsystem):
         self.hopperMotor.configure(self.hopperConfig, rev.ResetMode.kResetSafeParameters, rev.PersistMode.kPersistParameters)
         self.lastSpeed = 0
         self.toggleHopper = False
+        self.preToggleHopper = False
         self.hopperMode = HopperModes.HOPPER
 
     def setHexShaftSpeed(self, velocity : float):
@@ -44,18 +45,22 @@ class BallPitHopper(commands2.Subsystem):
         return self.lastSpeed
 
     def unjamHopper(self, velocity, repeat, duration):
-        self.preToggleHopper = self.toggleHopper
-        self.toggleHopper = False
         return commands2.cmd.sequence(
+            commands2.cmd.runOnce(
+                lambda: self.setHopperTogglePre(self.toggleHopper), self
+            ),
+            commands2.cmd.runOnce(
+                lambda: self.setHopperToggle(True), self
+            ),
             commands2.cmd.repeatingSequence(
                 self.hex_shaft_generator(-velocity).withTimeout(duration),
                 self.hex_shaft_generator(velocity).withTimeout(duration),
             ).withTimeout(repeat * (duration * 2)),
             commands2.cmd.runOnce(
-                lambda: self.setHopperToggle(self.preToggleHopper)
+                lambda: self.setHopperToggle(self.preToggleHopper), self
             ),
             commands2.cmd.runOnce(
-                self.setHopperMode(HopperModes.HOPPER)
+                lambda: self.setHopperMode(HopperModes.HOPPER), self
             )
         )
 
@@ -68,6 +73,9 @@ class BallPitHopper(commands2.Subsystem):
 
     def getHopperMode(self):
         return self.hopperMode
+
+    def setHopperTogglePre(self, pretoggle: bool):
+        self.preToggleHopper = pretoggle
 
     def setHopperToggle(self, toggle):
         self.toggleHopper = toggle
