@@ -155,3 +155,13 @@ class BallpitConstants:
     # list of constants for the ocalation constants for the addition area
     # ocs_consts =
     hopperCanId = 40
+
+class PancakeShooterConstants:
+    feedMotorId = 30
+    leadMotorId = 32
+    followerMotorId = 33
+    # Feed, Lead, Follower
+    shooterInverted = (True, False, False)
+    shooterOffsetDelta = 100
+    shooterFeedPercentOfFlywheel = 0.9
+    shooterFixedRPM = 3000
