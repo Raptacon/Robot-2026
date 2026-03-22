@@ -101,7 +101,7 @@ class SmokeTests(commands2.SequentialCommandGroup):
             commands2.cmd.runOnce(self.setMessage(25, "Intake", "Check to see if Intake begins deploying...", "Manual Confirmation")),
             commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False)),
             #Test Intake Stow
-            commands2.InstantCommand(lambda intake=intake: intake.stowIntake(), self.inake),
+            commands2.InstantCommand(lambda intake=intake: intake.stowIntake(), self.intake),
             commands2.cmd.runOnce(self.setMessage(26, "Intake", "Check to see if Intake begins stowing...", "Manual Confirmation")),
             commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False)),
             #Test Hopper Activation
