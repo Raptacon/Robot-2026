@@ -30,7 +30,7 @@ class SmokeTests(commands2.SequentialCommandGroup):
         # self.angular_velocity = angular_velocity
 
         self.addRequirements(self.drivetrain)
-        for swerve_module in self.drivetrain.swerve_modules:
+        for swerve_module, index in enumerate(self.drivetrain.swerve_modules):
             if swerve_module == 0:
                 self.addCommands(commands2.cmd.runOnce(self.setMessage(1)))
                 commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False)),
@@ -38,27 +38,27 @@ class SmokeTests(commands2.SequentialCommandGroup):
                 # Current swerve module's drive motor moves forward 0.2 meters per second until driver confirms 
                 commands2.InstantCommand(lambda swerve_module=swerve_module: swerve_module.set_state(SwerveModuleState(0.2, Rotation2d.fromDegrees(0)), apply_cosine_scaling=False),
                                         self.drivetrain),
-                commands2.cmd.runOnce(self.setMessage((swerve_module*6)+2, str(swerve_module.getName()), "Module starts driving")),
+                commands2.cmd.runOnce(self.setMessage((index*6)+2, str(swerve_module.getName()), "Module starts driving")),
                 commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False)),
                 # Current swerve module's drive motor stops
                 commands2.InstantCommand(lambda swerve_module=swerve_module: swerve_module.set_state(SwerveModuleState(0, Rotation2d.fromDegrees(0)), apply_cosine_scaling=False),
                                         self.drivetrain),
-                commands2.cmd.runOnce(self.setMessage((swerve_module*6)+3, str(swerve_module.getName()), "Module stops driving")),
+                commands2.cmd.runOnce(self.setMessage((index*6)+3, str(swerve_module.getName()), "Module stops driving")),
                 commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False)),
                 # Current swerve module's steer motor rotates to 0 degrees and driver confirms
                 commands2.InstantCommand(lambda swerve_module=swerve_module: swerve_module.set_state(SwerveModuleState(0, Rotation2d.fromDegrees(0)), apply_cosine_scaling=False),
                                         self.drivetrain),
-                commands2.cmd.runOnce(self.setMessage((swerve_module*6)+4, str(swerve_module.getName()), "Module rotates facing 0 degrees")),
+                commands2.cmd.runOnce(self.setMessage((index*6)+4, str(swerve_module.getName()), "Module rotates facing 0 degrees")),
                 commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False)),
                 # Current swerve module's steer motor rotates to 45 degrees and driver confirms
                 commands2.InstantCommand(lambda swerve_module=swerve_module: swerve_module.set_state(SwerveModuleState(0, Rotation2d.fromDegrees(45)), apply_cosine_scaling=False),
                                         self.drivetrain),
-                commands2.cmd.runOnce(self.setMessage((swerve_module*6)+5, str(swerve_module.getName()), "Module rotates facing 45 degrees")),
+                commands2.cmd.runOnce(self.setMessage((index*6)+5, str(swerve_module.getName()), "Module rotates facing 45 degrees")),
                 commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False)),
                 # Current swerve module's steer motor rotates to 90 degrees and driver confirms
                 commands2.InstantCommand(lambda swerve_module=swerve_module: swerve_module.set_state(SwerveModuleState(0, Rotation2d.fromDegrees(90)), apply_cosine_scaling=False),
                                         self.drivetrain),
-                commands2.cmd.runOnce(self.setMessage((swerve_module*6)+6, str(swerve_module.getName()), "Module rotates facing 90 degrees")),
+                commands2.cmd.runOnce(self.setMessage((index*6)+6, str(swerve_module.getName()), "Module rotates facing 90 degrees")),
                 commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False)),
                 # Current swerve module's steer motor rotates back to 0 degrees when finished
                 commands2.InstantCommand(lambda swerve_module=swerve_module: swerve_module.set_state(SwerveModuleState(0, Rotation2d.fromDegrees(0)), apply_cosine_scaling=False),
