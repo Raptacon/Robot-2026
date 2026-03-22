@@ -160,8 +160,15 @@ class PancakeShooterConstants:
     feedMotorId = 30
     leadMotorId = 32
     followerMotorId = 33
-    # Feed, Lead, Follower
-    shooterInverted = (True, False, False)
+    hoodMotorId = 31
+    # Feed, Lead, Follower, Hood
+    shooterInverted = (True, False, True, False)
     shooterOffsetDelta = 100
     shooterFeedPercentOfFlywheel = 0.9
     shooterFixedRPM = 3000
+    # TODO: Get rest and max positons for shooter
+    shooterHoodRestPosition = 2000
+    shooterHoodMaxPosition = 2500
+    shooterHoodPosition1 = 2125
+    shooterHoodPosition2 = 2250
+    shooterHoodPosition3 = 2500

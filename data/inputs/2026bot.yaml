@@ -57,6 +57,14 @@ actions:
       description: Turn the feed motor on or off
       input_type: button
       trigger_mode: on_true
+    raise_hood:
+      description: Raise the hood
+      input_type: button
+      trigger_mode: on_true
+    lower_hood:
+      description: Lower the hood
+      input_type: button
+      trigger_mode: on_true
   hopper:
     toggle_hopper: 
       description: Turn the hopper on or off
@@ -111,6 +119,8 @@ controllers:
     bindings:
       pov_up: [shooter.increment_RPM]
       pov_down: [shooter.decrement_RPM]
+      pov_right: [shooter.raise_hood]
+      pov_left: [shooter.lower_hood]
       y_button: [shooter.reset_RPM_offset]
       a_button: [shooter.cycle_flywheel_mode]
       x_button: [shooter.toggle_flywheel]

@@ -26,6 +26,7 @@ from utils.input import InputFactory
 
 # Third-party imports
 import commands2
+import rev
 import wpilib
 from commands2.button import Trigger
 from pathplannerlib.auto import AutoBuilder
@@ -266,6 +267,16 @@ class RobotSwerve:
                     commands2.cmd.runOnce(self.shooter.toggleFeedActive, self.shooter),
                     commands2.cmd.runOnce(lambda: self.hopper.setHopperToggle(self.shooter.feedActive), self.hopper)
             ))
+        self.raise_shooter_hood = self.factory.getButton("shooter.raise_hood").onTrue(
+            commands2.cmd.sequence(
+                commands2.cmd.runOnce(lambda: self.shooter.cycleHoodPosition(True), self.shooter),
+                commands2.cmd.runOnce(lambda: self.shooter.setMotorReference("hood", self.shooter.hoodPositionLookup[self.shooter.positionNumber], rev.SparkLowLevel.ControlType.kPosition), self.shooter)
+        ))
+        self.lower_shooter_hood = self.factory.getButton("shooter.lower_hood").whileTrue(
+            commands2.cmd.sequence(
+                commands2.cmd.runOnce(lambda: self.shooter.cycleHoodPosition(False), self.shooter),
+                commands2.cmd.runOnce(lambda: self.shooter.setMotorReference("hood", self.shooter.hoodPositionLookup[self.shooter.positionNumber], rev.SparkLowLevel.ControlType.kPosition), self.shooter)
+        ))
 
         # Hopper inputs
         self.toggle_hopper = self.factory.getButton("hopper.toggle_hopper").onTrue(
