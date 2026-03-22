@@ -257,16 +257,20 @@ class RobotSwerve:
             commands2.cmd.runOnce(self.shooter.toggleFlywheelActive, self.shooter)
         )
         self.toggle_shooter_feed = self.factory.getButton("shooter.toggle_feed").onTrue(
-            commands2.cmd.runOnce(self.shooter.toggleFeedActive, self.shooter)
-        )
+                commands2.cmd.sequence(
+                    commands2.cmd.runOnce(self.hopper.overrideHopperMotor, self.hopper),
+                    commands2.cmd.runOnce(self.shooter.toggleFeedActive, self.shooter)
+            ))
 
         # Hopper inputs
         self.toggle_hopper = self.factory.getButton("hopper.toggle_hopper").toggleOnTrue(
             self.hopper.hex_shaft_generator(BallpitConstants.motorGo)
         )
-        self.unjam_hopper = self.factory.getButton("hopper.unjam_hopper").toggleOnTrue(
-            commands2.DeferredCommand(lambda: self.hopper.unjamHopper(BallpitConstants.motorOsc, BallpitConstants.repeat, BallpitConstants.oscillationduration_s), self.hopper)
-        )
+        self.unjam_hopper = self.factory.getButton("hopper.unjam_hopper").onTrue(
+        commands2.cmd.sequence(
+            commands2.DeferredCommand(lambda: self.hopper.unjamHopper(BallpitConstants.motorOsc, BallpitConstants.repeat, BallpitConstants.oscillationduration_s), self.hopper),
+            commands2.cmd.runOnce(self.shooter.toggleFeedActive, self.shooter)
+        ))
 
         # Intake inputs
         self.stow_intake = self.factory.getButton("intake.stow_intake").onTrue(

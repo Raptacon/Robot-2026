@@ -17,6 +17,7 @@ class BallPitHopper(commands2.Subsystem):
         self.hopperMotorPIDF = self.hopperMotor.getClosedLoopController()
         self.hopperMotor.configure(self.hopperConfig, rev.ResetMode.kResetSafeParameters, rev.PersistMode.kPersistParameters)
         self.lastSpeed = 0
+        self.toggleHopper = False
 
     def setHexShaftSpeed(self, velocity : float):
         """
@@ -38,6 +39,7 @@ class BallPitHopper(commands2.Subsystem):
 
     def unjamHopper(self, velocity, repeat, duration):
         pre_unjamSpeed = self.getLastSpeed()
+        self.toggleHopper = False
         return commands2.cmd.sequence(
             commands2.cmd.repeatingSequence(
                 self.hex_shaft_generator(-velocity).withTimeout(duration),
@@ -45,11 +47,19 @@ class BallPitHopper(commands2.Subsystem):
             ).withTimeout(repeat * (duration * 2)),
             self.hex_shaft_generator(pre_unjamSpeed)
         )
-    
+
     def hex_shaft_generator(self, velocity):
         return commands2.cmd.run(lambda: self.setHexShaftSpeed(velocity), self)
         # self.setHexShaftSpeed(velocity)
 
+    def overrideHopperMotor(self):
+        self.toggleHopper = not self.toggleHopper
+
     def periodic(self):
-        self.hopperMotorPIDF.setReference(self.lastSpeed, rev.SparkLowLevel.ControlType.kVelocity, rev.ClosedLoopSlot.kSlot0)
+        if self.toggleHopper:
+            self.lastSpeed = BallpitConstants.motorGo
+            self.hopperMotorPIDF.setReference(self.lastSpeed, rev.SparkLowLevel.ControlType.kVelocity, rev.ClosedLoopSlot.kSlot0)
+        else:
+            self.lastSpeed = 0
+            self.hopperMotorPIDF.setReference(self.lastSpeed, rev.SparkLowLevel.ControlType.kVelocity, rev.ClosedLoopSlot.kSlot0)
         wpilib.SmartDashboard.putNumber("lastspeed hopper", self.lastSpeed)
