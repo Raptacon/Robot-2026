@@ -160,6 +160,14 @@ class RobotSwerve:
         ))
             
 
+        self.hopper.setDefaultCommand(commands2.cmd.select(
+            {
+                "hopperMode": self.hopper.hex_shaft_generator(BallpitConstants.motorGo),
+                "unjamMode": self.hopper.unjamHopper(BallpitConstants.motorOsc, BallpitConstants.repeat, BallpitConstants.oscillationduration_s)
+            },
+            self.hopper.getHopperMode
+        ))
+
         # TODO: Convert all subsystem bindings below to use InputFactory.
         # Add actions to data/inputs/2026bot.yaml and use self.factory.getButton()
         # to wire them. See _configure_controls() for examples.
@@ -254,15 +262,17 @@ class RobotSwerve:
             commands2.cmd.runOnce(self.shooter.toggleFlywheelActive, self.shooter)
         )
         self.toggle_shooter_feed = self.factory.getButton("shooter.toggle_feed").onTrue(
-            commands2.cmd.runOnce(self.shooter.toggleFeedActive, self.shooter)
-        )
+                commands2.cmd.sequence(
+                    commands2.cmd.runOnce(self.shooter.toggleFeedActive, self.shooter),
+                    commands2.cmd.runOnce(lambda: self.hopper.setHopperToggle(self.shooter.feedActive), self.hopper)
+            ))
 
         # Hopper inputs
-        self.toggle_hopper = self.factory.getButton("hopper.toggle_hopper").toggleOnTrue(
-            self.hopper.hex_shaft_generator(BallpitConstants.motorGo)
+        self.toggle_hopper = self.factory.getButton("hopper.toggle_hopper").onTrue(
+            commands2.cmd.runOnce(self.hopper.toggleHopperMotor, self.hopper)
         )
-        self.unjam_hopper = self.factory.getButton("hopper.unjam_hopper").toggleOnTrue(
-            commands2.DeferredCommand(lambda: self.hopper.unjamHopper(BallpitConstants.motorOsc, BallpitConstants.repeat, BallpitConstants.oscillationduration_s), self.hopper)
+        self.unjam_hopper = self.factory.getButton("hopper.unjam_hopper").onTrue(
+            commands2.cmd.runOnce(lambda: self.hopper.setHopperMode("unjamMode"), self.hopper)
         )
 
         # Intake inputs
