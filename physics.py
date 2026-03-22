@@ -148,6 +148,8 @@ class PhysicsEngine:
             )
 
         # Integrate chassis speeds into robot pose.
+        if len(module_states) != 4:
+            return
         speeds = self.kinematics.toChassisSpeeds(tuple(module_states))
         self._pose = self._pose.exp(
             Twist2d(
