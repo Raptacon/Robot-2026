@@ -18,12 +18,13 @@ from typing import Callable
 from config import ShooterConfig
 from constants.swerve_constants import BallpitConstants
 from data.telemetry import Telemetry
-from commands.auto.pid_to_angle import PIDToAngle
+from commands.auto.pid_to_angle import PIDAlignToTarget
 from commands.default_swerve_drive import DefaultDrive
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
 from subsystem.shooter import Shooter
 from subsystem.ballpit import BallPitHopper as Hopper
 from utils.input import InputFactory
+from utils.odometry_logic_2026 import determineShooterTargets2026
 
 # Third-party imports
 import commands2
@@ -249,9 +250,11 @@ class RobotSwerve:
 
         # Auto-rotate: rotate the drivetrain until it faces
         self.factory.getButton("drivetrain.auto_align").whileTrue(
-            PIDToAngle(self.drivetrain, lambda: Rotation2d.fromDegrees(0.5))
+            PIDAlignToTarget(
+                self.drivetrain,
+                lambda: determineShooterTargets2026(self.drivetrain.current_pose, self.alliance)
+            )
         ) 
-
 
         # Shooter inputs
         self.increment_shooter_offset = self.factory.getButton("shooter.increment_RPM").onTrue(

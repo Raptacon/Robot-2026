@@ -10,16 +10,16 @@ from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
 from commands2 import Command
 from wpimath import applyDeadband
 from wpimath.controller import ProfiledPIDController
-from wpimath.geometry import Rotation2d
+from wpimath.geometry import Translation2d
 from wpimath.kinematics import ChassisSpeeds
 from wpimath.trajectory import TrapezoidProfile
 
 
-class PIDToAngle(Command):
+class PIDAlignToTarget(Command):
     def __init__(
         self,
         drivetrain: SwerveDrivetrain,
-        target_rotation: Callable[[], Rotation2d] | None,
+        target_location: Callable[[], Translation2d] | None,
         rotation_pid_config: tuple = OperatorRobotConfig.pid_to_pose_rotation_pid_profile,
         setpoint_tolerances: tuple = OperatorRobotConfig.pid_to_pose_setpoint_tolerances
     ) -> None:
@@ -46,7 +46,7 @@ class PIDToAngle(Command):
         super().__init__()
 
         self.drivetrain = drivetrain
-        self.target_rotation = target_rotation
+        self.target_location = target_location
         self.rotation_pid = ProfiledPIDController(
             *rotation_pid_config[0:3], TrapezoidProfile.Constraints(*rotation_pid_config[3:5])
         )
@@ -65,14 +65,16 @@ class PIDToAngle(Command):
             None: translational and rotational velocities are passed into the drivetrain's drive
                 method, which runs the motors accordingly
         """
-        if self.target_rotation:
+        if self.target_location:
+            self.target_rotation = (self.target_location() - self.drivetrain.current_pose().translation()).angle()
             current_rotation = self.drivetrain.current_pose().rotation()
-            
-            rotation_error = (self.target_rotation() - current_rotation).radians()
+
+            rotation_error = (self.target_rotation - current_rotation).radians()
             rotation_output = -applyDeadband(self.rotation_pid.calculate(rotation_error, 0), 0.04, inf)
 
-            drive_speed = ChassisSpeeds.fromFieldRelativeSpeeds(0, 0, rotation_output, current_rotation)
-            self.drivetrain.drive(0, 0, drive_speed.omega, False)
+            current_velocities = self.drivetrain.current_robot_relative_speed()
+            new_rotation_velocity = ChassisSpeeds.fromFieldRelativeSpeeds(0, 0, rotation_output, current_rotation)
+            self.drivetrain.drive(current_velocities.vx, current_velocities.vy, new_rotation_velocity.omega, False)
 
     def end(self, interrupted: bool) -> None:
         """
