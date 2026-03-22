@@ -86,7 +86,7 @@ class SmokeTests(commands2.SequentialCommandGroup):
                 # commands2.runOnce(lambda: self.setMessage(21, "Onboard Sensors", "Trigger Breakbeam Sensors at Feed", "Successful Activation of Feed Breakbeam Sensors")),
                 # commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False)),
                 # Test confirms after Intake sensor activation
-                commands2.runOnce(lambda: self.setMessage(22, "Onboard Sensors", "Trigger Hall-Effects Sensor at Intake", "Successful Activation of Intake Hall-Effects Sensor")),
+                commands2.cmd.runOnce(lambda: self.setMessage(22, "Onboard Sensors", "Trigger Hall-Effects Sensor at Intake", "Successful Activation of Intake Hall-Effects Sensor")),
                 commands2.WaitUntilCommand(lambda: intake.HallEffectSensor.get()),
                 # Test confirms after Turret sensor activation
                 # commands2.runOnce(lambda: self.setMessage(23, "Onboard Sensors", "Trigger Forward Hall-Effects Sensor at Turret", "Successful Activation of Turret Forward Hall-Effects Sensor")),
