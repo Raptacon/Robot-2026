@@ -2,6 +2,11 @@ import commands2
 import rev
 import wpilib
 from constants.swerve_constants import BallpitConstants
+from enum import StrEnum
+
+class HopperModes(StrEnum):
+    HOPPER = "hopperMode"
+    UNJAM = "unjamMode"
 
 class BallPitHopper(commands2.Subsystem):
     def __init__(self) -> None:
@@ -18,6 +23,7 @@ class BallPitHopper(commands2.Subsystem):
         self.hopperMotor.configure(self.hopperConfig, rev.ResetMode.kResetSafeParameters, rev.PersistMode.kPersistParameters)
         self.lastSpeed = 0
         self.toggleHopper = False
+        self.hopperMode = HopperModes.HOPPER
 
     def setHexShaftSpeed(self, velocity : float):
         """
@@ -38,28 +44,40 @@ class BallPitHopper(commands2.Subsystem):
         return self.lastSpeed
 
     def unjamHopper(self, velocity, repeat, duration):
-        pre_unjamSpeed = self.getLastSpeed()
+        self.preToggleHopper = self.toggleHopper
         self.toggleHopper = False
         return commands2.cmd.sequence(
             commands2.cmd.repeatingSequence(
                 self.hex_shaft_generator(-velocity).withTimeout(duration),
                 self.hex_shaft_generator(velocity).withTimeout(duration),
             ).withTimeout(repeat * (duration * 2)),
-            self.hex_shaft_generator(pre_unjamSpeed)
+            commands2.cmd.runOnce(
+                lambda: self.setHopperToggle(self.preToggleHopper)
+            ),
+            commands2.cmd.runOnce(
+                self.setHopperMode(HopperModes.HOPPER)
+            )
         )
 
     def hex_shaft_generator(self, velocity):
         return commands2.cmd.run(lambda: self.setHexShaftSpeed(velocity), self)
         # self.setHexShaftSpeed(velocity)
 
-    def overrideHopperMotor(self):
+    def toggleHopperMotor(self):
         self.toggleHopper = not self.toggleHopper
 
+    def getHopperMode(self):
+        return self.hopperMode
+
+    def setHopperToggle(self, toggle):
+        self.toggleHopper = toggle
+
+    def setHopperMode(self, mode):
+        self.hopperMode = HopperModes(mode)
+
     def periodic(self):
-        if self.toggleHopper:
-            self.lastSpeed = BallpitConstants.motorGo
-            self.hopperMotorPIDF.setReference(self.lastSpeed, rev.SparkLowLevel.ControlType.kVelocity, rev.ClosedLoopSlot.kSlot0)
-        else:
-            self.lastSpeed = 0
-            self.hopperMotorPIDF.setReference(self.lastSpeed, rev.SparkLowLevel.ControlType.kVelocity, rev.ClosedLoopSlot.kSlot0)
+        if not self.toggleHopper:
+            self.lastSpeed = BallpitConstants.motorStop
+        self.hopperMotorPIDF.setReference(self.lastSpeed, rev.SparkLowLevel.ControlType.kVelocity, rev.ClosedLoopSlot.kSlot0)
+
         wpilib.SmartDashboard.putNumber("lastspeed hopper", self.lastSpeed)
