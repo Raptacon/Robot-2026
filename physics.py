@@ -9,10 +9,22 @@ visualization all respond correctly in simulation without tuning a dynamic model
 Robot field pose is integrated from swerve kinematics and fed back to:
   - The Field2d widget (visible in the sim GUI)
   - The NavX gyro sim device (so heading-based field-relative drive works)
+
+On macOS the WPILib sim GUI (GLFW) cannot read Xbox/PlayStation controller
+inputs because Apple's Game Controller framework intercepts them.  An optional
+SDL2-based bridge detects this at runtime — when a joystick port is mapped in
+the sim GUI but reports 0 axes, the bridge takes over and feeds controller
+data into the HAL sim.  Install ``pysdl2`` and ``pysdl2-dll`` to enable
+(not needed on Windows/Linux).
 """
 
+import logging
+import sys
+import threading
+import time
 import typing
 
+import hal.simulation
 import ntcore
 import rev
 import wpilib
@@ -25,6 +37,133 @@ from wpimath.system.plant import DCMotor
 
 if typing.TYPE_CHECKING:
     from robot import MyRobot
+
+logger = logging.getLogger("physics")
+
+
+# ---------------------------------------------------------------------------
+# macOS SDL2 controller bridge
+# ---------------------------------------------------------------------------
+
+def _start_sdl2_controller_bridge(port: int) -> None:
+    """Spawn a daemon thread that reads one game controller via SDL2 and
+    feeds its state into ``GenericHIDSim`` for the given WPILib joystick
+    *port*.
+
+    Called only when macOS is detected and the port has a mapped controller
+    with 0 reported axes (GLFW bug).
+    """
+    try:
+        import sdl2
+    except ImportError:
+        logger.warning(
+            "pysdl2 not installed — Xbox controller input in sim requires "
+            "'pip install pysdl2 pysdl2-dll' on macOS"
+        )
+        return
+
+    # --- mapping tables: SDL2 game controller → WPILib XboxController ---
+    _AXIS_MAP = {
+        sdl2.SDL_CONTROLLER_AXIS_LEFTX: 0,
+        sdl2.SDL_CONTROLLER_AXIS_LEFTY: 1,
+        sdl2.SDL_CONTROLLER_AXIS_TRIGGERLEFT: 2,
+        sdl2.SDL_CONTROLLER_AXIS_TRIGGERRIGHT: 3,
+        sdl2.SDL_CONTROLLER_AXIS_RIGHTX: 4,
+        sdl2.SDL_CONTROLLER_AXIS_RIGHTY: 5,
+    }
+    _BUTTON_MAP = {
+        sdl2.SDL_CONTROLLER_BUTTON_A: 1,
+        sdl2.SDL_CONTROLLER_BUTTON_B: 2,
+        sdl2.SDL_CONTROLLER_BUTTON_X: 3,
+        sdl2.SDL_CONTROLLER_BUTTON_Y: 4,
+        sdl2.SDL_CONTROLLER_BUTTON_LEFTSHOULDER: 5,
+        sdl2.SDL_CONTROLLER_BUTTON_RIGHTSHOULDER: 6,
+        sdl2.SDL_CONTROLLER_BUTTON_BACK: 7,
+        sdl2.SDL_CONTROLLER_BUTTON_START: 8,
+        sdl2.SDL_CONTROLLER_BUTTON_LEFTSTICK: 9,
+        sdl2.SDL_CONTROLLER_BUTTON_RIGHTSTICK: 10,
+    }
+    _DPAD = [
+        sdl2.SDL_CONTROLLER_BUTTON_DPAD_UP,
+        sdl2.SDL_CONTROLLER_BUTTON_DPAD_DOWN,
+        sdl2.SDL_CONTROLLER_BUTTON_DPAD_LEFT,
+        sdl2.SDL_CONTROLLER_BUTTON_DPAD_RIGHT,
+    ]
+
+    def _dpad_to_pov(up, down, left, right):
+        if up and right:
+            return 45
+        if right and down:
+            return 135
+        if down and left:
+            return 225
+        if left and up:
+            return 315
+        if up:
+            return 0
+        if right:
+            return 90
+        if down:
+            return 180
+        if left:
+            return 270
+        return -1
+
+    def _bridge_thread():
+        sdl2.SDL_SetHint(sdl2.SDL_HINT_JOYSTICK_MFI, b"1")
+        sdl2.SDL_Init(sdl2.SDL_INIT_GAMECONTROLLER)
+
+        # Allow time for controller discovery
+        for _ in range(20):
+            sdl2.SDL_PumpEvents()
+            time.sleep(0.05)
+
+        # Find the first game-controller-capable device
+        gc = None
+        for idx in range(sdl2.SDL_NumJoysticks()):
+            if sdl2.SDL_IsGameController(idx):
+                gc = sdl2.SDL_GameControllerOpen(idx)
+                break
+
+        if not gc:
+            logger.info("SDL2 bridge: no game controllers found")
+            sdl2.SDL_Quit()
+            return
+
+        gc_name = sdl2.SDL_GameControllerName(gc)
+        if gc_name and isinstance(gc_name, bytes):
+            gc_name = gc_name.decode()
+        logger.warning("SDL2 bridge: '%s' → HAL joystick port %d", gc_name, port)
+
+        sim = wpilib.simulation.GenericHIDSim(port)
+        sim.setAxisCount(6)
+        sim.setButtonCount(10)
+        sim.setPOVCount(1)
+
+        while True:
+            sdl2.SDL_PumpEvents()
+
+            for sdl_axis, wpi_axis in _AXIS_MAP.items():
+                raw = sdl2.SDL_GameControllerGetAxis(gc, sdl_axis)
+                sim.setRawAxis(wpi_axis, raw / 32767.0)
+
+            for sdl_btn, wpi_btn in _BUTTON_MAP.items():
+                sim.setRawButton(
+                    wpi_btn,
+                    bool(sdl2.SDL_GameControllerGetButton(gc, sdl_btn)),
+                )
+
+            dpad = [
+                bool(sdl2.SDL_GameControllerGetButton(gc, b)) for b in _DPAD
+            ]
+            sim.setPOV(0, _dpad_to_pov(*dpad))
+
+            time.sleep(0.01)
+
+    t = threading.Thread(
+        target=_bridge_thread, daemon=True, name="sdl2-controller-bridge"
+    )
+    t.start()
 
 
 class PhysicsEngine:
@@ -108,6 +247,38 @@ class PhysicsEngine:
             # ignore errors here and leave _navx_yaw as None.
             pass
 
+        # macOS controller bridge state — checked each tick until resolved.
+        # We monitor joystick ports 0 and 1 (driver and operator).  Once a
+        # port is assigned in the sim GUI but reports 0 axes we know GLFW
+        # cannot read it and start the SDL2 bridge for that port.
+        if sys.platform == "darwin":
+            self._controller_bridge_ports_to_check: set[int] = {0, 1}
+        else:
+            self._controller_bridge_ports_to_check: set[int] = set()
+
+    def _check_controller_bridge(self) -> None:
+        """On macOS, detect joystick ports that are mapped but broken (0 axes)
+        and start the SDL2 bridge for them.  Removes ports from the check set
+        once resolved (either working or bridged)."""
+        resolved = set()
+        for port in self._controller_bridge_ports_to_check:
+            axis_count, button_count, _ = hal.simulation.getJoystickCounts(port)
+            if axis_count > 0:
+                # GLFW is reading this port fine — no bridge needed
+                resolved.add(port)
+            elif button_count > 0:
+                # Controller is mapped (has buttons) but reports 0 axes —
+                # this is the broken GLFW state on macOS.
+                logger.warning(
+                    "macOS GLFW reports 0 axes for joystick port %d "
+                    "(buttons=%d) — starting SDL2 bridge",
+                    port, button_count,
+                )
+                _start_sdl2_controller_bridge(port)
+                resolved.add(port)
+            # else: nothing mapped yet, keep checking
+        self._controller_bridge_ports_to_check -= resolved
+
     def update_sim(self, now: float, tm_diff: float) -> None:
         """
         Called every simulation tick.
@@ -124,6 +295,10 @@ class PhysicsEngine:
             now: current timestamp in seconds
             tm_diff: elapsed time since last call in seconds
         """
+        # Check for broken macOS controller input each tick until resolved.
+        if self._controller_bridge_ports_to_check:
+            self._check_controller_bridge()
+
         module_states = []
 
         for module, drive_sim, steer_sim in zip(
