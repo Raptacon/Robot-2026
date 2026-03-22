@@ -14,8 +14,6 @@ import os
 from pathlib import Path
 from typing import Callable
 
-import wpimath
-
 # Internal imports
 from config import ShooterConfig
 from constants.swerve_constants import BallpitConstants
@@ -153,10 +151,9 @@ class RobotSwerve:
             )
         )
 
-        # TODO: Get odometry from drivetrain and calculate range
         self.shooter.setDefaultCommand(commands2.cmd.select(
             {
-                "autoRPM": commands2.cmd.run(lambda: self.shooter.setRpmUsingLookup(1), self.shooter),
+                "autoRPM": commands2.cmd.run(lambda: self.shooter.setRpmUsingLookup(self.shooter.calculateRangeFromOdometry(self.drivetrain.current_pose, self.alliance)), self.shooter),
                 "fixedRPM": commands2.cmd.run(lambda: self.shooter.setRPM(ShooterConfig.shooterFixedRPM), self.shooter)
             },
             self.shooter.getFlywheelMode
