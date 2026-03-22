@@ -19,7 +19,7 @@ def determineShooterTargets2026(odometry: Callable[[],Pose2d], alliance: wpilib.
     odometryTranslation = odometry().translation()
     target = Translation2d(8.270494, 4.034536)
     if alliance == wpilib.DriverStation.Alliance.kRed:
-        if odometryTranslation.X() > FieldTargets2026.redHubTarget[0]: 
+        if odometryTranslation.X() > FieldTargets2026.redHubTarget[0]:
             target = FieldTargets2026.redHubTarget
         elif odometryTranslation.Y() < FieldTargets2026.redHubTarget[1]:
             target = FieldTargets2026.bottomRightTarget
