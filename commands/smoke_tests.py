@@ -36,7 +36,7 @@ class SmokeTests(commands2.SequentialCommandGroup):
 
         self.progress = False
         self.testMessage = ""
-        self.totaltests = 24
+        self.totaltests = 32
         # self.velocity_vector_x = velocity_vector_x
         # self.velocity_vector_y = velocity_vector_y
         # self.angular_velocity = angular_velocity
