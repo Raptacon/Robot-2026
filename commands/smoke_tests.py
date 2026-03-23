@@ -98,35 +98,35 @@ class SmokeTests(commands2.SequentialCommandGroup):
         self.addCommands(
             #Test Intake Deployment
             commands2.InstantCommand(lambda intake=intake: intake.deployIntake(), self.intake),
-            commands2.cmd.runOnce(self.setMessage(25, "Intake", "Check to see if Intake begins deploying...", "Manual Confirmation")),
+            commands2.cmd.runOnce(lambda: self.setMessage(25, "Intake", "Check to see if Intake begins deploying...", "Manual Confirmation")),
             commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False)),
             #Test Intake Stow
             commands2.InstantCommand(lambda intake=intake: intake.stowIntake(), self.intake),
-            commands2.cmd.runOnce(self.setMessage(26, "Intake", "Check to see if Intake begins stowing...", "Manual Confirmation")),
+            commands2.cmd.runOnce(lambda: self.setMessage(26, "Intake", "Check to see if Intake begins stowing...", "Manual Confirmation")),
             commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False)),
             #Test Hopper Activation
             commands2.InstantCommand(lambda hopper=hopper: hopper.setHexShaftSpeed(0.2), self.hopper),
-            commands2.cmd.runOnce(self.setMessage(27, "Hopper", "Check to see if Hopper activates...", "Manual Confirmation")),
+            commands2.cmd.runOnce(lambda: self.setMessage(27, "Hopper", "Check to see if Hopper activates...", "Manual Confirmation")),
             commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False)),
             #Test Hopper Deactivation
             commands2.InstantCommand(lambda hopper=hopper: hopper.zeroHopperVelocity(), self.hopper),
-            commands2.cmd.runOnce(self.setMessage(28, "Hopper", "Check to see if Hopper deactivates...", "Manual Confirmation")),
+            commands2.cmd.runOnce(lambda: self.setMessage(28, "Hopper", "Check to see if Hopper deactivates...", "Manual Confirmation")),
             commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False)),
             #Test Shooter Feed Activation
             commands2.InstantCommand(lambda shooter=shooter: shooter.toggleFeedActive(), self.shooter),
-            commands2.cmd.runOnce(self.setMessage(29, "Shooter", "Check to see if Feed activates...", "Manual Confirmation")),
+            commands2.cmd.runOnce(lambda: self.setMessage(29, "Shooter", "Check to see if Feed activates...", "Manual Confirmation")),
             commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False)),
             #Test Shooter Feed Deactivation
             commands2.InstantCommand(lambda shooter=shooter: shooter.toggleFeedActive(), self.shooter),
-            commands2.cmd.runOnce(self.setMessage(30, "Shooter", "Check to see if Feed deactivates...", "Manual Confirmation")),
+            commands2.cmd.runOnce(lambda: self.setMessage(30, "Shooter", "Check to see if Feed deactivates...", "Manual Confirmation")),
             commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False)),
             #Test Shooter Flywheel Activation
             commands2.InstantCommand(lambda shooter=shooter: shooter.setRPM(3000), self.shooter),
-            commands2.cmd.runOnce(self.setMessage(31, "Shooter", "Check to see if BOTH Flywheels activate...", "Manual Confirmation")),
+            commands2.cmd.runOnce(lambda: self.setMessage(31, "Shooter", "Check to see if BOTH Flywheels activate...", "Manual Confirmation")),
             commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False)),
             #Test Shooter Flywheel Deactivation
             commands2.InstantCommand(lambda shooter=shooter: shooter.setRPM(0), self.shooter),
-            commands2.cmd.runOnce(self.setMessage(32, "Shooter", "Check to see if BOTH Flywheels deactivate...", "Manual Confirmation")),
+            commands2.cmd.runOnce(lambda: self.setMessage(32, "Shooter", "Check to see if BOTH Flywheels deactivate...", "Manual Confirmation")),
             commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False)),
         )
 
