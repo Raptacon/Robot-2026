@@ -55,3 +55,4 @@ class ShooterConfig:
     # Configs for shooter
     shooterFeedMotorPIDF = (0, 0, 0, 1 / 473)
     shooterFlywheelMotorPIDF = (0, 0, 0, 1 / 560)
+    shooterHoodMotorPIDF = (0, 0, 0, 1/917)

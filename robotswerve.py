@@ -156,7 +156,7 @@ class RobotSwerve:
         self.shooter.setDefaultCommand(commands2.cmd.select(
             {
                 "autoRPM": commands2.cmd.run(
-                    lambda: self.shooter.setRpmUsingLookup(
+                    lambda: self.shooter.setRpmAndHoodUsingLookup(
                         self.shooter.calculateRangeFromOdometry(
                             self.drivetrain.current_pose,
                             lambda: determineShooterTargets2026(self.drivetrain.current_pose, self.alliance)
@@ -287,6 +287,12 @@ class RobotSwerve:
                     commands2.cmd.runOnce(self.shooter.toggleFeedActive, self.shooter),
                     commands2.cmd.runOnce(lambda: self.hopper.setHopperToggle(self.shooter.feedActive), self.hopper)
             ))
+        self.raise_shooter_hood = self.factory.getButton("shooter.raise_hood").onTrue(
+            commands2.cmd.runOnce(lambda: self.shooter.cycleHoodPosition(True), self.shooter),
+        )
+        self.lower_shooter_hood = self.factory.getButton("shooter.lower_hood").onTrue(
+            commands2.cmd.runOnce(lambda: self.shooter.cycleHoodPosition(False), self.shooter)
+        )
 
         # Hopper inputs
         self.toggle_hopper = self.factory.getButton("hopper.toggle_hopper").onTrue(
