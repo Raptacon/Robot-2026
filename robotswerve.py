@@ -28,7 +28,6 @@ from utils.odometry_logic_2026 import determineShooterTargets2026
 
 # Third-party imports
 import commands2
-import rev
 import wpilib
 from commands2.button import Trigger
 from pathplannerlib.auto import AutoBuilder
