@@ -44,18 +44,20 @@ class Shooter(Subsystem):
 
         # Create lookup table (distance, RPM)
         self.lookupTable = [
-            (0.0, 1000),
-            (1.0, 1500),
-            (2.0, 2000),
-            (3.0, 3000),
-            (4.0, 3500),
-            (5.0, 4000),
+            (0.0, 1000, 0),
+            (1.0, 1500, 1),
+            (2.0, 2000, 1),
+            (3.0, 3000, 2),
+            (4.0, 3500, 3),
+            (5.0, 4000, 4),
             ]
         self.lookupTable.sort()
         # Create an array of just distances
-        self.lookupShooterDistances = np.array([d for d, _ in self.lookupTable])
+        self.lookupShooterDistances = np.array([d for d, _, _ in self.lookupTable])
         # Create an array of just RPMs
-        self.lookupShooterRpms = np.array([r for _, r in self.lookupTable])
+        self.lookupShooterRpms = np.array([r for _, r, _ in self.lookupTable])
+        # Create an array of just hood positions
+        self.lookupHoodPositions = np.array([p for _, _, p in self.lookupTable])
 
         # List shooter hood positions
         self.hoodPositionLookup = [
@@ -75,9 +77,9 @@ class Shooter(Subsystem):
         # Set up configs for each motor
         self.configureMotor(self.feedMotor, ShooterConfig.shooterFeedMotorPIDF, PancakeShooterConstants.shooterInverted[0])
         self.configureMotor(self.leadFlywheelMotor, ShooterConfig.shooterFlywheelMotorPIDF, PancakeShooterConstants.shooterInverted[1])
-        self.configureMotor(self.followerFlywheelMotor, ShooterConfig.shooterFlywheelMotorPIDF, PancakeShooterConstants.shooterInverted[2], self.leadFlywheelMotor)
+        self.configureMotor(self.followerFlywheelMotor, ShooterConfig.shooterFlywheelMotorPIDF, PancakeShooterConstants.shooterInverted[2], leader=self.leadFlywheelMotor)
         # Check inversion
-        self.configureMotor(self.hoodMotor, ShooterConfig.shooterFlywheelMotorPIDF, PancakeShooterConstants.shooterInverted[3])
+        self.configureMotor(self.hoodMotor, ShooterConfig.shooterFlywheelMotorPIDF, PancakeShooterConstants.shooterInverted[3], positionConversionFactor=PancakeShooterConstants.shooterPositionConversionFactor)
 
         self.motors: Dict[str, rev.SparkFlex | rev.SparkMax] = {
             ShooterMotorNames.FEED: self.feedMotor,
@@ -110,10 +112,13 @@ class Shooter(Subsystem):
             ShooterMotorNames.FOLLOWER_FLYWHEEL: self.leadFlywheelPID,
         }
 
+        self.hoodEncoder.setPosition(0)
+
     def configureMotor(
         self, motor: rev.SparkFlex | rev.SparkMax,
         pidf: tuple,
         invert: bool,
+        positionConversionFactor: float = None,
         leader: rev.SparkFlex | rev.SparkMax = None
     ):
         """
@@ -136,6 +141,9 @@ class Shooter(Subsystem):
             configs.inverted(invert)
             configs.closedLoop.pidf(*pidf, rev.ClosedLoopSlot.kSlot0)
 
+        if positionConversionFactor is not None:
+            configs.encoder.positionConversionFactor(positionConversionFactor)
+
         motor.configure(configs, rev.ResetMode.kResetSafeParameters, rev.PersistMode.kPersistParameters)
 
     def setMotorVoltage(self, motorName: str, voltage: float):
@@ -151,18 +159,18 @@ class Shooter(Subsystem):
         """
         self.motors[motorName].setVoltage(voltage)
 
-    def setMotorReference(self, motorName: str, rpm: float, controlType: rev.SparkLowLevel.ControlType):
+    def setMotorReference(self, motorName: str, setpoint: float, controlType: rev.SparkLowLevel.ControlType):
         """
-        Give a custom setpoint for PID to achieve in terms of velocity
+        Give a custom setpoint for PID to achieve
 
         Args:
             motorName: Name of the motor
-            rpm: The velocity setpoint for the motor in RPM
+            setpoint: The PID setpoint for the target motor
 
         Returns:
             None
         """
-        self.PIDs[motorName].setReference(rpm, controlType, rev.ClosedLoopSlot.kSlot0)
+        self.PIDs[motorName].setReference(setpoint, controlType, rev.ClosedLoopSlot.kSlot0)
 
     def setRPM(self, rpm: float):
         """
@@ -191,9 +199,9 @@ class Shooter(Subsystem):
     def getPosition(self, motorName: str):
         return self.encoders[motorName].getPosition()
 
-    def setRpmUsingLookup(self, distance: float):
+    def setRpmAndHoodUsingLookup(self, distance: float):
         """
-        Set the RPM needed to shoot the ball at a specified distance
+        Set the RPM and hood position needed to shoot the ball at a specified distance
 
         Args:
             distance: distance in meters from a target point
@@ -203,6 +211,12 @@ class Shooter(Subsystem):
         """
         # Get RPM from the distance given
         self.RPM = float(np.interp(distance, self.lookupShooterDistances, self.lookupShooterRpms))
+        newPositionNumber = int(np.floor(np.interp(distance, self.lookupShooterDistances, self.lookupHoodPositions)))
+        if newPositionNumber > (len([self.hoodPositionLookup]) - 1):
+            newPositionNumber = (len([self.hoodPositionLookup]) - 1)
+        if newPositionNumber < 0:
+            newPositionNumber = 0
+        self.positionNumber = newPositionNumber
 
     def modifyOffset(self, offsetDelta: float):
         """
@@ -251,12 +265,12 @@ class Shooter(Subsystem):
             self.flywheelMode = FlywheelModes.AUTO_RPM
 
     def cycleHoodPosition(self, cyclePositive: bool):
-        if cyclePositive == True:
+        if cyclePositive:
             self.positionNumber += 1
         else:
             self.positionNumber -= 1
-        if self.positionNumber > 4:
-            self.positionNumber = 4
+        if self.positionNumber > (len([self.hoodPositionLookup]) - 1):
+            self.positionNumber = (len([self.hoodPositionLookup]) - 1)
         if self.positionNumber < 0:
             self.positionNumber = 0
 
@@ -290,6 +304,8 @@ class Shooter(Subsystem):
         else:
             newRPM = 0
             self.setMotorVoltage(ShooterMotorNames.LEAD_FLYWHEEL, 0)
+
+        self.setMotorReference(ShooterMotorNames.HOOD, self.hoodPositionLookup[self.positionNumber], rev.SparkLowLevel.ControlType.kPosition)
 
         wpilib.SmartDashboard.putNumber("Shooter_RPM", newRPM)
         wpilib.SmartDashboard.putNumber("Shooter_Feed_RPM", feedRPM)
