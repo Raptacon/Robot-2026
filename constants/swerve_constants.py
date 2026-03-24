@@ -160,7 +160,7 @@ class PancakeShooterConstants:
     feedMotorId = 30
     leadMotorId = 32
     followerMotorId = 33
-    hoodMotorId = 31
+    hoodMotorId = 34
     # Feed, Lead, Follower, Hood
     shooterInverted = (True, False, True, False)
     shooterOffsetDelta = 100

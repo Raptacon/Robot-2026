@@ -40,13 +40,6 @@ class Shooter(Subsystem):
         self.flywheelMode = FlywheelModes.AUTO_RPM
         self.feedActive = False
         self.flywheelActive = False
-        # Coordinates are in meters
-        self.blueHubCords = Translation2d(4.625594, 4.034536)
-        self.redHubCords = Translation2d(11.915394, 4.034536)
-        self.bottomLeftTarget = Translation2d(1, 1)
-        self.bottomRightTarget = Translation2d(15.540988, 1)
-        self.topLeftTarget = Translation2d(1, 7.069326)
-        self.topRightTarget = Translation2d(15.540988, 7.069326)
         self.positionNumber = 0
 
         # Create lookup table (distance, RPM)
@@ -77,8 +70,7 @@ class Shooter(Subsystem):
         self.feedMotor = rev.SparkMax(PancakeShooterConstants.feedMotorId, rev.SparkLowLevel.MotorType.kBrushless)
         self.leadFlywheelMotor = rev.SparkFlex(PancakeShooterConstants.leadMotorId, rev.SparkLowLevel.MotorType.kBrushless)
         self.followerFlywheelMotor = rev.SparkFlex(PancakeShooterConstants.followerMotorId, rev.SparkLowLevel.MotorType.kBrushless)
-        # Check motor controller type and id
-        self.hoodMotor = rev.SparkFlex(PancakeShooterConstants.hoodMotorId, rev.SparkLowLevel.MotorType.kBrushless)
+        self.hoodMotor = rev.SparkMax(PancakeShooterConstants.hoodMotorId, rev.SparkLowLevel.MotorType.kBrushless)
 
         # Set up configs for each motor
         self.configureMotor(self.feedMotor, ShooterConfig.shooterFeedMotorPIDF, PancakeShooterConstants.shooterInverted[0])
