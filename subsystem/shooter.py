@@ -212,8 +212,8 @@ class Shooter(Subsystem):
         # Get RPM from the distance given
         self.RPM = float(np.interp(distance, self.lookupShooterDistances, self.lookupShooterRpms))
         newPositionNumber = int(np.floor(np.interp(distance, self.lookupShooterDistances, self.lookupHoodPositions)))
-        if newPositionNumber > (len([self.hoodPositionLookup]) - 1):
-            newPositionNumber = (len([self.hoodPositionLookup]) - 1)
+        if newPositionNumber > (len(self.hoodPositionLookup) - 1):
+            newPositionNumber = (len(self.hoodPositionLookup) - 1)
         if newPositionNumber < 0:
             newPositionNumber = 0
         self.positionNumber = newPositionNumber
@@ -269,8 +269,8 @@ class Shooter(Subsystem):
             self.positionNumber += 1
         else:
             self.positionNumber -= 1
-        if self.positionNumber > (len([self.hoodPositionLookup]) - 1):
-            self.positionNumber = (len([self.hoodPositionLookup]) - 1)
+        if self.positionNumber > (len(self.hoodPositionLookup) - 1):
+            self.positionNumber = (len(self.hoodPositionLookup) - 1)
         if self.positionNumber < 0:
             self.positionNumber = 0
 
