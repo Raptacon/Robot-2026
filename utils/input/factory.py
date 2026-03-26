@@ -40,6 +40,7 @@ from utils.input.shaping import build_shaping_pipeline
 from utils.input.virtual_analog import VirtualAnalogGenerator
 from utils.input._factory_helpers import (
     ControllerState,
+    format_binding_info,
     make_analog_nt_class,
     make_axis_accessor,
     make_button_condition,
@@ -349,6 +350,7 @@ class InputFactory:
         nt_path = f"{_NT_BASE}/actions/{action.group}/{action.name}"
         klass = make_button_nt_class(nt_path, action)
         btn = klass(action, condition, default_value)
+        btn._binding_info = format_binding_info(state, input_name)
         if threshold_ref is not None:
             btn._threshold_ref = threshold_ref
         self._buttons[qn] = btn
@@ -459,6 +461,7 @@ class InputFactory:
             nt_path = f"{_NT_BASE}/actions/{action.group}/{action.name}"
             klass = make_analog_nt_class(nt_path, action)
             analog = klass(action, generator.get_value, default_value)
+            analog._binding_info = format_binding_info(state, input_name)
             self._analogs[qn] = analog
             self._mark_in_use(analog)
             return analog
@@ -481,6 +484,7 @@ class InputFactory:
         nt_path = f"{_NT_BASE}/actions/{action.group}/{action.name}"
         klass = make_analog_nt_class(nt_path, action)
         analog = klass(action, accessor, default_value)
+        analog._binding_info = format_binding_info(state, input_name)
         self._analogs[qn] = analog
         self._mark_in_use(analog)
         return analog
@@ -603,6 +607,7 @@ class InputFactory:
         nt_path = f"{_NT_BASE}/actions/{action.group}/{action.name}"
         klass = make_rumble_nt_class(nt_path, action)
         rumble = klass(action, setter)
+        rumble._binding_info = format_binding_info(state, input_name)
         self._rumbles[qn] = rumble
         self._mark_in_use(rumble)
         return rumble

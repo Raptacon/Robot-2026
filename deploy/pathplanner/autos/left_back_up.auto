@@ -7,13 +7,13 @@
         {
           "type": "path",
           "data": {
-            "pathName": "ms_forward"
+            "pathName": "left_back_up"
           }
         }
       ]
     }
   },
   "resetOdom": true,
-  "folder": "Autos2025_Blue",
+  "folder": null,
   "choreoAuto": false
 }
