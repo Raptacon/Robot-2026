@@ -296,6 +296,7 @@ class Shooter(Subsystem):
             feedRPM = int(newRPM * PancakeShooterConstants.shooterFeedPercentOfFlywheel)
             self.setMotorReference(ShooterMotorNames.FEED, feedRPM, rev.SparkLowLevel.ControlType.kVelocity)
         else:
+            self.positionNumber = 0
             feedRPM = 0
             self.setMotorVoltage(ShooterMotorNames.FEED, 0)
 
