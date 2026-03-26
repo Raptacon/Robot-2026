@@ -30,20 +30,20 @@ class TestIntakeRoller:
         cls.pivot_sim.setBusVoltage(12.0)
 
     def setup_method(self):
-        self.intake.rollerPower = 0.0
-        self.intake.pivotPower = 0.0
+        self.intake.rollerSetpoint = 0.0
+        self.intake.pivotSetpoint = 0.0
         self.intake.rollerStoppedOnce = False
         self.intake.jamDetected = False
         self.intake.jamTimingActive = False
 
-    def test_request_roller_on_sets_power(self):
+    def test_request_roller_on_sets_setpoint(self):
         self.intake.requestRollerOn()
-        assert self.intake.rollerPower == 1
+        assert self.intake.rollerSetpoint == self.intake.rollerBaseSpeed
 
-    def test_request_roller_off_sets_power(self):
-        self.intake.rollerPower = 1
+    def test_request_roller_off_sets_setpoint(self):
+        self.intake.rollerSetpoint = self.intake.rollerBaseSpeed
         self.intake.requestRollerOff()
-        assert self.intake.rollerPower == 0
+        assert self.intake.rollerSetpoint == 0
 
     def test_request_roller_on_clears_stopped_once(self):
         self.intake.rollerStoppedOnce = True
@@ -54,30 +54,21 @@ class TestIntakeRoller:
         """requestRollerOn must return immediately, not block on velocity."""
         self.intake.requestRollerOn()
         # If we got here, it didn't block
-        assert self.intake.rollerPower == 1
+        assert self.intake.rollerSetpoint == self.intake.rollerBaseSpeed
 
     def test_request_roller_off_is_nonblocking(self):
         """requestRollerOff must return immediately, not block on velocity."""
-        self.intake.rollerPower = 1
+        self.intake.rollerSetpoint = 1
         self.intake.requestRollerOff()
-        assert self.intake.rollerPower == 0
+        assert self.intake.rollerSetpoint == 0
 
-    def test_roller_power_multiplier_forward(self):
-        self.intake.rollerPower = 1
-        self.intake.rollerSpeed = 0.3
-        expected = 1 * 0.3
-        assert self.intake.rollerPower * self.intake.rollerSpeed == expected
+    def test_roller_setpoint_forward(self):
+        self.intake.requestRollerOn()
+        assert self.intake.rollerSetpoint == self.intake.rollerBaseSpeed
 
-    def test_roller_power_multiplier_reverse(self):
-        self.intake.rollerPower = -1
-        self.intake.rollerSpeed = 0.3
-        expected = -1 * 0.3
-        assert self.intake.rollerPower * self.intake.rollerSpeed == expected
-
-    def test_roller_power_multiplier_off(self):
-        self.intake.rollerPower = 0
-        self.intake.rollerSpeed = 0.3
-        assert self.intake.rollerPower * self.intake.rollerSpeed == 0
+    def test_roller_setpoint_off(self):
+        self.intake.requestRollerOff()
+        assert self.intake.rollerSetpoint == 0
 
 
 class TestIntakePivot:
@@ -96,71 +87,56 @@ class TestIntakePivot:
         cls.roller_sim = TestIntakeRoller.roller_sim
 
     def setup_method(self):
-        self.intake.pivotPower = 0.0
+        self.intake.pivotSetpoint = 0.0
         self.intake.pivotSpeed = 0.3
-        self.intake.rollerPower = 0.0
+        self.intake.rollerSetpoint = 0.0
         self.intake.pivotRamping = False
         self.intake.rampPower = 0.0
         self.intake.pivotRampComplete = False
         self.pivot_sim.setPosition(0.0)
 
-    def test_deploy_sets_positive_power(self):
-        """With encoder at 0 (below deployed limit), deployIntake should set power=1."""
+    def test_deploy_sets_positive_setpoint(self):
+        """With encoder at 0 (below deployed limit), deployIntake should set positive setpoint."""
         self.intake.pivotMotorEncoder.setPosition(0.0)
         self.intake.deployIntake()
-        assert self.intake.pivotPower == 1
+        assert self.intake.pivotSetpoint == self.intake.pivotBaseSpeed
 
-    def test_stow_sets_negative_power(self):
-        """With encoder past stowed, stowIntake should set power=-1."""
+    def test_stow_sets_negative_setpoint(self):
+        """With encoder past stowed, stowIntake should set negative setpoint."""
         self.intake.pivotMotorEncoder.setPosition(50.0)
-        self.intake.pivotPower = 0.0
+        self.intake.pivotSetpoint = 0.0
         self.intake.stowIntake()
-        assert self.intake.pivotPower == -1
+        assert self.intake.pivotSetpoint == -self.intake.pivotBaseSpeed
 
     def test_deploy_stops_at_limit(self):
-        """When encoder is past deployed limit, deployIntake should zero power."""
+        """When encoder is past deployed limit, deployIntake should zero setpoint."""
         self.intake.pivotMotorEncoder.setPosition(self.intake.pivotDeployed + 1)
-        self.intake.pivotPower = 1
+        self.intake.pivotSetpoint = self.intake.pivotBaseSpeed
         self.intake.deployIntake()
-        assert self.intake.pivotPower == 0
+        assert self.intake.pivotSetpoint == 0
 
     def test_stow_stops_at_limit(self):
-        """When encoder is past stowed limit, stowIntake should zero power."""
+        """When encoder is past stowed limit, stowIntake should zero setpoint."""
         self.intake.pivotMotorEncoder.setPosition(self.intake.pivotStowed - 1)
-        self.intake.pivotPower = -1
+        self.intake.pivotSetpoint = -self.intake.pivotBaseSpeed
         self.intake.stowIntake()
-        assert self.intake.pivotPower == 0
-
-    def test_motor_checks_zeros_speed_when_stopped(self):
-        self.intake.pivotPower = 0
-        self.intake.motorChecks()
-        assert self.intake.pivotSpeed == 0
-
-    def test_pivot_power_multiplier_deploy(self):
-        self.intake.pivotPower = 1
-        self.intake.pivotSpeed = 0.3
-        assert self.intake.pivotPower * self.intake.pivotSpeed == 0.3
-
-    def test_pivot_power_multiplier_stow(self):
-        self.intake.pivotPower = -1
-        self.intake.pivotSpeed = 0.3
-        assert self.intake.pivotPower * self.intake.pivotSpeed == -0.3
+        assert self.intake.pivotSetpoint == 0
 
     def test_pivot_slowdown_deploy(self):
-        self.intake.pivotPower = 1
+        self.intake.pivotSetpoint = self.intake.pivotBaseSpeed
         # Position past 75% of travel
         self.intake.pivotMotorEncoder.setPosition(self.intake.pivotDeployed * 0.8)
         self.intake.pivotSlowdown()
-        assert self.intake.pivotPower == 0.5
+        assert self.intake.pivotSetpoint == self.intake.pivotBaseSpeed / 2
 
     def test_pivot_slowdown_stow(self):
-        self.intake.pivotPower = -1
+        self.intake.pivotSetpoint = -self.intake.pivotBaseSpeed
         self.intake.pivotDeployed = 155
         self.intake.pivotStowed = 0
         # Position past 75% of stow travel (near 0)
         self.intake.pivotMotorEncoder.setPosition(self.intake.pivotDeployed * 0.2)
         self.intake.pivotSlowdown()
-        assert self.intake.pivotPower == -0.5
+        assert self.intake.pivotSetpoint == -self.intake.pivotBaseSpeed / 2
 
     def test_periodic_runs_without_error(self):
         """Smoke test: periodic() should not raise."""
