@@ -164,7 +164,7 @@ class RobotSwerve:
                     ),
                     self.shooter
                 ),
-                "fixedRPM": commands2.cmd.run(lambda: self.shooter.setRPM(PancakeShooterConstants.shooterFixedRPM), self.shooter)
+                "fixedRPM": commands2.cmd.run(lambda: self.shooter.setRpmAtFixedPosition(), self.shooter)
             },
             self.shooter.getFlywheelMode
         ))
@@ -177,36 +177,6 @@ class RobotSwerve:
             },
             self.hopper.getHopperMode
         ))
-
-        # TODO: Convert all subsystem bindings below to use InputFactory.
-        # Add actions to data/inputs/2026bot.yaml and use self.factory.getButton()
-        # to wire them. See _configure_controls() for examples.
-
-        # Hopper bindings (mech_controller port 1)
-        # self.hopper.setDefaultCommand(self.hopper.hex_shaft_generator(BallpitConstants.motorStop))
-        # self.mech_controller.leftBumper().toggleOnTrue(
-        #     self.hopper.hex_shaft_generator(BallpitConstants.motorGo)
-        # )
-        # self.mech_controller.rightBumper().toggleOnTrue(
-        #     commands2.DeferredCommand(lambda: self.hopper.unjamHopper(BallpitConstants.motorOsc, BallpitConstants.repeat, BallpitConstants.duration), self.hopper)
-        # )
-
-        # Intake bindings (driver_controller port 0)
-        # self.driver_controller.y().onTrue(
-        #     commands2.cmd.runOnce(self.intake.stowIntake, self.intake)
-        # )
-        # self.driver_controller.a().onTrue(
-        #     commands2.cmd.runOnce(self.intake.deployIntake, self.intake)
-        # )
-        # self.driver_controller.x().onTrue(
-        #     commands2.cmd.runOnce(self.intake.deactivateRoller, self.intake)
-        # )
-        # self.driver_controller.b().onTrue(
-        #     commands2.cmd.runOnce(self.intake.activateRoller, self.intake)
-        # )
-        # self.driver_controller.start().onTrue(
-        #     commands2.cmd.run(self.intake.rampIntake, self.intake)
-        # )
 
     def teleopPeriodic(self):
         pass

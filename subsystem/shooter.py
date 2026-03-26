@@ -31,6 +31,19 @@ class FlywheelModes(StrEnum):
     AUTO_RPM = "autoRPM"
     FIXED_RPM = "fixedRPM"
 
+class FixedShootingPositions(StrEnum):
+    """
+    Define a set of postiions on the field to tie fixed RPMs to
+    """
+
+    DEFAULT = "default"
+    HUB = "hub"
+    TOWER = "tower"
+    ALLIANCE_CORNER = "alliance_corner"
+    CLOSE_FEED = "close_feed"
+    MID_FEED = "mid_feed"
+    FAR_FEED = "far_feed"
+
 class Shooter(Subsystem):
     def __init__(self):
         super().__init__()
@@ -38,6 +51,7 @@ class Shooter(Subsystem):
         self.offsetDelta = 0
         self.RPM = 0
         self.flywheelMode = FlywheelModes.AUTO_RPM
+        self.fixedRPMPosition = FixedShootingPositions.DEFAULT
         self.feedActive = False
         self.flywheelActive = False
         self.positionNumber = 0
@@ -67,6 +81,17 @@ class Shooter(Subsystem):
             PancakeShooterConstants.shooterHoodPosition3,
             PancakeShooterConstants.shooterHoodMaxPosition
         ]
+
+        # Create a lookup for fixed location RPMs
+        self.lookupFixedPositionRPMs = {
+            FixedShootingPositions.DEFAULT: 3000,
+            FixedShootingPositions.HUB: 1500,
+            FixedShootingPositions.TOWER: 2250,
+            FixedShootingPositions.ALLIANCE_CORNER: 3500,
+            FixedShootingPositions.CLOSE_FEED: 1750,
+            FixedShootingPositions.MID_FEED: 2750,
+            FixedShootingPositions.FAR_FEED: 4500,
+        } 
 
         # Instantiate motors
         self.feedMotor = rev.SparkMax(PancakeShooterConstants.feedMotorId, rev.SparkLowLevel.MotorType.kBrushless)
@@ -217,6 +242,28 @@ class Shooter(Subsystem):
         if newPositionNumber < 0:
             newPositionNumber = 0
         self.positionNumber = newPositionNumber
+
+    def setRpmAtFixedPosition(self):
+        """
+        Set the RPM based on the designated fixed position on the field
+        """
+        self.RPM = self.lookupFixedPositionRPMs.get(self.fixedRPMPosition, 0)
+
+    def cycleFixedShootingPosition(self):
+        if self.fixedRPMPosition == FixedShootingPositions.DEFAULT:
+            self.fixedRPMPosition = FixedShootingPositions.HUB
+        elif self.fixedRPMPosition == FixedShootingPositions.HUB:
+            self.fixedRPMPosition = FixedShootingPositions.TOWER
+        elif self.fixedRPMPosition == FixedShootingPositions.TOWER:
+            self.fixedRPMPosition = FixedShootingPositions.ALLIANCE_CORNER
+        elif self.fixedRPMPosition == FixedShootingPositions.ALLIANCE_CORNER:
+            self.fixedRPMPosition = FixedShootingPositions.CLOSE_FEED
+        elif self.fixedRPMPosition == FixedShootingPositions.CLOSE_FEED:
+            self.fixedRPMPosition = FixedShootingPositions.MID_FEED
+        elif self.fixedRPMPosition == FixedShootingPositions.MID_FEED:
+            self.fixedRPMPosition = FixedShootingPositions.FAR_FEED
+        elif self.fixedRPMPosition == FixedShootingPositions.FAR_FEED:
+            self.fixedRPMPosition = FixedShootingPositions.DEFAULT
 
     def modifyOffset(self, offsetDelta: float):
         """
