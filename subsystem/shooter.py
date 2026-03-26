@@ -18,10 +18,11 @@ class ShooterMotorNames(StrEnum):
     Create consistent names for shooter motor references
     """
 
-    FEED = "feed"
-    LEAD_FLYWHEEL = "lead"
-    FOLLOWER_FLYWHEEL = "follower"
+    LEAD_FLYWHEEL = "lead_flywheel"
+    FOLLOWER_FLYWHEEL = "follower_flywheel"
     HOOD = "hood"
+    LEAD_FEED = "lead_feed"
+    FOLLOWER_FEED = "follower_feed"
 
 class FlywheelModes(StrEnum):
     """
@@ -94,47 +95,55 @@ class Shooter(Subsystem):
         } 
 
         # Instantiate motors
-        self.feedMotor = rev.SparkMax(PancakeShooterConstants.feedMotorId, rev.SparkLowLevel.MotorType.kBrushless)
-        self.leadFlywheelMotor = rev.SparkFlex(PancakeShooterConstants.leadMotorId, rev.SparkLowLevel.MotorType.kBrushless)
-        self.followerFlywheelMotor = rev.SparkFlex(PancakeShooterConstants.followerMotorId, rev.SparkLowLevel.MotorType.kBrushless)
+        self.leadFlywheelMotor = rev.SparkFlex(PancakeShooterConstants.flywheelLeadMotorId, rev.SparkLowLevel.MotorType.kBrushless)
+        self.followerFlywheelMotor = rev.SparkFlex(PancakeShooterConstants.flywheelFollowerMotorId, rev.SparkLowLevel.MotorType.kBrushless)
         self.hoodMotor = rev.SparkMax(PancakeShooterConstants.hoodMotorId, rev.SparkLowLevel.MotorType.kBrushless)
+        self.leadFeedMotor = rev.SparkMax(PancakeShooterConstants.feedLeadMotorId, rev.SparkLowLevel.MotorType.kBrushless)
+        self.followerFeedMotor = rev.SparkMax(PancakeShooterConstants.feedFolowerMotorId, rev.SparkLowLevel.MotorType.kBrushless)
 
         # Set up configs for each motor
-        self.configureMotor(self.feedMotor, ShooterConfig.shooterFeedMotorPIDF, PancakeShooterConstants.shooterInverted[0])
-        self.configureMotor(self.leadFlywheelMotor, ShooterConfig.shooterFlywheelMotorPIDF, PancakeShooterConstants.shooterInverted[1])
-        self.configureMotor(self.followerFlywheelMotor, ShooterConfig.shooterFlywheelMotorPIDF, PancakeShooterConstants.shooterInverted[2], leader=self.leadFlywheelMotor)
+        
+        self.configureMotor(self.leadFlywheelMotor, ShooterConfig.shooterFlywheelMotorPIDF, PancakeShooterConstants.shooterInverted[0])
+        self.configureMotor(self.followerFlywheelMotor, ShooterConfig.shooterFlywheelMotorPIDF, PancakeShooterConstants.shooterInverted[1], leader=self.leadFlywheelMotor)
         # Check inversion
-        self.configureMotor(self.hoodMotor, ShooterConfig.shooterFlywheelMotorPIDF, PancakeShooterConstants.shooterInverted[3], positionConversionFactor=PancakeShooterConstants.shooterPositionConversionFactor)
+        self.configureMotor(self.hoodMotor, ShooterConfig.shooterFlywheelMotorPIDF, PancakeShooterConstants.shooterInverted[2], positionConversionFactor=PancakeShooterConstants.shooterPositionConversionFactor)
+        self.configureMotor(self.leadFeedMotor, ShooterConfig.shooterFeedMotorPIDF, PancakeShooterConstants.shooterInverted[3])
+        self.configureMotor(self.followerFeedMotor, ShooterConfig.shooterFeedMotorPIDF, PancakeShooterConstants.shooterInverted[4], leader=self.leadFeedMotor)
 
         self.motors: Dict[str, rev.SparkFlex | rev.SparkMax] = {
-            ShooterMotorNames.FEED: self.feedMotor,
             ShooterMotorNames.LEAD_FLYWHEEL: self.leadFlywheelMotor,
             ShooterMotorNames.FOLLOWER_FLYWHEEL: self.followerFlywheelMotor,
-            ShooterMotorNames.HOOD: self.hoodMotor
+            ShooterMotorNames.HOOD: self.hoodMotor,
+            ShooterMotorNames.LEAD_FEED: self.leadFeedMotor,
+            ShooterMotorNames.FOLLOWER_FEED: self.followerFeedMotor
         }
 
         # Get encoders from each motor to read data
-        self.feedEncoder = self.feedMotor.getEncoder()
         self.leadFlywheelEncoder = self.leadFlywheelMotor.getEncoder()
         self.followerFlywheelEncoder = self.followerFlywheelMotor.getEncoder()
         self.hoodEncoder = self.hoodMotor.getEncoder()
+        self.leadFeedEncoder = self.leadFeedMotor.getEncoder()
+        self.followerFeedEncoder = self.followerFeedMotor.getEncoder()
         self.encoders = {
-            ShooterMotorNames.FEED: self.feedEncoder,
             ShooterMotorNames.LEAD_FLYWHEEL: self.leadFlywheelEncoder,
             ShooterMotorNames.FOLLOWER_FLYWHEEL: self.followerFlywheelEncoder,
-            ShooterMotorNames.HOOD: self.hoodEncoder
+            ShooterMotorNames.HOOD: self.hoodEncoder,
+            ShooterMotorNames.LEAD_FEED: self.leadFeedEncoder,
+            ShooterMotorNames.FOLLOWER_FEED: self.followerFeedEncoder,
         }
 
         # Create closed loop controllers to be able to set a reference/goal for pid
-        self.feedPID = self.feedMotor.getClosedLoopController()
+        
         self.leadFlywheelPID = self.leadFlywheelMotor.getClosedLoopController()
         self.hoodPID = self.hoodMotor.getClosedLoopController()
+        self.leadFeedPID = self.leadFeedMotor.getClosedLoopController()
         self.PIDs = {
-            ShooterMotorNames.FEED: self.feedPID,
             ShooterMotorNames.LEAD_FLYWHEEL: self.leadFlywheelPID,
             ShooterMotorNames.HOOD: self.hoodPID,
+            ShooterMotorNames.LEAD_FEED: self.leadFeedPID,
             # Avoid key errors
             ShooterMotorNames.FOLLOWER_FLYWHEEL: self.leadFlywheelPID,
+            ShooterMotorNames.FOLLOWER_FEED: self.leadFeedPID
         }
 
         self.hoodEncoder.setPosition(0)
@@ -341,11 +350,11 @@ class Shooter(Subsystem):
         newRPM = self.RPM + self.offsetAmount
         if self.feedActive:
             feedRPM = int(newRPM * PancakeShooterConstants.shooterFeedPercentOfFlywheel)
-            self.setMotorReference(ShooterMotorNames.FEED, feedRPM, rev.SparkLowLevel.ControlType.kVelocity)
+            self.setMotorReference(ShooterMotorNames.LEAD_FEED, feedRPM, rev.SparkLowLevel.ControlType.kVelocity)
         else:
             self.positionNumber = 0
             feedRPM = 0
-            self.setMotorVoltage(ShooterMotorNames.FEED, 0)
+            self.setMotorVoltage(ShooterMotorNames.LEAD_FEED, 0)
 
         if self.flywheelActive:
             self.setMotorReference(ShooterMotorNames.LEAD_FLYWHEEL, newRPM, rev.SparkLowLevel.ControlType.kVelocity)

@@ -122,8 +122,6 @@ class RobotSwerve:
 
         self.shooter.setRPM(0)
         self.shooter.resetOffset()
-        for motor in ["feed", "lead", "follower"]:
-            self.shooter.setMotorVoltage(motor, 0)
 
         self.hopper.zeroHopperVelocity()
 

@@ -157,12 +157,13 @@ class BallpitConstants:
     hopperCanId = 40
 
 class PancakeShooterConstants:
-    feedMotorId = 30
-    leadMotorId = 32
-    followerMotorId = 33
+    flywheelLeadMotorId = 32
+    flywheelFollowerMotorId = 33
     hoodMotorId = 34
-    # Feed, Lead, Follower, Hood
-    shooterInverted = (True, False, True, False)
+    feedLeadMotorId = 35
+    feedFolowerMotorId = 36
+    # Fly Lead, Fly Follower, Hood, Feed Lead, Feed Follower
+    shooterInverted = (False, True, False, False, True)
     shooterOffsetDelta = 100
     shooterFeedPercentOfFlywheel = 0.9
     shooterFixedRPM = 3000
