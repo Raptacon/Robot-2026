@@ -266,6 +266,9 @@ class RobotSwerve:
         self.lower_shooter_hood = self.factory.getButton("shooter.lower_hood").onTrue(
             commands2.cmd.runOnce(lambda: self.shooter.cycleHoodPosition(False), self.shooter)
         )
+        self.shooter_cycle_fixed_RPM = self.factory.getButton("shooter.cycle_shooter_fixed").onTrue(
+            commands2.cmd.runOnce(self.shooter.cycleFixedShootingPosition, self.shooter)
+        )
 
         # Hopper inputs
         self.toggle_hopper = self.factory.getButton("hopper.toggle_hopper").onTrue(
@@ -343,4 +346,3 @@ class RobotSwerve:
         """
         self.alliance = wpilib.DriverStation.getAlliance()
         self.drivetrain.update_alliance_flag(self.alliance)
-

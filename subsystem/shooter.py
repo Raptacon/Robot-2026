@@ -50,7 +50,7 @@ class Shooter(Subsystem):
         self.offsetAmount = 0
         self.offsetDelta = 0
         self.RPM = 0
-        self.flywheelMode = FlywheelModes.AUTO_RPM
+        self.flywheelMode = FlywheelModes.FIXED_RPM
         self.fixedRPMPosition = FixedShootingPositions.DEFAULT
         self.feedActive = False
         self.flywheelActive = False
@@ -363,3 +363,4 @@ class Shooter(Subsystem):
         wpilib.SmartDashboard.putBoolean("Shooter_Flywheel_Active", self.flywheelActive)
         wpilib.SmartDashboard.putString("Shooter_Flywheel_Mode", self.flywheelMode)
         wpilib.SmartDashboard.putNumber("Shooter_Hood_Position", self.positionNumber)
+        wpilib.SmartDashboard.putString("Shooter_Fixed_RPM_Position", self.fixedRPMPosition)
