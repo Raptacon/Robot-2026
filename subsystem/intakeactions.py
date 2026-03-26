@@ -7,6 +7,7 @@ import array
 from constants import CaptainPlanetConsts as intakeConsts
 from config import OperatorRobotConfig
 
+
 class IntakeSubsystem(commands2.SubsystemBase):
     def __init__(self):
         #Initializes all devices
@@ -38,218 +39,201 @@ class IntakeSubsystem(commands2.SubsystemBase):
         self.jamThreshold = 10 #Maximum sustained rpm before assuming a ball inside the rollers has gotten stuck
         self.jamReversalTime = 3 #Amount of time to have motors reverse when a ball inside the intake has gotten stuck
         self.unjam = 1500 #Minimum sustained rpm before assuming rollers have been unjammed
-        self.pivotVelocity = 0.3 #Velocity intake moves upon deploying/stow
-        self.rollerVelocity = 0.3 #Velocity rollers move upon activation
+        self.pivotSpeed = 0.3 #Base speed for pivot motor
+        self.rollerSpeed = 0.3 #Base speed for roller motor
 
-        self.pivotCondition = 0 #Leave at 0, provides reference to code on current intake status
-        self.pivotRamped = 0 #Leave at 0, provides reference to code on ramping intake status
-        self.pivotRampedCondition = 0 #Leave at 0, provides reference to code on whether ramping intake is finished
-        self.baselineFault = 0 #Leave at 0, provides baseline to compare to when determining faults
-        self.baselineJam = 0 #Leave at 0, provides baseline to compare to when determining faults
-        self.jamReversalCount = 0 #Leave at 0, stores amount of attempts in reversing motors in the event of a jam before a fault condition is triggered
-        self.pivotDifference = 0 #Leave at 0, rotations required to get from intake stowed position to intake deployed position is automatically calculated
-        self.remainingRotations = 0 #Leave at 0, rotations remaining to finish deploying/stowing intake is automatically calculated
-        self.pivotSlowdownPosition = 0 #Leave at 0, stores amount of intake motor rotations required to slow it down
-        self.pivotRamp = 0 #Leave at 0, motor position for ramp is automatically calculated
-        self.pivotRampStatus = 0 #Leave at 0, provides reference to code on whether intake is moving to ramp
-        self.hardStopIndex = 0 #Leave at 0, provides index to code for hardstop checks
-        self.jamOccurence = 0 #Leave at 0, provides baseline to compare to when determining jams
-        self.baselineDetectedJam = 0 #Leave at 0, provides baseline to compare to when jam detection is activated
-        self.rollerCondition = 0 #Leave at 0, provides reference to code on current roller status
-        self.rollerSensor = 0 #Leave at 0, ensures that the rollers are stopped only once, preventing obstruction of manual controls
-        
-        self.jamDetected = False #Leave at False
-        self.pivotMotorPositions = array.array('f', [0,0,0,0,0]) #Leave with all zeros, for checking if intake motor stopped during deployment/stowing
+        # Motor power multipliers: sign = direction, magnitude = speed fraction
+        # pivot: -1 stow, -0.5 slow stow, 0 stop, 0.5 slow deploy, 1 deploy
+        # roller: -1 reverse (unjam), 0 off, 1 forward
+        self.pivotPower = 0.0
+        self.rollerPower = 0.0
+        self.rampPower = 0.0  # pivot ramp direction multiplier
+
+        self.pivotRampComplete = False
+        self.pivotRamping = False
+        self.baselineFault = 0.0
+        self.baselineJam = 0.0
+        self.jamReversalCount = 0
+        self.pivotDifference = 0.0
+        self.remainingRotations = 0.0
+        self.pivotSlowdownPosition = 0.0
+        self.pivotRamp = 0.0
+        self.hardStopIndex = 0
+        self.jamTimingActive = False
+        self.baselineDetectedJam = 0.0
+        self.rollerStoppedOnce = False
+
+        self.jamDetected = False
+        self.pivotMotorPositions = array.array('f', [0, 0, 0, 0, 0])
 
     def deployIntake(self):
-        #Check Sensor for deployment, if not, deploy it.
-        if self.pivotCondition <= 0 and self.pivotMotorEncoder.getPosition() <= self.pivotDeployed:
+        if self.pivotPower <= 0 and self.pivotMotorEncoder.getPosition() <= self.pivotDeployed:
             self.baselineFault = time.perf_counter()
-            self.pivotCondition = 1
-        if self.pivotCondition >= 0:
-            # if self.HallEffectSensor.get() == False:
-            #     self.pivotDeployed = self.pivotMotorEncoder.getPosition()
-            #     self.pivotCondition = 0
+            self.pivotPower = 1
+        if self.pivotPower >= 0:
             if self.pivotMotorEncoder.getPosition() >= self.pivotDeployed:
-                self.pivotCondition = 0
+                self.pivotPower = 0
             if self.baselineFault - time.perf_counter() >= self.pivotFaultThreshold:
-                wpilib.Alert("INTAKE ERR101: Deployment of intake dosen't appear to be working! Stopped activation.", wpilib.Alert.AlertType.kError)
+                wpilib.Alert("INTAKE ERR101: Deployment of intake doesn't appear to be working! Stopped activation.", wpilib.Alert.AlertType.kError)
                 return
         else:
-            self.pivotCondition = 0
-
-    def activateRoller(self):
-        """Request roller spin-up. motorChecks() in periodic() drives the motor."""
-        self.rollerCondition = 1
-        self.rollerSensor = 0
-        self.baselineFault = time.perf_counter()
-
-    def deactivateRoller(self):
-        """Request roller spin-down. motorChecks() in periodic() drives the motor."""
-        self.rollerCondition = 0
-        self.baselineFault = time.perf_counter()
+            self.pivotPower = 0
 
     def requestRollerOn(self):
         """Request roller spin-up. motorChecks() in periodic() drives the motor."""
-        self.activateRoller()
+        self.rollerPower = 1
+        self.rollerStoppedOnce = False
+        self.baselineFault = time.perf_counter()
 
     def requestRollerOff(self):
         """Request roller spin-down. motorChecks() in periodic() drives the motor."""
-        self.deactivateRoller()
+        self.rollerPower = 0
+        self.baselineFault = time.perf_counter()
 
     def isRollerOn(self) -> bool:
-        return self.rollerCondition != 0
+        return self.rollerPower != 0
 
     def isRollerOff(self) -> bool:
-        return self.rollerCondition == 0
+        return self.rollerPower == 0
 
     def stowIntake(self):
-        if self.pivotCondition >= 0 and self.pivotMotorEncoder.getPosition() >= self.pivotStowed:
+        if self.pivotPower >= 0 and self.pivotMotorEncoder.getPosition() >= self.pivotStowed:
             self.baselineFault = time.perf_counter()
-            self.pivotCondition = -1
-        if self.pivotCondition <= 0:
+            self.pivotPower = -1
+        if self.pivotPower <= 0:
             if self.pivotMotorEncoder.getPosition() <= self.pivotStowed:
-                self.pivotCondition = 0
+                self.pivotPower = 0
             if self.baselineFault - time.perf_counter() >= self.pivotFaultThreshold:
                 wpilib.Alert("INTAKE ERR112: Intake Stow doesn't appear to be working! Stopping activation.", wpilib.Alert.AlertType.kError)
                 return
-            # if self.pivotMagnetFaultThreshold + 1 >= time.perf_counter() - self.baselineFault >= self.pivotMagnetFaultThreshold:
-            #     if self.HallEffectSensor.get() == False:
-            #           wpilib.Alert("INTAKE ERR112: Intake motor is engaged but the Intake doesn't appear to be moving! Stopping code.", wpilib.Alert.AlertType.kError)
-            #           return
         else:
-            self.pivotCondition = 0
+            self.pivotPower = 0
 
     def jamDetection(self):
         if not self.jamDetected:
-            self.rollerSensor = 0
-            if self.rollerCondition == 1:
+            self.rollerStoppedOnce = False
+            if self.rollerPower == 1:
                 if self.rollerMotorEncoder.getVelocity() <= self.jamThreshold:
-                    if self.jamOccurence == 0:
+                    if not self.jamTimingActive:
                         self.baselineJam = time.perf_counter()
-                        self.jamOccurence = 1
+                        self.jamTimingActive = True
                     else:
                         if time.perf_counter() - self.baselineJam >= self.jamTime:
                             self.baselineDetectedJam = time.perf_counter()
                             self.jamDetected = True
                 else:
-                    self.jamOccurence = 0
+                    self.jamTimingActive = False
         else:
-            if time.perf_counter() - self.baselineDetectedJam <= self.jamReversalTime and self.jamOccurence == 1:
-                self.rollerCondition = -1
+            if time.perf_counter() - self.baselineDetectedJam <= self.jamReversalTime and self.jamTimingActive:
+                self.rollerPower = -1
                 if abs(self.rollerMotorEncoder.getVelocity()) >= self.unjam:
-                    self.jamOccurence = 0
+                    self.jamTimingActive = False
             else:
                 if self.rollerMotorEncoder.getVelocity() <= self.unjam:
                     wpilib.Alert("Jam reversal unsuccessful! Stopping motor.", wpilib.Alert.AlertType.kError)
                     self.rollerMotor.disable()
-                if self.rollerSensor == 0:
+                if not self.rollerStoppedOnce:
                     self.requestRollerOff()
-                    self.rollerSensor = 1
+                    self.rollerStoppedOnce = True
                 else:
-                    self.rollerCondition = 1
-                    self.jamOccurence = 0
+                    self.rollerPower = 1
+                    self.jamTimingActive = False
                     self.jamDetected = False
 
     # def automaticRollerActivation(self):
         # if not self.breakBeam.get():
-        #     self.rollerSensor = 1
-        #     self.activateRoller()
+        #     self.rollerStoppedOnce = True
+        #     self.requestRollerOn()
         # else:
-        #     if self.rollerSensor == 1:
-        #         self.deactivateRoller()
-        #         self.rollerSensor = 0
+        #     if self.rollerStoppedOnce:
+        #         self.requestRollerOff()
+        #         self.rollerStoppedOnce = False
 
     def pivotSlowdown(self):
         self.pivotDifference = abs(self.pivotStowed) + abs(self.pivotDeployed)
-        if self.pivotCondition == 1:
+        if self.pivotPower == 1:
             self.remainingRotations = self.pivotDifference - (abs(self.pivotStowed) + abs(0 - self.pivotMotorEncoder.getPosition()))
             self.pivotSlowdownPosition = self.pivotStowed + (self.pivotDifference * 0.75)
             if self.pivotMotorEncoder.getPosition() >= self.pivotSlowdownPosition:
-                self.pivotCondition = 0.5
-        if self.pivotCondition == -1:
+                self.pivotPower = 0.5
+        if self.pivotPower == -1:
             self.remainingRotations = self.pivotDifference - (self.pivotDeployed - self.pivotMotorEncoder.getPosition() - abs(self.pivotStowed))
             self.pivotSlowdownPosition = self.pivotDeployed - (self.pivotDifference * 0.75)
             if self.pivotMotorEncoder.getPosition() <= self.pivotSlowdownPosition:
-                self.pivotCondition = -0.5
+                self.pivotPower = -0.5
 
     def rampIntake(self):
-        if not self.pivotRampedCondition:
+        if not self.pivotRampComplete:
             self.pivotDifference = abs(self.pivotStowed) + abs(self.pivotDeployed)
             self.pivotRamp = self.pivotStowed + (self.pivotDifference * 0.5)
             if self.pivotMotorEncoder.getPosition() <= self.pivotRamp:
-                if self.pivotRamped <= 0:
+                if self.rampPower <= 0:
                     self.baselineFault = time.perf_counter()
-                    self.pivotRamped = 1
-                    self.pivotCondition = 1
-                    self.pivotRampStatus = 1
+                    self.rampPower = 1
+                    self.pivotPower = 1
+                    self.pivotRamping = True
             elif self.pivotMotorEncoder.getPosition() >= self.pivotRamp:
-                if self.pivotRamped >= 0:
+                if self.rampPower >= 0:
                     self.baselineFault = time.perf_counter()
-                    self.pivotRamped = -1
-                    self.pivotCondition = -1
-                    self.pivotRampStatus = 1
+                    self.rampPower = -1
+                    self.pivotPower = -1
+                    self.pivotRamping = True
 
     def motorChecks(self):
         # Check if intake deployment motor is deploying without limits
-        if self.pivotMotorEncoder.getPosition() >= self.pivotDeployed + 15 and self.pivotCondition >= 0:
+        if self.pivotMotorEncoder.getPosition() >= self.pivotDeployed + 15 and self.pivotPower >= 0:
             wpilib.Alert("INTAKE ERR122: Intake Motor appears to be deploying outside of limits! Motor has been disabled.", wpilib.Alert.AlertType.kError)
             self.pivotMotor.disable()
 
-        if self.pivotMotorEncoder.getPosition() <= self.pivotStowed - 15 and self.pivotCondition <= 0:
+        if self.pivotMotorEncoder.getPosition() <= self.pivotStowed - 15 and self.pivotPower <= 0:
             wpilib.Alert("INTAKE ERR122: Intake Motor appears to be stowing outside of limits! Motor has been disabled.", wpilib.Alert.AlertType.kError)
             self.pivotMotor.disable()
 
-        
-        #Stop intake deployment motor if it reaches limits
-        if self.pivotMotorEncoder.getPosition() >= self.pivotDeployed and self.pivotCondition >= 0:
-            self.pivotCondition = 0
-        if self.pivotMotorEncoder.getPosition() <= self.pivotStowed and self.pivotCondition <= 0:
-            self.pivotCondition = 0
+        # Stop intake deployment motor if it reaches limits
+        if self.pivotMotorEncoder.getPosition() >= self.pivotDeployed and self.pivotPower >= 0:
+            self.pivotPower = 0
+        if self.pivotMotorEncoder.getPosition() <= self.pivotStowed and self.pivotPower <= 0:
+            self.pivotPower = 0
 
-        
-        #Stop intake deployment motor if it's position does not change even when it is supposed to be moving
+        # Stop intake deployment motor if its position does not change even when it is supposed to be moving
         self.pivotMotorPositions.pop(0)
         self.pivotMotorPositions.append(self.pivotMotorEncoder.getPosition())
         if not self.pivotMotorEncoder.getPosition() <= self.pivotStowed and not self.pivotMotorEncoder.getPosition() >= self.pivotDeployed:
             if self.pivotMotorPositions.count(self.pivotMotorEncoder.getPosition()) == 5:
-                if self.pivotCondition == -1:
+                if self.pivotPower == -1:
                     self.pivotStowed = self.pivotMotorEncoder.getPosition() + 1
-                    self.pivotCondition = 0
-                elif self.pivotCondition == 1:
+                    self.pivotPower = 0
+                elif self.pivotPower == 1:
                     self.pivotDeployed = self.pivotMotorEncoder.getPosition() - 1
-                    self.pivotCondition = 0
+                    self.pivotPower = 0
 
-        if self.pivotCondition == 0:
-            self.pivotVelocity = 0
-        self.rollerMotor.set(self.rollerCondition * self.rollerVelocity)
-        
-        self.pivotMotor.set(self.pivotCondition * self.pivotVelocity)
-        # self.pivotMotorPID.setReference(
-        #     self.pivotCondition * self.pivotVelocity, rev.SparkLowLevel.ControlType.kVelocity, rev.ClosedLoopSlot.kSlot0
-        # )
+        if self.pivotPower == 0:
+            self.pivotSpeed = 0
+        self.rollerMotor.set(self.rollerPower * self.rollerSpeed)
+
+        self.pivotMotor.set(self.pivotPower * self.pivotSpeed)
 
         # Stop pivot deployment motor if it is being ramped
-        if self.pivotRampStatus == 1:
-            if self.pivotRamped == 1:
+        if self.pivotRamping:
+            if self.rampPower == 1:
                 if self.pivotMotorEncoder.getPosition() >= self.pivotRamp:
-                    self.pivotRamped = 0
-                    self.pivotCondition = 0
-                    self.pivotRampedCondition = True
-            if self.pivotRamped == -1:
+                    self.rampPower = 0
+                    self.pivotPower = 0
+                    self.pivotRampComplete = True
+            if self.rampPower == -1:
                 if self.pivotMotorEncoder.getPosition() <= self.pivotRamp:
-                    self.pivotRamped = 0
-                    self.pivotCondition = 0
-                    self.pivotRampedCondition = True
-        
-        #Allows pivot to be ramped even from deployed/stowed position
-        if self.pivotMotorEncoder.getPosition() >= self.pivotDeployed:
-            self.pivotRamped = 0
-        if self.pivotMotorEncoder.getPosition() <= self.pivotStowed:
-            self.pivotRamped = 0
+                    self.rampPower = 0
+                    self.pivotPower = 0
+                    self.pivotRampComplete = True
 
-        if self.pivotCondition != 0:
-            self.pivotRampedCondition = False
+        # Allows pivot to be ramped even from deployed/stowed position
+        if self.pivotMotorEncoder.getPosition() >= self.pivotDeployed:
+            self.rampPower = 0
+        if self.pivotMotorEncoder.getPosition() <= self.pivotStowed:
+            self.rampPower = 0
+
+        if self.pivotPower != 0:
+            self.pivotRampComplete = False
 
     def tuningMotors(self):
         (
@@ -279,22 +263,21 @@ class IntakeSubsystem(commands2.SubsystemBase):
         # wpilib.SmartDashboard.putBoolean("Hall Effects Sensor", self.HallEffectSensor.get())
         wpilib.SmartDashboard.putNumber("Time", time.perf_counter())
         wpilib.SmartDashboard.putNumber("Baseline Fault", self.baselineFault)
-        wpilib.SmartDashboard.putNumber("Intake Condition", self.pivotCondition)
-        # wpilib.SmartDashboard.putBoolean("Break Beam Sensor", self.breakBeam.get())
-        wpilib.SmartDashboard.putNumber("Roller Sensor", self.rollerSensor)
+        wpilib.SmartDashboard.putNumber("Pivot Power", self.pivotPower)
+        wpilib.SmartDashboard.putBoolean("Roller Stopped Once", self.rollerStoppedOnce)
         wpilib.SmartDashboard.putNumber("Intake Difference", self.pivotDifference)
         wpilib.SmartDashboard.putNumber("Remaining Rotations", self.remainingRotations)
         wpilib.SmartDashboard.putNumber("Intake Slowdown Position", self.pivotSlowdownPosition)
-        wpilib.SmartDashboard.putNumber("Intake Ramped", self.pivotRamped)
+        wpilib.SmartDashboard.putNumber("Ramp Power", self.rampPower)
         wpilib.SmartDashboard.putNumber("Intake Ramp Position", self.pivotRamp)
-        wpilib.SmartDashboard.putBoolean("Intake Ramp Condition", self.pivotRampedCondition)
+        wpilib.SmartDashboard.putBoolean("Intake Ramp Complete", self.pivotRampComplete)
         wpilib.SmartDashboard.putNumberArray("Intake Positions", self.pivotMotorPositions)
         wpilib.SmartDashboard.putNumber("Intake Stowed", self.pivotStowed)
-        wpilib.SmartDashboard.putNumber("Roller Condition", self.rollerCondition)
+        wpilib.SmartDashboard.putNumber("Roller Power", self.rollerPower)
         wpilib.SmartDashboard.putBoolean("Roller Jam", self.jamDetected)
         wpilib.SmartDashboard.putNumber("Actual Roller Velocity", self.rollerMotorEncoder.getVelocity())
         wpilib.SmartDashboard.putNumber("Baseline Detected Jam", self.baselineDetectedJam)
-        wpilib.SmartDashboard.putNumber("Intake Condition * Velocity", self.pivotCondition * self.pivotVelocity)
+        wpilib.SmartDashboard.putNumber("Pivot Motor Output", self.pivotPower * self.pivotSpeed)
         wpilib.SmartDashboard.putNumber("Baseline Jam", self.baselineJam)
 
         self.motorChecks()
