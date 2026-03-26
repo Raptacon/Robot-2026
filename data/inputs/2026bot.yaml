@@ -70,6 +70,11 @@ actions:
       description: Lower the hood
       input_type: button
       trigger_mode: on_true
+    cycle_shooter_fixed:
+      description: Cycle through fixed position options for RPM
+      input_type: boolean_trigger
+      trigger_mode: on_true
+      threshold: 0.5
   hopper:
     toggle_hopper: 
       description: Turn the hopper on or off
@@ -138,4 +143,5 @@ controllers:
       b_button: [shooter.toggle_feed]
       left_bumper: [hopper.toggle_hopper]
       right_bumper: [hopper.unjam_hopper]
-      right_trigger: [localization.stop_turret]
+      right_trigger: [shooter.cycle_shooter_fixed]
+      left_trigger: [localization.stop_turret]
