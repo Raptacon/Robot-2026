@@ -41,6 +41,9 @@ class IntakeSubsystem(commands2.SubsystemBase):
         self.unjam = 1500 #Minimum sustained rpm before assuming rollers have been unjammed
         self.pivotSpeed = 0.3 #Base speed for pivot motor
         self.rollerSpeed = 0.3 #Base speed for roller motor
+        # RPM below which the roller is considered stopped. Accounts for
+        # small rocking motion when the robot moves. Tune as needed.
+        self.rollerStoppedThreshold = 0.5
 
         # Motor power multipliers: sign = direction, magnitude = speed fraction
         # pivot: -1 stow, -0.5 slow stow, 0 stop, 0.5 slow deploy, 1 deploy
@@ -91,10 +94,12 @@ class IntakeSubsystem(commands2.SubsystemBase):
         self.baselineFault = time.perf_counter()
 
     def isRollerOn(self) -> bool:
-        return self.rollerPower != 0
+        """True when roller is commanded on AND actually spinning."""
+        return self.rollerPower != 0 and abs(self.rollerMotorEncoder.getVelocity()) > self.rollerStoppedThreshold
 
     def isRollerOff(self) -> bool:
-        return self.rollerPower == 0
+        """True when roller velocity is below the stopped threshold."""
+        return abs(self.rollerMotorEncoder.getVelocity()) <= self.rollerStoppedThreshold
 
     def stowIntake(self):
         if self.pivotPower >= 0 and self.pivotMotorEncoder.getPosition() >= self.pivotStowed:
