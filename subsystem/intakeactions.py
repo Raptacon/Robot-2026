@@ -79,27 +79,29 @@ class IntakeSubsystem(commands2.SubsystemBase):
             self.pivotCondition = 0
 
     def activateRoller(self):
+        """Request roller spin-up. motorChecks() in periodic() drives the motor."""
+        self.rollerCondition = 1
+        self.rollerSensor = 0
         self.baselineFault = time.perf_counter()
-        
-        # Apply voltage to roller until it starts moving; Terminate program with ERR103 if fault condition is detected
-        while self.rollerMotorEncoder.getVelocity() == 0:
-            if self.rollerCondition != 1:
-                self.rollerCondition = 1
-                self.rollerSensor = 0
-            if self.baselineFault - time.perf_counter() >= self.rollerFaultThreshold:
-                wpilib.Alert("INTAKE ERR103: Activation of rollers don't appear to be working! Stopped activation.", wpilib.Alert.AlertType.kError)
-                return
 
     def deactivateRoller(self):
+        """Request roller spin-down. motorChecks() in periodic() drives the motor."""
+        self.rollerCondition = 0
         self.baselineFault = time.perf_counter()
-    
-        # Try to terminate voltage until motor stops moving; Terminate program with ERR103 if fault condition is detected
-        while self.rollerMotorEncoder.getVelocity() != 0:
-            if self.rollerCondition != 0:
-                self.rollerCondition = 0
-                if self.baselineFault - time.perf_counter() >= self.rollerFaultThreshold:
-                    wpilib.Alert("INTAKE ERR103: Activation of rollers don't appear to be working! Stopped activation.", wpilib.Alert.AlertType.kError)
-                    return
+
+    def requestRollerOn(self):
+        """Request roller spin-up. motorChecks() in periodic() drives the motor."""
+        self.activateRoller()
+
+    def requestRollerOff(self):
+        """Request roller spin-down. motorChecks() in periodic() drives the motor."""
+        self.deactivateRoller()
+
+    def isRollerOn(self) -> bool:
+        return self.rollerCondition != 0
+
+    def isRollerOff(self) -> bool:
+        return self.rollerCondition == 0
 
     def stowIntake(self):
         if self.pivotCondition >= 0 and self.pivotMotorEncoder.getPosition() >= self.pivotStowed:
@@ -142,7 +144,7 @@ class IntakeSubsystem(commands2.SubsystemBase):
                     wpilib.Alert("Jam reversal unsuccessful! Stopping motor.", wpilib.Alert.AlertType.kError)
                     self.rollerMotor.disable()
                 if self.rollerSensor == 0:
-                    self.deactivateRoller()
+                    self.requestRollerOff()
                     self.rollerSensor = 1
                 else:
                     self.rollerCondition = 1
