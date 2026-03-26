@@ -48,25 +48,25 @@ class IntakeSubsystem(commands2.SubsystemBase):
         # Motor power multipliers: sign = direction, magnitude = speed fraction
         # pivot: -1 stow, -0.5 slow stow, 0 stop, 0.5 slow deploy, 1 deploy
         # roller: -1 reverse (unjam), 0 off, 1 forward
-        self.pivotPower = 0.0
-        self.rollerPower = 0.0
-        self.rampPower = 0.0  # pivot ramp direction multiplier
+        self.pivotPower = 0.0 #Leave at 0, power multiplier for pivot motor direction and speed
+        self.rollerPower = 0.0 #Leave at 0, power multiplier for roller motor direction and speed
+        self.rampPower = 0.0 #Leave at 0, power multiplier for pivot ramp direction
 
-        self.pivotRampComplete = False
-        self.pivotRamping = False
-        self.baselineFault = 0.0
-        self.baselineJam = 0.0
-        self.jamReversalCount = 0
-        self.pivotDifference = 0.0
-        self.remainingRotations = 0.0
-        self.pivotSlowdownPosition = 0.0
-        self.pivotRamp = 0.0
-        self.hardStopIndex = 0
-        self.jamTimingActive = False
-        self.baselineDetectedJam = 0.0
-        self.rollerStoppedOnce = False
+        self.pivotRampComplete = False #Leave at False, provides reference to code on whether ramping intake is finished
+        self.pivotRamping = False #Leave at False, provides reference to code on whether intake is moving to ramp
+        self.baselineFault = 0.0 #Leave at 0, provides baseline to compare to when determining faults
+        self.baselineJam = 0.0 #Leave at 0, provides baseline to compare to when determining faults
+        self.jamReversalCount = 0 #Leave at 0, stores amount of attempts in reversing motors in the event of a jam before a fault condition is triggered
+        self.pivotDifference = 0.0 #Leave at 0, rotations required to get from intake stowed position to intake deployed position is automatically calculated
+        self.remainingRotations = 0.0 #Leave at 0, rotations remaining to finish deploying/stowing intake is automatically calculated
+        self.pivotSlowdownPosition = 0.0 #Leave at 0, stores amount of intake motor rotations required to slow it down
+        self.pivotRamp = 0.0 #Leave at 0, motor position for ramp is automatically calculated
+        self.hardStopIndex = 0 #Leave at 0, provides index to code for hardstop checks
+        self.jamTimingActive = False #Leave at False, whether jam timing window is active
+        self.baselineDetectedJam = 0.0 #Leave at 0, provides baseline to compare to when jam detection is activated
+        self.rollerStoppedOnce = False #Leave at False, ensures that the rollers are stopped only once, preventing obstruction of manual controls
 
-        self.jamDetected = False
+        self.jamDetected = False #Leave at False
         self.pivotMotorPositions = array.array('f', [0, 0, 0, 0, 0])
 
     def deployIntake(self):
