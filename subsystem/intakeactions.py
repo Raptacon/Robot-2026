@@ -67,7 +67,7 @@ class IntakeSubsystem(commands2.SubsystemBase):
         self.rollerStoppedOnce = False #Leave at False, ensures that the rollers are stopped only once, preventing obstruction of manual controls
 
         self.jamDetected = False #Leave at False
-        self.pivotMotorPositions = array.array('f', [0, 0, 0, 0, 0])
+        self.pivotMotorPositions = array.array('f', [0, 0, 0, 0, 0]) #Leave with all zeros, for checking if intake motor stopped during deployment/stowing
 
     def deployIntake(self):
         if self.pivotPower <= 0 and self.pivotMotorEncoder.getPosition() <= self.pivotDeployed:
