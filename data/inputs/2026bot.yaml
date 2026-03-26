@@ -101,6 +101,11 @@ actions:
       description: Hold the intake halfway between being deployed and stowed
       input_type: button
       trigger_mode: on_true
+  turret:
+    stop_turret:
+      description: Completely stops the turret from moving
+      input_type: button
+      trigger_mode: on_true
 
 
 controllers:
@@ -133,3 +138,4 @@ controllers:
       b_button: [shooter.toggle_feed]
       left_bumper: [hopper.toggle_hopper]
       right_bumper: [hopper.unjam_hopper]
+      right_trigger: [localization.stop_turret]

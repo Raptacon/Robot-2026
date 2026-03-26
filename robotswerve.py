@@ -23,6 +23,8 @@ from commands.default_swerve_drive import DefaultDrive
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
 from subsystem.shooter import Shooter
 from subsystem.ballpit import BallPitHopper as Hopper
+from subsystem.localization.localization import Localization
+from subsystem.mechanisms.turret import Turret
 from utils.input import InputFactory
 from utils.odometry_logic_2026 import determineShooterTargets2026
 
@@ -32,6 +34,7 @@ import wpilib
 from commands2.button import Trigger
 from pathplannerlib.auto import AutoBuilder
 from subsystem.intakeactions import IntakeSubsystem
+import rev
 
 class RobotSwerve:
     # forward declare critical types for editors
@@ -48,6 +51,13 @@ class RobotSwerve:
         self.shooter = Shooter()
         self.hopper = Hopper()
         self.intake = IntakeSubsystem()
+        #TODO replace with real turret code
+        self.turret = Turret(rev.SparkMax(12, rev.SparkMax.MotorType.kBrushless), 0, 0, 1 )
+
+        #Vision set up
+        self.localization = Localization()
+        self.localization.robotInit()
+        self.localization.__init__()
 
         # Alliance instantiation
         self.updateAlliance()
@@ -212,7 +222,10 @@ class RobotSwerve:
         # )
 
     def teleopPeriodic(self):
-        pass
+        self.localization.teleopPeriodic()
+        self.localization.periodic()
+        if not self.localization.isDisabled():
+            self.turret.setPosition(self.localization.getTargetpose())
 
     def testInit(self):
         #TODO Move to NT listener on change listener
@@ -320,6 +333,11 @@ class RobotSwerve:
         )
         self.ramp_intake = self.factory.getButton("intake.ramp_intake").onTrue(
             commands2.cmd.run(self.intake.rampIntake, self.intake)
+        )
+
+        #Turret stop
+        self.stop_turret = self.factory.getButton("turret.stop_turret").onTrue(
+            commands2.cmd.runOnce(self.localization.disable, self.localization)
         )
 
         # Map all drive axes' scale to a shared SmartDashboard entry.
