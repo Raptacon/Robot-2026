@@ -51,6 +51,9 @@ class RobotSwerve:
         # Alliance instantiation
         self.updateAlliance()
 
+        # camera stream init
+        wpilib.CameraServer.launch()
+
         # Initialize timer
         self.timer = wpilib.Timer()
         self.timer.start()
