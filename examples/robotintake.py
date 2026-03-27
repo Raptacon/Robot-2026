@@ -53,10 +53,10 @@ class RobotIntake:
             commands2.cmd.run(self.intake.deployIntake, self.intake)
         )
         Trigger(self.intakeController.getXButtonPressed).onTrue(
-            commands2.cmd.runOnce(self.intake.deactivateRoller, self.intake)
+            commands2.cmd.runOnce(self.intake.requestRollerOff, self.intake)
         )
         Trigger(self.intakeController.getBButtonPressed).onTrue(
-            commands2.cmd.runOnce(self.intake.activateRoller, self.intake)
+            commands2.cmd.runOnce(self.intake.requestRollerOn, self.intake)
         )
         Trigger(self.intakeController.getStartButtonPressed).onTrue(
             commands2.cmd.run(self.intake.rampIntake, self.intake)

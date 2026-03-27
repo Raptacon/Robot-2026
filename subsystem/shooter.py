@@ -92,7 +92,7 @@ class Shooter(Subsystem):
             FixedShootingPositions.CLOSE_FEED: 1750,
             FixedShootingPositions.MID_FEED: 2750,
             FixedShootingPositions.FAR_FEED: 4500,
-        } 
+        }
 
         # Instantiate motors
         self.leadFlywheelMotor = rev.SparkFlex(PancakeShooterConstants.flywheelLeadMotorId, rev.SparkLowLevel.MotorType.kBrushless)
