@@ -235,7 +235,7 @@ class RobotSwerve:
                 self.translate_x,
                 self.translate_y,
                 lambda: not self.robot_relative_btn(),
-                Rotation2d.fromDegrees(180)
+                alignment_angle=Rotation2d.fromDegrees(180)
             )
         )
 
