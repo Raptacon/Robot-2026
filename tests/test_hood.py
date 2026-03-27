@@ -36,7 +36,7 @@ class TestHood(unittest.TestCase):
     shared across all tests, since REV enforces one instance per CAN ID.
     """
 
-    MOTOR_CAN_ID = 41
+    MOTOR_CAN_ID = 34
     POSITION_CONVERSION_FACTOR = 360.0 / 1.7  # degrees per motor rotation
     MAX_ANGLE_DEGREES = 30.0
     PID = (0.5, 0, 0)
