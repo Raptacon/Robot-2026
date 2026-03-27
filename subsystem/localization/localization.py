@@ -1,13 +1,9 @@
 import commands2
 import wpilib
-from wpilib import SmartDashboard, Field2d
 import ntcore
 import photonlibpy
-from robotpy_apriltag import AprilTagFieldLayout, AprilTagField
 import wpimath
 from wpimath.geometry import Translation3d, Rotation3d
-import math
-
 
 nt = ntcore.NetworkTableInstance.getDefault()
 
