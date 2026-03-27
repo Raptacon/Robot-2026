@@ -15,13 +15,15 @@ from pathlib import Path
 from typing import Callable
 
 # Internal imports
-from constants.swerve_constants import BallpitConstants
+from config import HoodConfig
+from constants.swerve_constants import BallpitConstants, HoodConstants
 from constants.swerve_constants import PancakeShooterConstants
 from data.telemetry import Telemetry
 from commands.auto.pid_to_angle import PIDAlignToTarget
 from commands.default_swerve_drive import DefaultDrive
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
-from subsystem.shooter import Shooter
+from subsystem.shooter.shooter import Shooter
+from subsystem.shooter.hood import createHood
 from subsystem.ballpit import BallPitHopper as Hopper
 from utils.input import InputFactory
 from utils.odometry_logic_2026 import determineShooterTargets2026
@@ -46,6 +48,7 @@ class RobotSwerve:
         # Subsystem instantiation
         self.drivetrain = SwerveDrivetrain()
         self.shooter = Shooter()
+        self.hood = createHood(HoodConstants, HoodConfig)
         self.hopper = Hopper()
         self.intake = IntakeSubsystem()
 
@@ -157,7 +160,7 @@ class RobotSwerve:
         self.shooter.setDefaultCommand(commands2.cmd.select(
             {
                 "autoRPM": commands2.cmd.run(
-                    lambda: self.shooter.setRpmAndHoodUsingLookup(
+                    lambda: self.shooter.setRpmUsingLookup(
                         self.shooter.calculateRangeFromOdometry(
                             self.drivetrain.current_pose,
                             lambda: determineShooterTargets2026(self.drivetrain.current_pose, self.alliance)
@@ -168,6 +171,13 @@ class RobotSwerve:
                 "fixedRPM": commands2.cmd.run(lambda: self.shooter.setRpmAtFixedPosition(), self.shooter)
             },
             self.shooter.getFlywheelMode
+        ))
+
+        # Hood default command: right trigger analog (0..1) maps to hood angle
+        self.hood.setDefaultCommand(commands2.cmd.run(
+            lambda: self.hood.setAngleNormalized(
+                self.hood_angle_input()),
+            self.hood
         ))
             
 
@@ -258,15 +268,12 @@ class RobotSwerve:
                     commands2.cmd.runOnce(self.shooter.toggleFeedActive, self.shooter),
                     commands2.cmd.runOnce(lambda: self.hopper.setHopperToggle(self.shooter.feedActive), self.hopper)
             ))
-        self.raise_shooter_hood = self.factory.getButton("shooter.raise_hood").onTrue(
-            commands2.cmd.runOnce(lambda: self.shooter.cycleHoodPosition(True), self.shooter),
-        )
-        self.lower_shooter_hood = self.factory.getButton("shooter.lower_hood").onTrue(
-            commands2.cmd.runOnce(lambda: self.shooter.cycleHoodPosition(False), self.shooter)
-        )
         self.shooter_cycle_fixed_RPM = self.factory.getButton("shooter.cycle_shooter_fixed").onTrue(
             commands2.cmd.runOnce(self.shooter.cycleFixedShootingPosition, self.shooter)
         )
+
+        # Hood input — right trigger analog mapped to hood angle
+        self.hood_angle_input = self.factory.getAnalog("hood.angle")
 
         # Hopper inputs
         self.toggle_hopper = self.factory.getButton("hopper.toggle_hopper").onTrue(
