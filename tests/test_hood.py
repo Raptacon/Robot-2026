@@ -26,7 +26,7 @@ import wpilib.simulation
 from wpimath.system.plant import DCMotor
 
 # Internal imports
-from subsystem.shooter.hood import Hood
+from subsystem.mechanisms.shooter.hood import Hood
 
 
 class TestHood(unittest.TestCase):
@@ -137,17 +137,21 @@ class TestHood(unittest.TestCase):
     def test_at_setpoint_true(self):
         self.hood.setAngleDegrees(10.0)
         self.motor_sim.getRelativeEncoderSim().setPosition(10.0)
+        self.hood.periodic()
         assert self.hood.atSetpoint()
 
     def test_at_setpoint_false(self):
         self.hood.setAngleDegrees(10.0)
         self.motor_sim.getRelativeEncoderSim().setPosition(5.0)
+        self.hood.periodic()
         assert not self.hood.atSetpoint()
 
     def test_at_setpoint_within_tolerance(self):
+        self.hood.controller.setTolerance(0.5)
         self.hood.setAngleDegrees(10.0)
         self.motor_sim.getRelativeEncoderSim().setPosition(10.3)
-        assert self.hood.atSetpoint(tolerance_deg=0.5)
+        self.hood.periodic()
+        assert self.hood.atSetpoint()
 
     # -- Configuration --
 

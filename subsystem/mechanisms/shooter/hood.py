@@ -4,7 +4,9 @@ import math
 # Third-party imports
 import rev
 import wpilib
+from typing import Callable
 from commands2 import Command, Subsystem
+import commands2.cmd
 from commands2.sysid import SysIdRoutine
 from ntcore.util import ntproperty
 from wpilib.sysid import SysIdRoutineLog
@@ -25,6 +27,11 @@ class Hood(Subsystem):
     The feedforward uses ArmFeedforward to compensate for gravity —
     0 degrees is approximately horizontal, positive degrees lift
     toward vertical.
+
+    Safety interlock: when enabled (default on code load), the hood
+    automatically stows if the injected shooter's RPM setpoint falls
+    below a configurable threshold. Safety is always enabled on startup
+    and must be explicitly disabled at runtime.
     """
 
     # Telemetry via ntproperty (published to NT, not persisted)
@@ -46,6 +53,16 @@ class Hood(Subsystem):
         '/Hood/minSoftLimit', 0.0, writeDefault=True)
     nt_max_soft_limit = ntproperty(
         '/Hood/maxSoftLimit', 0.0, writeDefault=True)
+
+    # Safety: persistent configuration
+    nt_safety_enabled = ntproperty(
+        '/Hood/safetyEnabled', True, writeDefault=True)
+    nt_stowed_angle_degrees = ntproperty(
+        '/Hood/stowedAngleDegrees', 0.0,
+        writeDefault=False, persistent=True)
+    nt_safety_rpm_threshold = ntproperty(
+        '/Hood/safetyRpmThreshold', 5.0,
+        writeDefault=False, persistent=True)
 
     def __init__(
         self,
@@ -130,6 +147,9 @@ class Hood(Subsystem):
         # Assume 0 position on startup
         self.encoder.setPosition(0)
 
+        # Shooter dependency (optional, injected via setShooter)
+        self._shooter = None
+
         # Mechanism2d visualization
         self.configureMechanism2d()
 
@@ -151,6 +171,30 @@ class Hood(Subsystem):
         """Set hood target angle in radians, converted to degrees."""
         self.setAngleDegrees(math.degrees(radians))
 
+    # -- Shooter injection --
+
+    def setShooter(self, shooter) -> None:
+        """Inject a shooter subsystem for safety interlock.
+
+        The shooter must have an `RPM` attribute representing
+        the current setpoint in RPM.
+        """
+        self._shooter = shooter
+
+    def getShooter(self):
+        """Return the injected shooter, or None."""
+        return self._shooter
+
+    # -- Safety --
+
+    def setSafetyEnabled(self, enabled: bool) -> None:
+        """Enable or disable the shooter-based safety interlock."""
+        self.nt_safety_enabled = enabled
+
+    def getSafetyEnabled(self) -> bool:
+        """Return whether the safety interlock is enabled."""
+        return self.nt_safety_enabled
+
     # -- Getter methods --
 
     def getAngleDegrees(self) -> float:
@@ -169,9 +213,9 @@ class Hood(Subsystem):
         """Get the current target angle in degrees."""
         return self._target_degrees
 
-    def atSetpoint(self, tolerance_deg: float = 0.5) -> bool:
-        """Check if the hood is within tolerance of the target."""
-        return abs(self.getAngleDegrees() - self._target_degrees) < tolerance_deg
+    def atSetpoint(self) -> bool:
+        """Return whether the hood is at its target setpoint."""
+        return self.controller.atSetpoint()
 
     # -- Lifecycle --
 
@@ -190,6 +234,12 @@ class Hood(Subsystem):
         """
         Drive PID + feedforward to target, update viz and telemetry.
         """
+        # Safety interlock: stow hood when shooter setpoint is low
+        if (self.nt_safety_enabled
+                and self._shooter is not None
+                and self._shooter.RPM < self.nt_safety_rpm_threshold):
+            self._target_degrees = self.nt_stowed_angle_degrees
+
         position = self.encoder.getPosition()
 
         # PID output
@@ -314,6 +364,32 @@ class Hood(Subsystem):
     ) -> Command:
         """Create a dynamic SysId command for the hood."""
         return sysIdRoutine.dynamic(direction)
+
+    # -- Command generators --
+
+    def autoAngleCommand(self) -> Command:
+        """Command that sets hood angle from shooter's distance lookup."""
+        def _action():
+            if self._shooter is not None:
+                self.setAngleDegrees(
+                    self._shooter.getHoodAngleForDistance(
+                        self._shooter.targetDistance))
+
+        return commands2.cmd.run(_action, self)
+
+    def manualTestCommand(
+        self, analog_input: Callable[[], float]
+    ) -> Command:
+        """Test command: analog input controls hood angle directly.
+
+        Disables safety when input > 0.02, re-enables when released.
+        """
+        def _action():
+            trigger = analog_input()
+            self.setSafetyEnabled(trigger <= 0.02)
+            self.setAngleNormalized(trigger)
+
+        return commands2.cmd.run(_action, self)
 
 
 def createHood(constants, config) -> Hood:

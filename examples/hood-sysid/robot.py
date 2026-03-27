@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 from config import HoodConfig
 from constants.swerve_constants import HoodConstants
-from subsystem.shooter.hood import Hood
+from subsystem.mechanisms.shooter.hood import Hood
 from utils.passive_range_finder import PassiveRangeFinderCommand
 
 # Hood motor CAN ID

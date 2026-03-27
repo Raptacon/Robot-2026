@@ -22,8 +22,8 @@ from data.telemetry import Telemetry
 from commands.auto.pid_to_angle import PIDAlignToTarget
 from commands.default_swerve_drive import DefaultDrive
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
-from subsystem.shooter.shooter import Shooter
-from subsystem.shooter.hood import createHood
+from subsystem.mechanisms.shooter.shooter import Shooter
+from subsystem.mechanisms.shooter.hood import createHood
 from subsystem.ballpit import BallPitHopper as Hopper
 from utils.input import InputFactory
 from utils.odometry_logic_2026 import determineShooterTargets2026
@@ -49,6 +49,7 @@ class RobotSwerve:
         self.drivetrain = SwerveDrivetrain()
         self.shooter = Shooter()
         self.hood = createHood(HoodConstants, HoodConfig)
+        self.hood.setShooter(self.shooter)
         self.hopper = Hopper()
         self.intake = IntakeSubsystem()
 
@@ -173,12 +174,8 @@ class RobotSwerve:
             self.shooter.getFlywheelMode
         ))
 
-        # Hood default command: right trigger analog (0..1) maps to hood angle
-        self.hood.setDefaultCommand(commands2.cmd.run(
-            lambda: self.hood.setAngleNormalized(
-                self.hood_angle_input()),
-            self.hood
-        ))
+        # Hood default: set angle from shooter's distance-based lookup
+        self.hood.setDefaultCommand(self.hood.autoAngleCommand())
             
 
         self.hopper.setDefaultCommand(commands2.cmd.select(
@@ -206,6 +203,10 @@ class RobotSwerve:
             )
         )
         commands2.cmd.run(lambda: self.drivetrain.drive(2, 0, 0, False), self.drivetrain).withTimeout(5).schedule()
+
+        # Hood manual test: trigger analog overrides safety for manual control
+        self.hood.setDefaultCommand(
+            self.hood.manualTestCommand(self.hood_angle_input))
 
     def testPeriodic(self):
         pass
