@@ -36,7 +36,7 @@ class TestHood(unittest.TestCase):
     shared across all tests, since REV enforces one instance per CAN ID.
     """
 
-    MOTOR_CAN_ID = 34
+    MOTOR_CAN_ID = 19
     POSITION_CONVERSION_FACTOR = 360.0 / 1.7  # degrees per motor rotation
     MAX_ANGLE_DEGREES = 30.0
     PID = (0.5, 0, 0)
@@ -59,6 +59,15 @@ class TestHood(unittest.TestCase):
         )
         cls.motor_sim = rev.SparkSim(cls.motor, DCMotor.NEO())
         cls.motor_sim.setBusVoltage(12.0)
+
+    @classmethod
+    def tearDownClass(cls):
+        """Free the SparkMax so other test classes can reuse the CAN ID."""
+        import gc
+        del cls.motor_sim
+        del cls.hood
+        del cls.motor
+        gc.collect()
 
     def setUp(self):
         """Reset hood state before each test."""

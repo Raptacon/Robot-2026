@@ -59,6 +59,15 @@ class TestPositionCalibration(unittest.TestCase):
         cls.motor_sim = rev.SparkSim(cls.motor, DCMotor.NEO())
         cls.motor_sim.setBusVoltage(12.0)
 
+    @classmethod
+    def tearDownClass(cls):
+        """Free the SparkMax so other test classes can reuse the CAN ID."""
+        import gc
+        del cls.motor_sim
+        del cls.encoder
+        del cls.motor
+        gc.collect()
+
     def setUp(self):
         """Reset calibration state before each test."""
         # restartTiming() makes existing NT topic handles read-only,
@@ -874,22 +883,25 @@ class TestPositionCalibrationCallbacks(unittest.TestCase):
         motor = rev.SparkMax(
             17, rev.SparkLowLevel.MotorType.kBrushless
         )
-        custom_output = []
-        cal = PositionCalibration(
-            name="CbOverride",
-            fallback_min=self.MIN_SOFT_LIMIT,
-            fallback_max=self.MAX_SOFT_LIMIT,
-            motor=motor,
-            set_motor_output=lambda p: custom_output.append(p),
-        )
-        cal.homing_init(
-            max_current=10.0, max_power_pct=0.3,
-            max_homing_time=5.0, homing_forward=True
-        )
-        cal._homing_periodic()
-        # Custom callback should have been called, not motor.set()
-        self.assertEqual(len(custom_output), 1)
-        self.assertAlmostEqual(custom_output[0], 0.3, places=1)
+        try:
+            custom_output = []
+            cal = PositionCalibration(
+                name="CbOverride",
+                fallback_min=self.MIN_SOFT_LIMIT,
+                fallback_max=self.MAX_SOFT_LIMIT,
+                motor=motor,
+                set_motor_output=lambda p: custom_output.append(p),
+            )
+            cal.homing_init(
+                max_current=10.0, max_power_pct=0.3,
+                max_homing_time=5.0, homing_forward=True
+            )
+            cal._homing_periodic()
+            # Custom callback should have been called, not motor.set()
+            self.assertEqual(len(custom_output), 1)
+            self.assertAlmostEqual(custom_output[0], 0.3, places=1)
+        finally:
+            del motor
 
     # ---- Abort with callbacks ----
 

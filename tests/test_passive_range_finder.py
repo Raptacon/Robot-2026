@@ -53,6 +53,14 @@ class TestPassiveRangeFinder(unittest.TestCase):
             rev.PersistMode.kNoPersistParameters
         )
 
+    @classmethod
+    def tearDownClass(cls):
+        """Free the SparkMax so other test classes can reuse the CAN ID."""
+        import gc
+        del cls.motor_sim
+        del cls.motor
+        gc.collect()
+
     def setUp(self):
         # Restore known config before each test
         cfg = rev.SparkMaxConfig()

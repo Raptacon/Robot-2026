@@ -57,6 +57,15 @@ class TestTurret(unittest.TestCase):
         cls.motor_sim = rev.SparkSim(cls.motor, DCMotor.NEO())
         cls.motor_sim.setBusVoltage(12.0)
 
+    @classmethod
+    def tearDownClass(cls):
+        """Free the SparkMax so other test classes can reuse the CAN ID."""
+        import gc
+        del cls.motor_sim
+        del cls.turret
+        del cls.motor
+        gc.collect()
+
     def setUp(self):
         """Reset motor and turret state before each test."""
         # Abort any active calibration or homing
