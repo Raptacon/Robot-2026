@@ -21,7 +21,7 @@ class Localization(commands2.Subsystem):
             Rotation3d.fromDegrees(0.0, 0.0, 0.0),
         )
         self.target_pose_front = wpimath.geometry.Pose3d( #I don't think we are using this anywhere
-            Translation3d(0.0, 0.0, 0.0), 
+            Translation3d(0.0, 0.0, 0.0),
             Rotation3d.fromDegrees(0.0, 0.0, 0.0),
         )
 
