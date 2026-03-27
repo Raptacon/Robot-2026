@@ -20,6 +20,7 @@ import wpimath
 from data.telemetry import Telemetry
 from commands.default_swerve_drive import DefaultDrive
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
+from subsystem.localization.localization import Localization
 from utils.input import InputFactory
 
 # Third-party imports
@@ -44,6 +45,9 @@ class RobotSwerve:
         # Alliance instantiation
         self.updateAlliance()
 
+        # camera stream init
+        self.localization = Localization()
+        wpilib.CameraServer.launch()
 
         # Initialize timer
         self.timer = wpilib.Timer()
