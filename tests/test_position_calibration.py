@@ -870,9 +870,9 @@ class TestPositionCalibrationCallbacks(unittest.TestCase):
 
     def test_motor_param_with_callback_override(self):
         """Test that explicit callback overrides SparkMax default."""
-        # Use CAN ID 41 motor from TestPositionCalibration class setup
+        # Use a unique CAN ID to avoid conflict with other test fixtures
         motor = rev.SparkMax(
-            42, rev.SparkLowLevel.MotorType.kBrushless
+            43, rev.SparkLowLevel.MotorType.kBrushless
         )
         custom_output = []
         cal = PositionCalibration(
