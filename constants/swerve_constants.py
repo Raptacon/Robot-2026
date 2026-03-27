@@ -174,3 +174,14 @@ class PancakeShooterConstants:
     shooterHoodPosition2 = 0.5
     shooterHoodPosition3 = 0.75
     shooterPositionConversionFactor = 1 / 1.5
+
+
+class HoodConstants:
+    motorId = PancakeShooterConstants.hoodMotorId
+    inverted = PancakeShooterConstants.shooterInverted[2]
+    gearRatio = 1.7  # 1.7:1 — motor rotations per output rotation
+    # NEO 550 (42 CPR handled internally by SparkMax)
+    # Converts motor rotations to output degrees
+    positionConversionFactor = 360.0 / gearRatio
+    maxAngleDegrees = 30.0
+    minAngleDegrees = 0.0
