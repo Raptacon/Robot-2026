@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 from config import HoodConfig
 from constants.swerve_constants import HoodConstants
 from subsystem.shooter.hood import Hood
+from utils.passive_range_finder import PassiveRangeFinderCommand
 
 # Hood motor CAN ID
 kHoodMotorID = HoodConstants.motorId
@@ -25,12 +26,12 @@ class MyRobot(TimedCommandRobot):
 
     def robotInit(self):
         # Create hood motor and subsystem
-        motor = rev.SparkMax(
+        self.hood_motor = rev.SparkMax(
             kHoodMotorID,
             rev.SparkLowLevel.MotorType.kBrushless
         )
         self.hood = Hood(
-            motor=motor,
+            motor=self.hood_motor,
             position_conversion_factor=HoodConstants.positionConversionFactor,
             max_angle_degrees=HoodConstants.maxAngleDegrees,
             pid=HoodConfig.hoodPID,
@@ -78,6 +79,12 @@ class MyRobot(TimedCommandRobot):
             self.hood.sysIdDynamicCommand(
                 SysIdRoutine.Direction.kReverse, self.sysId
             )
+        )
+
+        # Back button: toggle passive range finder (start/stop)
+        self.controller.back().toggleOnTrue(
+            PassiveRangeFinderCommand(
+                self.hood_motor, "Hood", self.hood)
         )
 
     def teleopPeriodic(self):
