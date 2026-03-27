@@ -56,8 +56,9 @@ class RobotSwerve:
         # Alliance instantiation
         self.updateAlliance()
 
-        # camera stream init
-        wpilib.CameraServer.launch()
+        # camera stream init — skip in sim to avoid test cleanup issues
+        if not wpilib.RobotBase.isSimulation():
+            wpilib.CameraServer.launch()
 
         # Initialize timer
         self.timer = wpilib.Timer()
@@ -292,10 +293,10 @@ class RobotSwerve:
             commands2.cmd.runOnce(self.intake.deployIntake, self.intake)
         )
         self.deactivate_roller = self.factory.getButton("intake.deactivate_roller").onTrue(
-            commands2.cmd.runOnce(self.intake.deactivateRoller, self.intake)
+            commands2.cmd.runOnce(self.intake.requestRollerOff, self.intake)
         )
         self.activate_roller = self.factory.getButton("intake.activate_roller").onTrue(
-            commands2.cmd.runOnce(self.intake.activateRoller, self.intake)
+            commands2.cmd.runOnce(self.intake.requestRollerOn, self.intake)
         )
         self.ramp_intake = self.factory.getButton("intake.ramp_intake").onTrue(
             commands2.cmd.run(self.intake.rampIntake, self.intake)
