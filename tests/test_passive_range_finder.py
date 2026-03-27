@@ -25,7 +25,7 @@ from utils.passive_range_finder import PassiveRangeFinderCommand
 class TestPassiveRangeFinder(unittest.TestCase):
     """Test suite for PassiveRangeFinderCommand."""
 
-    MOTOR_CAN_ID = 42
+    MOTOR_CAN_ID = 18
     POSITION_CONVERSION_FACTOR = 360.0 / 1.7
 
     @classmethod

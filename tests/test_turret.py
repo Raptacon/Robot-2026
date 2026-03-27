@@ -33,7 +33,7 @@ class TestTurret(unittest.TestCase):
     """
 
     # Test constants
-    MOTOR_CAN_ID = 40
+    MOTOR_CAN_ID = 15
     # Example: a 100:1 gear ratio turret
     # 1 motor rotation = 360/100 = 3.6 degrees of turret rotation
     POSITION_CONVERSION_FACTOR = 3.6  # degrees per motor rotation

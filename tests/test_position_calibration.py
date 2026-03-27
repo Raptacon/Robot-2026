@@ -26,7 +26,7 @@ from utils.position_calibration import (
 class TestPositionCalibration(unittest.TestCase):
     """Test suite for the PositionCalibration utility class."""
 
-    MOTOR_CAN_ID = 41
+    MOTOR_CAN_ID = 16
     MIN_SOFT_LIMIT = -90.0
     MAX_SOFT_LIMIT = 90.0
 
@@ -870,9 +870,9 @@ class TestPositionCalibrationCallbacks(unittest.TestCase):
 
     def test_motor_param_with_callback_override(self):
         """Test that explicit callback overrides SparkMax default."""
-        # Use a unique CAN ID to avoid conflict with other test fixtures
+        # Use a unique CAN ID from the reserved test range (15-19)
         motor = rev.SparkMax(
-            43, rev.SparkLowLevel.MotorType.kBrushless
+            17, rev.SparkLowLevel.MotorType.kBrushless
         )
         custom_output = []
         cal = PositionCalibration(
