@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Callable
 
 # Internal imports
-from config import HoodConfig
+from config import HoodConfig, OperatorRobotConfig
 from constants.swerve_constants import BallpitConstants, HoodConstants
 from constants.swerve_constants import PancakeShooterConstants
 from data.telemetry import Telemetry
@@ -48,6 +48,16 @@ class RobotSwerve:
         self.field = wpilib.Field2d()
         wpilib.SmartDashboard.putData("Field", self.field)
 
+        # In simulation, pre-seed CANcoder supply voltage so the absolute
+        # encoders report valid data when swerve modules call
+        # baseline_relative_encoders() during construction.
+        if wpilib.RobotBase.isSimulation():
+            import phoenix6
+            for base_id in OperatorRobotConfig.swerve_module_channels:
+                encoder_id = base_id + 2
+                encoder = phoenix6.hardware.CANcoder(encoder_id)
+                encoder.sim_state.set_supply_voltage(12.0)
+
         # Subsystem instantiation
         self.drivetrain = SwerveDrivetrain()
         self.shooter = Shooter()
@@ -59,7 +69,7 @@ class RobotSwerve:
         self.turret = Turret(rev.SparkMax(12, rev.SparkMax.MotorType.kBrushless), 0, 0, 1 )
 
         # Vision pose estimation
-        self.localization = Localization(self.drivetrain)
+        self.localization = Localization(self.drivetrain, field=self.field)
 
         # Alliance instantiation
         self.updateAlliance()

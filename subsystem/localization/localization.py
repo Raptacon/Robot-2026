@@ -11,9 +11,9 @@ See VISION.md in this directory for best practices and tuning guidance.
 import math
 from typing import List, Tuple
 
-import wpilib
+import ntcore
 from wpimath.geometry import (
-    Pose3d, Rotation3d, Transform3d, Translation3d,
+    Pose2d, Pose3d, Rotation3d, Transform3d, Translation3d,
 )
 from robotpy_apriltag import AprilTagField, AprilTagFieldLayout
 import photonlibpy
@@ -53,10 +53,11 @@ class Localization:
     robotPeriodic() to update the drivetrain pose every cycle in all modes.
     """
 
-    def __init__(self, drivetrain):
+    def __init__(self, drivetrain, field=None):
         """
         Args:
             drivetrain: SwerveDrivetrain instance that owns the pose estimator.
+            field: Optional Field2d to publish detected tag markers onto.
         """
         self.drivetrain = drivetrain
         self.field_layout = AprilTagFieldLayout.loadField(
@@ -91,10 +92,14 @@ class Localization:
         self.multi_tag_std_devs = cfg.vision_multi_tag_std_devs
         self.std_dev_distance_factor = cfg.vision_std_dev_distance_factor
 
-        # Telemetry
-        self._nt_table = wpilib.SmartDashboard
+        # Telemetry via NT (for AdvantageScope)
+        nt = ntcore.NetworkTableInstance.getDefault()
+        self._nt_vision = nt.getTable("Vision")
         self._accepted_count = 0
         self._rejected_count = 0
+        self._detected_tag_ids: List[int] = []
+        self._detected_tag_poses: List[Pose2d] = []
+        self._field = field
 
     def _add_camera(
         self,
@@ -115,6 +120,9 @@ class Localization:
 
         Call this once per robot loop (from robotPeriodic).
         """
+        self._detected_tag_ids.clear()
+        self._detected_tag_poses.clear()
+
         for cam in self.cameras:
             if not cam.camera.isConnected():
                 continue
@@ -122,12 +130,18 @@ class Localization:
             for result in cam.camera.getAllUnreadResults():
                 self._process_result(cam, result)
 
-        self._nt_table.putNumber(
-            "Vision/accepted_count", self._accepted_count
+        # Publish telemetry to NT for AdvantageScope
+        self._nt_vision.putNumber("accepted_count", self._accepted_count)
+        self._nt_vision.putNumber("rejected_count", self._rejected_count)
+        self._nt_vision.putNumberArray(
+            "detected_tag_ids", self._detected_tag_ids
         )
-        self._nt_table.putNumber(
-            "Vision/rejected_count", self._rejected_count
-        )
+
+        # Publish detected tag poses to Field2d
+        if self._field is not None:
+            self._field.getObject("Detected Tags").setPoses(
+                self._detected_tag_poses
+            )
 
     def _process_result(self, cam: VisionCamera, result) -> None:
         """Try multi-tag first, fall back to single-tag lowest ambiguity."""
@@ -143,6 +157,13 @@ class Localization:
         estimated_pose_3d: Pose3d = pose_est.estimatedPose
         targets_used = pose_est.targetsUsed
         timestamp = pose_est.timestampSeconds
+
+        # Collect detected tag IDs and poses for telemetry
+        for target in targets_used:
+            self._detected_tag_ids.append(target.fiducialId)
+            tag_pose = self.field_layout.getTagPose(target.fiducialId)
+            if tag_pose is not None:
+                self._detected_tag_poses.append(tag_pose.toPose2d())
 
         # --- Filtering ---
         if not self._passes_filters(
@@ -163,10 +184,13 @@ class Localization:
         pose_2d = estimated_pose_3d.toPose2d()
         self.drivetrain.add_vision_pose_estimate(pose_2d, timestamp, std_devs)
 
-        # Publish for AdvantageScope overlay
-        self._nt_table.putNumberArray(
-            "Vision/last_accepted_pose",
+        # Publish for AdvantageScope
+        self._nt_vision.putNumberArray(
+            "last_accepted_pose",
             [pose_2d.X(), pose_2d.Y(), pose_2d.rotation().degrees()],
+        )
+        self._nt_vision.putNumberArray(
+            "last_std_devs", list(std_devs)
         )
 
     def _passes_filters(
