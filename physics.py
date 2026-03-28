@@ -13,11 +13,12 @@ Robot field pose is integrated from swerve kinematics and fed back to:
 
 import typing
 
+import ntcore
 import rev
 import wpilib
 import wpilib.simulation
 from pyfrc.physics.core import PhysicsInterface
-from wpimath.geometry import Rotation2d, Twist2d
+from wpimath.geometry import Pose2d, Rotation2d, Twist2d
 from wpimath.kinematics import SwerveModuleState
 from wpimath.system.plant import DCMotor
 
@@ -68,6 +69,11 @@ class PhysicsEngine:
 
         # Seed pose from the drivetrain's configured default starting position.
         self._pose = robot.container.drivetrain.get_default_starting_pose()
+
+        # Ground-truth pose struct publisher (for AdvantageScope ghost overlay)
+        self._gt_pose_pub = ntcore.NetworkTableInstance.getDefault().getStructTopic(
+            "SimGroundTruth/pose", Pose2d
+        ).publish()
 
         # Vision simulation — generate AprilTag detections from ground-truth pose.
         self._localization = robot.container.localization
@@ -138,8 +144,9 @@ class PhysicsEngine:
             )
         )
 
-        # Update Field2d widget with the integrated pose.
+        # Update Field2d widget and struct publisher with the integrated pose.
         self.physics_controller.field.setRobotPose(self._pose)
+        self._gt_pose_pub.set(self._pose)
 
         # Feed integrated heading back to the NavX gyro sim device so that
         # field-relative drive and pose estimation use the correct heading.

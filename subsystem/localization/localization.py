@@ -92,7 +92,7 @@ class Localization:
         self.multi_tag_std_devs = cfg.vision_multi_tag_std_devs
         self.std_dev_distance_factor = cfg.vision_std_dev_distance_factor
 
-        # Telemetry via NT (for AdvantageScope)
+        # Telemetry via NT struct publishers (for AdvantageScope)
         nt = ntcore.NetworkTableInstance.getDefault()
         self._nt_vision = nt.getTable("Vision")
         self._accepted_count = 0
@@ -100,6 +100,14 @@ class Localization:
         self._detected_tag_ids: List[int] = []
         self._detected_tag_poses: List[Pose2d] = []
         self._field = field
+
+        # Struct publishers for native AdvantageScope drag-and-drop
+        self._accepted_pose_pub = nt.getStructTopic(
+            "Vision/acceptedPose", Pose2d
+        ).publish()
+        self._detected_tags_pub = nt.getStructArrayTopic(
+            "Vision/detectedTagPoses", Pose3d
+        ).publish()
 
     def _add_camera(
         self,
@@ -137,7 +145,15 @@ class Localization:
             "detected_tag_ids", self._detected_tag_ids
         )
 
-        # Publish detected tag poses to Field2d
+        # Publish detected tag poses as struct array (AdvantageScope 3D field)
+        tag_poses_3d = []
+        for tag_id in self._detected_tag_ids:
+            tag_pose = self.field_layout.getTagPose(tag_id)
+            if tag_pose is not None:
+                tag_poses_3d.append(tag_pose)
+        self._detected_tags_pub.set(tag_poses_3d)
+
+        # Publish detected tag poses to Field2d (sim GUI 2D view)
         if self._field is not None:
             self._field.getObject("Detected Tags").setPoses(
                 self._detected_tag_poses
@@ -184,11 +200,8 @@ class Localization:
         pose_2d = estimated_pose_3d.toPose2d()
         self.drivetrain.add_vision_pose_estimate(pose_2d, timestamp, std_devs)
 
-        # Publish for AdvantageScope
-        self._nt_vision.putNumberArray(
-            "last_accepted_pose",
-            [pose_2d.X(), pose_2d.Y(), pose_2d.rotation().degrees()],
-        )
+        # Publish for AdvantageScope (struct for drag-and-drop onto 3D field)
+        self._accepted_pose_pub.set(pose_2d)
         self._nt_vision.putNumberArray(
             "last_std_devs", list(std_devs)
         )
