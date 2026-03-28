@@ -70,8 +70,9 @@ instance/
 # Sphinx documentation
 docs/_build/
 
-# pdoc generated documentation
-docs/
+# pdoc generated documentation (keep hand-written docs/, ignore generated html)
+docs/_build/
+docs/html/
 
 # PyBuilder
 target/
@@ -112,7 +113,6 @@ venv*/
 ENV/
 env.bak/
 venv.bak/
-.claude/
 
 # Spyder project settings
 .spyderproject
@@ -152,8 +152,9 @@ tests/logs
 # Host tool user settings
 host/controller_config/.settings.json
 
-# Claude Code local settings
-.claude/
+# Claude Code -- ignore local settings but keep shared skills
+.claude/settings.local.json
+!.claude/skills/
 
 # Auto-generated controller map files
 controller_maps.py
