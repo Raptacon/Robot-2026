@@ -62,14 +62,6 @@ actions:
       description: Turn the feed motor on or off
       input_type: button
       trigger_mode: on_true
-    raise_hood:
-      description: Raise the hood
-      input_type: button
-      trigger_mode: on_true
-    lower_hood:
-      description: Lower the hood
-      input_type: button
-      trigger_mode: on_true
     cycle_shooter_fixed:
       description: Cycle through fixed position options for RPM
       input_type: boolean_trigger
@@ -106,11 +98,11 @@ actions:
       description: Hold the intake halfway between being deployed and stowed
       input_type: button
       trigger_mode: on_true
-  turret:
-    stop_turret:
-      description: Completely stops the turret from moving
-      input_type: button
-      trigger_mode: on_true
+  hood:
+    angle:
+      description: Analog hood angle control (0..1 maps to min..max angle)
+      input_type: analog
+      trigger_mode: scaled
 
 
 controllers:
@@ -135,13 +127,11 @@ controllers:
     bindings:
       pov_up: [shooter.increment_RPM]
       pov_down: [shooter.decrement_RPM]
-      pov_right: [shooter.raise_hood]
-      pov_left: [shooter.lower_hood]
       y_button: [shooter.reset_RPM_offset]
       a_button: [shooter.cycle_flywheel_mode]
       x_button: [shooter.toggle_flywheel]
       b_button: [shooter.toggle_feed]
       left_bumper: [hopper.toggle_hopper]
       right_bumper: [hopper.unjam_hopper]
-      right_trigger: [shooter.cycle_shooter_fixed]
-      left_trigger: [localization.stop_turret]
+      left_trigger: [shooter.cycle_shooter_fixed]
+      right_trigger: [hood.angle]

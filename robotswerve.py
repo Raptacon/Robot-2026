@@ -15,13 +15,15 @@ from pathlib import Path
 from typing import Callable
 
 # Internal imports
-from constants.swerve_constants import BallpitConstants
+from config import HoodConfig
+from constants.swerve_constants import BallpitConstants, HoodConstants
 from constants.swerve_constants import PancakeShooterConstants
 from data.telemetry import Telemetry
 from commands.auto.pid_to_angle import PIDAlignToTarget
 from commands.default_swerve_drive import DefaultDrive
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
-from subsystem.shooter import Shooter
+from subsystem.mechanisms.shooter.shooter import Shooter
+from subsystem.mechanisms.shooter.hood import createHood
 from subsystem.ballpit import BallPitHopper as Hopper
 from subsystem.localization.localization import Localization
 from subsystem.mechanisms.turret import Turret
@@ -49,6 +51,8 @@ class RobotSwerve:
         # Subsystem instantiation
         self.drivetrain = SwerveDrivetrain()
         self.shooter = Shooter()
+        self.hood = createHood(HoodConstants, HoodConfig)
+        self.hood.setShooter(self.shooter)
         self.hopper = Hopper()
         self.intake = IntakeSubsystem()
         #TODO replace with real turret code
@@ -60,8 +64,9 @@ class RobotSwerve:
         # Alliance instantiation
         self.updateAlliance()
 
-        # camera stream init
-        wpilib.CameraServer.launch()
+        # camera stream init — skip in sim to avoid test cleanup issues
+        if not wpilib.RobotBase.isSimulation():
+            wpilib.CameraServer.launch()
 
         # Initialize timer
         self.timer = wpilib.Timer()
@@ -133,8 +138,6 @@ class RobotSwerve:
 
         self.shooter.setRPM(0)
         self.shooter.resetOffset()
-        for motor in ["feed", "lead", "follower"]:
-            self.shooter.setMotorVoltage(motor, 0)
 
         self.hopper.zeroHopperVelocity()
 
@@ -170,7 +173,7 @@ class RobotSwerve:
         self.shooter.setDefaultCommand(commands2.cmd.select(
             {
                 "autoRPM": commands2.cmd.run(
-                    lambda: self.shooter.setRpmAndHoodUsingLookup(
+                    lambda: self.shooter.setRpmUsingLookup(
                         self.shooter.calculateRangeFromOdometry(
                             self.drivetrain.current_pose,
                             lambda: determineShooterTargets2026(self.drivetrain.current_pose, self.alliance)
@@ -182,6 +185,9 @@ class RobotSwerve:
             },
             self.shooter.getFlywheelMode
         ))
+
+        # Hood default: set angle from shooter's distance-based lookup
+        self.hood.setDefaultCommand(self.hood.autoAngleCommand())
             
 
         self.hopper.setDefaultCommand(commands2.cmd.select(
@@ -209,6 +215,10 @@ class RobotSwerve:
             )
         )
         commands2.cmd.run(lambda: self.drivetrain.drive(2, 0, 0, False), self.drivetrain).withTimeout(5).schedule()
+
+        # Hood manual test: trigger analog overrides safety for manual control
+        self.hood.setDefaultCommand(
+            self.hood.manualTestCommand(self.hood_angle_input))
 
     def testPeriodic(self):
         pass
@@ -271,15 +281,12 @@ class RobotSwerve:
                     commands2.cmd.runOnce(self.shooter.toggleFeedActive, self.shooter),
                     commands2.cmd.runOnce(lambda: self.hopper.setHopperToggle(self.shooter.feedActive), self.hopper)
             ))
-        self.raise_shooter_hood = self.factory.getButton("shooter.raise_hood").onTrue(
-            commands2.cmd.runOnce(lambda: self.shooter.cycleHoodPosition(True), self.shooter),
-        )
-        self.lower_shooter_hood = self.factory.getButton("shooter.lower_hood").onTrue(
-            commands2.cmd.runOnce(lambda: self.shooter.cycleHoodPosition(False), self.shooter)
-        )
         self.shooter_cycle_fixed_RPM = self.factory.getButton("shooter.cycle_shooter_fixed").onTrue(
             commands2.cmd.runOnce(self.shooter.cycleFixedShootingPosition, self.shooter)
         )
+
+        # Hood input — right trigger analog mapped to hood angle
+        self.hood_angle_input = self.factory.getAnalog("hood.angle")
 
         # Hopper inputs
         self.toggle_hopper = self.factory.getButton("hopper.toggle_hopper").onTrue(
@@ -297,10 +304,10 @@ class RobotSwerve:
             commands2.cmd.runOnce(self.intake.deployIntake, self.intake)
         )
         self.deactivate_roller = self.factory.getButton("intake.deactivate_roller").onTrue(
-            commands2.cmd.runOnce(self.intake.deactivateRoller, self.intake)
+            commands2.cmd.runOnce(self.intake.requestRollerOff, self.intake)
         )
         self.activate_roller = self.factory.getButton("intake.activate_roller").onTrue(
-            commands2.cmd.runOnce(self.intake.activateRoller, self.intake)
+            commands2.cmd.runOnce(self.intake.requestRollerOn, self.intake)
         )
         self.ramp_intake = self.factory.getButton("intake.ramp_intake").onTrue(
             commands2.cmd.run(self.intake.rampIntake, self.intake)
