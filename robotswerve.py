@@ -34,6 +34,11 @@ import wpilib
 from commands2.button import Trigger
 from pathplannerlib.auto import AutoBuilder
 from subsystem.intakeactions import IntakeSubsystem
+from playsound3 import playsound
+from pydub import AudioSegment
+from pydub.playback import play
+
+import pygame
 
 class RobotSwerve:
     # forward declare critical types for editors
@@ -52,6 +57,10 @@ class RobotSwerve:
         self.hood.setShooter(self.shooter)
         self.hopper = Hopper()
         self.intake = IntakeSubsystem()
+
+        pygame.mixer.init()
+        self.imdisabled = pygame.mixer.Sound('im disabled-Audio (High).ogg')
+        self.imdisabled.set_volume(1.0)
 
         # Alliance instantiation
         self.updateAlliance()
@@ -130,6 +139,7 @@ class RobotSwerve:
 
         self.hopper.zeroHopperVelocity()
 
+        self.imdisabled.play()
     def disabledPeriodic(self):
         pass
 
