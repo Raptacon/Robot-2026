@@ -169,12 +169,37 @@ read `drivetrain.current_pose()` for the best available position, not raw vision
 
 ## References
 
-- [PhotonVision Pose Estimation Docs](https://docs.photonvision.org/en/latest/docs/programming/photonlib/robot-pose-estimator.html)
-- [PhotonVision Multi-Tag](https://docs.photonvision.org/en/latest/docs/apriltag-pipelines/multitag.html)
-- [PhotonVision 3D Tracking / Ambiguity](https://docs.photonvision.org/en/latest/docs/apriltag-pipelines/3D-tracking.html)
-- [WPILib Pose Estimators](https://docs.wpilib.org/en/stable/docs/software/advanced-controls/state-space/state-space-pose-estimators.html)
-- [WPILib AprilTag Intro](https://docs.wpilib.org/en/stable/docs/software/vision-processing/apriltag/apriltag-intro.html)
-- [YAGSL Vision.java](https://github.com/BroncBotz3481/YAGSL-Example/blob/main/src/main/java/frc/robot/subsystems/swervedrive/Vision.java)
-- [HuskieRobotics 3061-lib](https://github.com/HuskieRobotics/3061-lib)
-- [FRC 5712 Vision Workshop](https://www.frc5712.com/vision-implementation)
-- [Chief Delphi - PhotonVision Pose Estimation](https://www.chiefdelphi.com/t/use-photovision-to-improve-pose-estimation-via-april-tags/511031)
+### PhotonVision Documentation
+
+- [PhotonVision Pose Estimation Docs](https://docs.photonvision.org/en/latest/docs/programming/photonlib/robot-pose-estimator.html) -- `PhotonPoseEstimator` API, estimation strategies, usage examples
+- [PhotonVision Multi-Tag Pipeline](https://docs.photonvision.org/en/latest/docs/apriltag-pipelines/multitag.html) -- How multi-tag estimation works on the coprocessor, how to enable it
+- [PhotonVision 3D Tracking / Ambiguity](https://docs.photonvision.org/en/latest/docs/apriltag-pipelines/3D-tracking.html) -- SolvePnP ambiguity explained, why head-on viewing fails
+- [PhotonVision Advanced Strategies](https://docs.photonvision.org/en/latest/docs/integration/advancedStrategies.html) -- Field layout loading, coordinate systems, latency compensation
+- [PhotonVision Pose Estimation Example (Python)](https://github.com/PhotonVision/photonvision/blob/main/photonlib-python-examples/poseest/robot.py) -- Official Python example showing full integration
+- [PhotonPoseEstimator Source (Python)](https://github.com/PhotonVision/photonvision/blob/main/photon-lib/py/photonlibpy/photonPoseEstimator.py) -- Source code for the Python pose estimator
+- [PhotonVision Camera Calibration](https://docs.photonvision.org/en/latest/docs/calibration/calibration.html) -- How to calibrate cameras (critical for accuracy)
+
+### WPILib Documentation
+
+- [WPILib Pose Estimators](https://docs.wpilib.org/en/stable/docs/software/advanced-controls/state-space/state-space-pose-estimators.html) -- How `SwerveDrivePoseEstimator` works, Kalman filter math, std dev tuning
+- [WPILib AprilTag Intro](https://docs.wpilib.org/en/stable/docs/software/vision-processing/apriltag/apriltag-intro.html) -- How AprilTag detection works, 2D-to-3D ambiguity, tunable parameters
+- [WPILib Vision Processing](https://docs.wpilib.org/en/stable/docs/software/vision-processing/index.html) -- Overview of vision processing options in FRC
+- [WPILib Coordinate Systems](https://docs.wpilib.org/en/stable/docs/software/basic-programming/coordinate-system.html) -- Robot and field coordinate conventions (X forward, Y left, Z up)
+- [SwerveDrive4PoseEstimator RobotPy API](https://robotpy.readthedocs.io/projects/robotpy/en/stable/wpimath.estimator/SwerveDrive4PoseEstimator.html) -- Python-specific API reference
+- [PoseEstimator.java Source](https://github.com/wpilibsuite/allwpilib/blob/main/wpimath/src/main/java/edu/wpi/first/math/estimator/PoseEstimator.java) -- WPILib source showing Kalman gain formula and latency compensation internals
+
+### FRC Team Implementations
+
+- [YAGSL Vision.java](https://github.com/BroncBotz3481/YAGSL-Example/blob/main/src/main/java/frc/robot/subsystems/swervedrive/Vision.java) -- Widely-used swerve library with distance-based std dev scaling, ambiguity filtering, and sanity checks. Our std dev formula is adapted from this.
+- [HuskieRobotics 3061-lib (Team 3061)](https://github.com/HuskieRobotics/3061-lib) -- Comprehensive vision subsystem with per-camera std dev factors, reprojection error filtering, and gyro rotation agreement checks
+- [Team 254 FRC-2024-Public](https://github.com/Team254/FRC-2024-Public) -- Cheesy Poofs' 2024 robot code; reference-quality vision integration
+- [Team 6328 Mechanical Advantage](https://www.littletonrobotics.org/software-update-2-one-vision-ring-to-rule-them-all/) -- Blog post on their vision architecture, AdvantageKit logging approach, and pose estimation strategy
+- [FRC 5712 Vision Implementation Workshop](https://www.frc5712.com/vision-implementation) -- Step-by-step tutorial with std dev formula: `xy = 0.5 * dist^2 / tag_count`
+
+### Chief Delphi Discussions
+
+- [Use PhotonVision to improve pose estimation via AprilTags](https://www.chiefdelphi.com/t/use-photovision-to-improve-pose-estimation-via-april-tags/511031) -- Community recommendations; points to YAGSL and 3061-lib as gold standard implementations
+- [Pose estimation degrades when camera is normal to AprilTag plane](https://www.chiefdelphi.com/t/pose-estimation-degrades-when-the-camera-is-normal-to-the-apriltag-plane/514907) -- Explains why head-on viewing causes ambiguity; camera mounting angle advice
+- [How to improve accuracy of swerve odometry pose estimation](https://www.chiefdelphi.com/t/how-to-improve-accuracy-of-swerve-odometry-pose-estimation/506754) -- Teams report 4-5 inch offset errors; discussion of tuning approaches
+- [Difficulty with Robot Pose Estimation](https://www.chiefdelphi.com/t/difficulty-with-robot-pose-estimation-in-frc/506639) -- When to trust vision vs odometry, handling periods with no visible targets
+- [MT2 Discrepancy with PoseEstimation (flipped across tag)](https://www.chiefdelphi.com/t/mt2-discrepancy-with-poseestimation-flipped-across-the-apriltag/507224) -- Gyro/coordinate system mismatch causing flipped poses; reinforces need for rotation agreement filter
