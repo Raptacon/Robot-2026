@@ -35,6 +35,7 @@ class VisionCamera:
         field_layout: AprilTagFieldLayout,
     ):
         self.name = name
+        self.robot_to_camera = robot_to_camera
         self.camera = photonlibpy.PhotonCamera(name)
         self.pose_estimator = photonlibpy.PhotonPoseEstimator(
             field_layout, robot_to_camera
@@ -159,8 +160,13 @@ class Localization:
             return
 
         self._accepted_count += 1
-        self.drivetrain.add_vision_pose_estimate(
-            estimated_pose_3d.toPose2d(), timestamp, std_devs
+        pose_2d = estimated_pose_3d.toPose2d()
+        self.drivetrain.add_vision_pose_estimate(pose_2d, timestamp, std_devs)
+
+        # Publish for AdvantageScope overlay
+        self._nt_table.putNumberArray(
+            "Vision/last_accepted_pose",
+            [pose_2d.X(), pose_2d.Y(), pose_2d.rotation().degrees()],
         )
 
     def _passes_filters(
@@ -249,3 +255,34 @@ class Localization:
     def updateTelemetry(self) -> None:
         """Called by subsystem registry if this is registered as a subsystem."""
         pass
+
+    # ── Simulation support ──────────────────────────────────────────────
+
+    def setup_sim(self) -> None:
+        """Create VisionSystemSim with a PhotonCameraSim per camera.
+
+        Call once during sim init (from physics.py). Imports are deferred so
+        cv2 and the simulation module are never loaded on real hardware.
+        """
+        from photonlibpy.simulation import (
+            PhotonCameraSim,
+            SimCameraProperties,
+            VisionSystemSim,
+        )
+
+        self._vision_sim = VisionSystemSim("main")
+        self._vision_sim.addAprilTags(self.field_layout)
+
+        for vcam in self.cameras:
+            props = SimCameraProperties.PERFECT_90DEG()
+            cam_sim = PhotonCameraSim(vcam.camera, props)
+            self._vision_sim.addCamera(cam_sim, vcam.robot_to_camera)
+
+    def update_sim(self, robot_pose) -> None:
+        """Feed ground-truth pose into VisionSystemSim.
+
+        Call each physics tick from physics.py so cameras see simulated
+        AprilTag detections.
+        """
+        if hasattr(self, '_vision_sim'):
+            self._vision_sim.update(robot_pose)

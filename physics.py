@@ -79,6 +79,10 @@ class PhysicsEngine:
         # Seed pose from the drivetrain's configured default starting position.
         self._pose = robot.container.drivetrain.get_default_starting_pose()
 
+        # Vision simulation — generate AprilTag detections from ground-truth pose.
+        self._localization = robot.container.localization
+        self._localization.setup_sim()
+
         # NavX yaw variable — may be unavailable depending on sim state.
         self._navx_yaw = None
         try:
@@ -164,3 +168,7 @@ class PhysicsEngine:
         # field-relative drive and pose estimation use the correct heading.
         if self._navx_yaw is not None:
             self._navx_yaw.set(self._pose.rotation().degrees())
+
+        # Feed ground-truth pose into VisionSystemSim so simulated cameras
+        # generate AprilTag detections via NetworkTables.
+        self._localization.update_sim(self._pose)

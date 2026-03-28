@@ -167,6 +167,80 @@ is a thin wrapper around `SwerveDrive4PoseEstimator.addVisionMeasurement()`.
 The drivetrain owns the fused pose. Other subsystems (shooter, turret, auto) should
 read `drivetrain.current_pose()` for the best available position, not raw vision data.
 
+## Simulation
+
+The vision system is fully simulated when running `python -m robotpy sim`.
+
+### How it works
+
+1. `Localization.setup_sim()` creates a `VisionSystemSim` with `PhotonCameraSim`
+   wrappers around each real `PhotonCamera`.
+2. `physics.py` calls `localization.update_sim(ground_truth_pose)` each tick.
+3. `VisionSystemSim` ray-traces the field's AprilTag layout to determine which
+   tags each camera can see, then publishes simulated `PhotonPipelineResult`
+   data through NetworkTables.
+4. The normal `Localization.update()` in `robotPeriodic()` reads these results
+   as if they came from real cameras -- the entire filtering, std dev, and pose
+   estimator pipeline runs identically in sim and on hardware.
+
+### Running the sim
+
+```bash
+python -m robotpy sim
+```
+
+### Camera properties
+
+By default, `SimCameraProperties.PERFECT_90DEG()` is used (no noise, no
+latency, 90-degree FOV). To test with realistic noise, modify `setup_sim()`:
+
+```python
+props = SimCameraProperties.PERFECT_90DEG()
+props.setCalibError(0.25, 0.05)   # avg/stddev pixel noise
+props.setAvgLatency(0.035)         # 35ms average latency
+props.setLatencyStdDev(0.008)      # 8ms jitter
+props.setFPS(30)                   # 30 fps
+```
+
+### Physics model
+
+The current zero-delay swerve model is sufficient for vision testing. The
+vision pipeline depends on accurate *position* (which tags are visible), not
+on realistic motor dynamics. A physics model upgrade (DCMotorSim, low-pass
+filter) would improve auto path / PID tuning fidelity but is independent of
+vision correctness.
+
+## Visualization with AdvantageScope
+
+[AdvantageScope](https://docs.advantagescope.org/) is the primary visualization
+tool for debugging vision in sim. It connects to the robot sim via
+NetworkTables on localhost.
+
+### Setup
+
+1. Open AdvantageScope (bundled with WPILib)
+2. Connect to `localhost` (File > Connect to Simulator)
+3. Open the **3D Field** tab
+
+### What you can see
+
+- **Ground-truth pose** (from physics.py `Field2d`) -- the "real" robot position
+- **Estimated pose** (from `drivetrain.current_pose()`) -- the fused odometry +
+  vision estimate
+- **Vision target detections** -- drag poses from the `VisionSystemSim-main/`
+  NT subtree onto the field
+- **Camera poses** -- auto-published by `VisionSystemSim`
+
+The 3D field tab includes the 2026 field model with AprilTag positions already
+built in. You can overlay estimated vs actual pose as solid + ghost robot models
+to visualize how well vision is correcting odometry drift.
+
+### Custom robot models
+
+Export your robot CAD as `.glb` (binary glTF) and load it in AdvantageScope
+preferences under custom assets. See the
+[AdvantageScope docs](https://docs.advantagescope.org/more-features/custom-assets/).
+
 ## References
 
 ### PhotonVision Documentation
