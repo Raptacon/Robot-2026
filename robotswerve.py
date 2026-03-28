@@ -54,10 +54,8 @@ class RobotSwerve:
         #TODO replace with real turret code
         self.turret = Turret(rev.SparkMax(12, rev.SparkMax.MotorType.kBrushless), 0, 0, 1 )
 
-        #Vision set up
-        self.localization = Localization()
-        self.localization.robotInit()
-        self.localization.__init__()
+        # Vision pose estimation
+        self.localization = Localization(self.drivetrain)
 
         # Alliance instantiation
         self.updateAlliance()
@@ -120,6 +118,9 @@ class RobotSwerve:
 
 
     def robotPeriodic(self):
+        # Update vision pose estimates every cycle (all modes)
+        self.localization.update()
+
         if self.enableTelemetry and self.telemetry:
             self.telemetry.runDefaultDataCollections()
 
@@ -192,10 +193,7 @@ class RobotSwerve:
         ))
 
     def teleopPeriodic(self):
-        self.localization.teleopPeriodic()
-        self.localization.periodic()
-        if not self.localization.isDisabled():
-            self.turret.setPosition(self.localization.getTargetpose())
+        pass
 
     def testInit(self):
         #TODO Move to NT listener on change listener
@@ -309,9 +307,10 @@ class RobotSwerve:
         )
 
         #Turret stop
-        self.stop_turret = self.factory.getButton("turret.stop_turret").onTrue(
-            commands2.cmd.runOnce(self.localization.disable, self.localization)
-        )
+        # TODO: Turret disable should be handled by the turret subsystem itself
+        # self.stop_turret = self.factory.getButton("turret.stop_turret").onTrue(
+        #     commands2.cmd.runOnce(self.turret.disable, self.turret)
+        # )
 
         # Map all drive axes' scale to a shared SmartDashboard entry.
         # Dashboard changes and Y-button toggles both write to this path;
