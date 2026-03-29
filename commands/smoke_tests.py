@@ -11,6 +11,7 @@ from wpimath.kinematics import SwerveModuleState
 
 import commands2
 import wpilib
+import rev
 
 class SmokeTests(commands2.SequentialCommandGroup):
     """    
@@ -37,10 +38,31 @@ class SmokeTests(commands2.SequentialCommandGroup):
         self.progress = False
         self.testMessage = ""
         self.totaltests = 32
+        self.testNumber = 0
         # self.velocity_vector_x = velocity_vector_x
         # self.velocity_vector_y = velocity_vector_y
         # self.angular_velocity = angular_velocity
 
+        self.canIDs = [0,1,2,3,4,5,6,7,8,9,10]
+        self.allMotors = []
+        self.testResults = []
+        currentMotor = 0
+        possibleUnpluggedRio = False
+        while currentMotor <= len(self.canIDs):
+            if self.allMotors[currentMotor] == rev.REVLibError.kOk:
+                self.testResults.append(".")
+                if possibleUnpluggedRio:
+                    currentMotor = 2
+                    possibleUnpluggedRio = False
+            else:
+                self.testResults.append("F")
+                if currentMotor == 1:
+                    possibleUnpluggedRio = True
+                    currentMotor = len(self.canIDs) - 2
+            currentMotor += 1
+        if possibleUnpluggedRio == True:
+            pass
+        
         self.addRequirements(self.drivetrain)
         # Tests Swerve Modules (0-20)
         for index, swerve_module in enumerate(self.drivetrain.swerve_modules):
@@ -52,27 +74,27 @@ class SmokeTests(commands2.SequentialCommandGroup):
                 # Current swerve module's drive motor moves forward 0.2 meters per second until driver confirms 
                 commands2.InstantCommand(lambda swerve_module=swerve_module: swerve_module.set_state(SwerveModuleState(0.2, Rotation2d.fromDegrees(0)), apply_cosine_scaling=False),
                                         self.drivetrain),
-                commands2.cmd.runOnce(lambda index=index, swerve_module=swerve_module:self.setMessage((index*5)+1, str(swerve_module.getName()), "Check to see if module starts driving...", "Manual Confirmation")),
+                commands2.cmd.runOnce(lambda swerve_module=swerve_module:self.setMessage(str(swerve_module.getName()), "Check to see if module starts driving...", "Manual Confirmation")),
                 commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False)),
                 # Current swerve module's drive motor stops
                 commands2.InstantCommand(lambda swerve_module=swerve_module: swerve_module.set_state(SwerveModuleState(0, Rotation2d.fromDegrees(0)), apply_cosine_scaling=False),
                                         self.drivetrain),
-                commands2.cmd.runOnce(lambda index=index, swerve_module=swerve_module:self.setMessage((index*5)+2, str(swerve_module.getName()), "Check to see if module stops driving...", "Manual Confirmation")),
+                commands2.cmd.runOnce(lambda swerve_module=swerve_module:self.setMessage(str(swerve_module.getName()), "Check to see if module stops driving...", "Manual Confirmation")),
                 commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False)),
                 # Current swerve module's steer motor rotates to 0 degrees and driver confirms
                 commands2.InstantCommand(lambda swerve_module=swerve_module: swerve_module.set_state(SwerveModuleState(0, Rotation2d.fromDegrees(0)), apply_cosine_scaling=False),
                                         self.drivetrain),
-                commands2.cmd.runOnce(lambda index=index, swerve_module=swerve_module:self.setMessage((index*5)+3, str(swerve_module.getName()), "Check to see if module rotates facing 0 degrees...", "Manual Confirmation")),
+                commands2.cmd.runOnce(lambda swerve_module=swerve_module:self.setMessage(str(swerve_module.getName()), "Check to see if module rotates facing 0 degrees...", "Manual Confirmation")),
                 commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False)),
                 # Current swerve module's steer motor rotates to 45 degrees and driver confirms
                 commands2.InstantCommand(lambda swerve_module=swerve_module: swerve_module.set_state(SwerveModuleState(0, Rotation2d.fromDegrees(45)), apply_cosine_scaling=False),
                                         self.drivetrain),
-                commands2.cmd.runOnce(lambda index=index, swerve_module=swerve_module:self.setMessage((index*5)+4, str(swerve_module.getName()), "Check to see if module rotates facing 45 degrees...", "Manual Confirmation")),
+                commands2.cmd.runOnce(lambda swerve_module=swerve_module:self.setMessage(str(swerve_module.getName()), "Check to see if module rotates facing 45 degrees...", "Manual Confirmation")),
                 commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False)),
                 # Current swerve module's steer motor rotates to 90 degrees and driver confirms
                 commands2.InstantCommand(lambda swerve_module=swerve_module: swerve_module.set_state(SwerveModuleState(0, Rotation2d.fromDegrees(90)), apply_cosine_scaling=False),
                                         self.drivetrain),
-                commands2.cmd.runOnce(lambda index=index, swerve_module=swerve_module:self.setMessage((index*5)+5, str(swerve_module.getName()), "Check to see if module rotates facing 90 degrees...", "Manual Confirmation")),
+                commands2.cmd.runOnce(lambda swerve_module=swerve_module:self.setMessage(str(swerve_module.getName()), "Check to see if module rotates facing 90 degrees...", "Manual Confirmation")),
                 commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False)),
                 # Current swerve module's steer motor rotates back to 0 degrees when finished
                 commands2.InstantCommand(lambda swerve_module=swerve_module: swerve_module.set_state(SwerveModuleState(0, Rotation2d.fromDegrees(0)), apply_cosine_scaling=False),
@@ -128,6 +150,9 @@ class SmokeTests(commands2.SequentialCommandGroup):
             commands2.InstantCommand(lambda shooter=shooter: shooter.setRPM(0), self.shooter),
             commands2.cmd.runOnce(lambda: self.setMessage(32, "Shooter", "Check to see if BOTH Flywheels deactivate...", "Manual Confirmation")),
             commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False)),
+            #Test Vision
+            #Test LEDs
+            #Test NavX?
         )
 
     # def execute(self):
@@ -137,9 +162,9 @@ class SmokeTests(commands2.SequentialCommandGroup):
         self.progress = progress
 
 
-    def setMessage(self, testNumber, testComponent = None, testInstruction = None, testConfirmation = None):
+    def setMessage(self, testComponent = None, testInstruction = None, testConfirmation = None):
         # self.testMessage = self.allMessages[messageNumber]
-        self.testNumber = testNumber
+        self.testNumber += 1
         self.testComponent = testComponent
         self.testInstruction = testInstruction
         self.testConfirmation = testConfirmation
