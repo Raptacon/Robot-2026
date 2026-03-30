@@ -28,7 +28,7 @@ class SmokeTests(commands2.SequentialCommandGroup):
                 intake: IntakeSubsystem,
                 hopper: BallPitHopper,
                 shooter: Shooter
-                ):
+                ) -> None:
         """
         This creates the tests and all associated objects.
 
@@ -174,7 +174,7 @@ class SmokeTests(commands2.SequentialCommandGroup):
     # def execute(self):
     #     self.drivetrain.swerve_modules[0].set_state(SwerveModuleState(0.2, Rotation2d.fromDegrees(0)))
 
-    def advance(self, progress = True):
+    def advance(self, progress = True) -> None:
         """
         This will tell the code whether it should "advance" to the next test.
         
@@ -186,7 +186,7 @@ class SmokeTests(commands2.SequentialCommandGroup):
         """
         self.progress = progress
 
-    def setMessage(self, testComponent = None, row1 = None, row2 = None, test = True):
+    def setMessage(self, testComponent = None, row1 = None, row2 = None, test = True) -> None:
         """
         Sets the Test Message for Drivers.
 
@@ -201,6 +201,9 @@ class SmokeTests(commands2.SequentialCommandGroup):
             row1: first row of message
             row2: second row of message
             test: whether message is being set as part of a test
+
+        Returns:
+            None
         """
         if test:
             self.testNumber += 1
@@ -214,7 +217,7 @@ class SmokeTests(commands2.SequentialCommandGroup):
             """
         print(self.testMessage)
 
-    def failureMessage(self, title = None, row1 = None, row2 = None, row3 = None):
+    def failureMessage(self, title = None, row1 = None, row2 = None, row3 = None) -> None:
         """
         Sets the Failure Message for Drivers.
 
@@ -236,7 +239,7 @@ class SmokeTests(commands2.SequentialCommandGroup):
         """
         sys.exit(1)
 
-    def setElapsedTime(self):
+    def setElapsedTime(self) -> None:
         """
         This sets the elapsed starting time for tests.
 
@@ -260,7 +263,7 @@ class SmokeTests(commands2.SequentialCommandGroup):
         """
         return time.perf_counter() - self.timer
 
-    def updateMessage(self):
+    def updateMessage(self) -> None:
         """
         Updates the Message which has been set elsewhere into a Network Table.
 
