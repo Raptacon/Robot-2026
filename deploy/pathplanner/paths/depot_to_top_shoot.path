@@ -1,0 +1,81 @@
+{
+  "version": "2025.0",
+  "waypoints": [
+    {
+      "anchor": {
+<<<<<<<< Updated upstream:deploy/pathplanner/paths/ms_forward.path
+        "x": 7.225,
+        "y": 4.0
+      },
+      "prevControl": null,
+      "nextControl": {
+        "x": 6.0954441474968535,
+        "y": 4.0
+========
+        "x": 0.5228574852682284,
+        "y": 5.96522724561297
+      },
+      "prevControl": null,
+      "nextControl": {
+        "x": 1.3193614419397128,
+        "y": 6.52329126170574
+>>>>>>>> Stashed changes:deploy/pathplanner/paths/depot_to_top_shoot.path
+      },
+      "isLocked": false,
+      "linkedName": "ms"
+    },
+    {
+      "anchor": {
+<<<<<<<< Updated upstream:deploy/pathplanner/paths/ms_forward.path
+        "x": 6.5,
+        "y": 4.0
+      },
+      "prevControl": {
+        "x": 7.0,
+        "y": 4.0
+========
+        "x": 2.0352935474537044,
+        "y": 7.027102719907407
+      },
+      "prevControl": {
+        "x": 1.6534675231356286,
+        "y": 6.762657914113576
+>>>>>>>> Stashed changes:deploy/pathplanner/paths/depot_to_top_shoot.path
+      },
+      "nextControl": null,
+      "isLocked": false,
+      "linkedName": null
+    }
+  ],
+  "rotationTargets": [],
+  "constraintZones": [],
+  "pointTowardsZones": [],
+  "eventMarkers": [],
+  "globalConstraints": {
+    "maxVelocity": 0.75,
+    "maxAcceleration": 1.0,
+    "maxAngularVelocity": 360.0,
+    "maxAngularAcceleration": 360.0,
+    "nominalVoltage": 12.0,
+    "unlimited": false
+  },
+  "goalEndState": {
+    "velocity": 0,
+<<<<<<<< Updated upstream:deploy/pathplanner/paths/ms_forward.path
+    "rotation": 180.0
+========
+    "rotation": 179.5537867047405
+>>>>>>>> Stashed changes:deploy/pathplanner/paths/depot_to_top_shoot.path
+  },
+  "reversed": false,
+  "folder": "Paths2025_Blue",
+  "idealStartingState": {
+    "velocity": 0,
+<<<<<<<< Updated upstream:deploy/pathplanner/paths/ms_forward.path
+    "rotation": 180.0
+========
+    "rotation": -179.9569136053319
+>>>>>>>> Stashed changes:deploy/pathplanner/paths/depot_to_top_shoot.path
+  },
+  "useDefaultConstraints": true
+}

@@ -1,0 +1,83 @@
+{
+  "version": "2025.0",
+  "waypoints": [
+    {
+      "anchor": {
+<<<<<<<< Updated upstream:deploy/pathplanner/paths/back_up_middle.path
+        "x": 5.759,
+        "y": 3.735
+      },
+      "prevControl": null,
+      "nextControl": {
+        "x": 6.009,
+        "y": 3.735
+========
+        "x": 3.58140574363426,
+        "y": 0.6548109809027778
+      },
+      "prevControl": null,
+      "nextControl": {
+        "x": 3.347519828524892,
+        "y": 0.7820945361458305
+>>>>>>>> Stashed changes:deploy/pathplanner/paths/bottom_start_to_depot.path
+      },
+      "isLocked": false,
+      "linkedName": "4r"
+    },
+    {
+      "anchor": {
+<<<<<<<< Updated upstream:deploy/pathplanner/paths/back_up_middle.path
+        "x": 6.259,
+        "y": 3.735
+      },
+      "prevControl": {
+        "x": 6.509,
+        "y": 3.735
+========
+        "x": 0.5228574852682284,
+        "y": 5.96522724561297
+      },
+      "prevControl": {
+        "x": 3.013480975115741,
+        "y": 6.012042173032407
+>>>>>>>> Stashed changes:deploy/pathplanner/paths/bottom_start_to_depot.path
+      },
+      "nextControl": null,
+      "isLocked": false,
+      "linkedName": null
+    }
+  ],
+  "rotationTargets": [],
+  "constraintZones": [],
+  "pointTowardsZones": [],
+  "eventMarkers": [],
+  "globalConstraints": {
+    "maxVelocity": 0.75,
+    "maxAcceleration": 1.0,
+    "maxAngularVelocity": 360.0,
+    "maxAngularAcceleration": 360.0,
+    "nominalVoltage": 12.0,
+    "unlimited": false
+  },
+  "goalEndState": {
+    "velocity": 0,
+<<<<<<<< Updated upstream:deploy/pathplanner/paths/back_up_middle.path
+    "rotation": 180.0
+  },
+  "reversed": false,
+  "folder": "Paths2025_Blue",
+  "idealStartingState": {
+    "velocity": 0,
+    "rotation": 180.0
+========
+    "rotation": 179.5537867047405
+  },
+  "reversed": false,
+  "folder": "KIS Blue Paths",
+  "idealStartingState": {
+    "velocity": 0,
+    "rotation": -179.95691360533186
+>>>>>>>> Stashed changes:deploy/pathplanner/paths/bottom_start_to_depot.path
+  },
+  "useDefaultConstraints": true
+}

@@ -1,0 +1,54 @@
+{
+  "version": "2025.0",
+  "waypoints": [
+    {
+      "anchor": {
+        "x": 0.5228574852682284,
+        "y": 5.96522724561297
+      },
+      "prevControl": null,
+      "nextControl": {
+        "x": 0.22942985891171414,
+        "y": 6.237468838654585
+      },
+      "isLocked": false,
+      "linkedName": null
+    },
+    {
+      "anchor": {
+        "x": 1.9504591290509263,
+        "y": 4.689202618634259
+      },
+      "prevControl": {
+        "x": 1.696097425258658,
+        "y": 4.913383147886529
+      },
+      "nextControl": null,
+      "isLocked": false,
+      "linkedName": null
+    }
+  ],
+  "rotationTargets": [],
+  "constraintZones": [],
+  "pointTowardsZones": [],
+  "eventMarkers": [],
+  "globalConstraints": {
+    "maxVelocity": 0.75,
+    "maxAcceleration": 1.0,
+    "maxAngularVelocity": 360.0,
+    "maxAngularAcceleration": 360.0,
+    "nominalVoltage": 12.0,
+    "unlimited": false
+  },
+  "goalEndState": {
+    "velocity": 0,
+    "rotation": 179.5537867047405
+  },
+  "reversed": false,
+  "folder": "KIS Blue Paths",
+  "idealStartingState": {
+    "velocity": 0,
+    "rotation": -179.95691360533186
+  },
+  "useDefaultConstraints": true
+}

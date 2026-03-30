@@ -1,0 +1,38 @@
+{
+  "version": "2025.0",
+  "command": {
+    "type": "sequential",
+    "data": {
+      "commands": [
+        {
+          "type": "sequential",
+          "data": {
+            "commands": [
+              {
+                "type": "path",
+                "data": {
+                  "pathName": "shoot_1_rev"
+                }
+              },
+              {
+                "type": "path",
+                "data": {
+                  "pathName": "shoot_2_rev"
+                }
+              },
+              {
+                "type": "path",
+                "data": {
+                  "pathName": "shoot_3_rev"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "resetOdom": true,
+  "folder": null,
+  "choreoAuto": false
+}

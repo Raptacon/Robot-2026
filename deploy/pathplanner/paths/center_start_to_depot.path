@@ -1,0 +1,73 @@
+{
+  "version": "2025.0",
+  "waypoints": [
+    {
+      "anchor": {
+<<<<<<<< Updated upstream:deploy/pathplanner/paths/Straight_2_Meters.path
+        "x": 2.0,
+        "y": 6.0
+      },
+      "prevControl": null,
+      "nextControl": {
+        "x": 3.0,
+        "y": 6.0
+========
+        "x": 3.5315417390046298,
+        "y": 4.0214842303240745
+      },
+      "prevControl": null,
+      "nextControl": {
+        "x": 3.2976558238952616,
+        "y": 4.148767785567127
+>>>>>>>> Stashed changes:deploy/pathplanner/paths/center_start_to_depot.path
+      },
+      "isLocked": false,
+      "linkedName": null
+    },
+    {
+      "anchor": {
+<<<<<<<< Updated upstream:deploy/pathplanner/paths/Straight_2_Meters.path
+        "x": 4.0,
+        "y": 6.0
+      },
+      "prevControl": {
+        "x": 3.0,
+        "y": 6.0
+========
+        "x": 0.5228574852682284,
+        "y": 5.96522724561297
+      },
+      "prevControl": {
+        "x": 1.853158709490741,
+        "y": 5.936983723958333
+>>>>>>>> Stashed changes:deploy/pathplanner/paths/center_start_to_depot.path
+      },
+      "nextControl": null,
+      "isLocked": false,
+      "linkedName": null
+    }
+  ],
+  "rotationTargets": [],
+  "constraintZones": [],
+  "pointTowardsZones": [],
+  "eventMarkers": [],
+  "globalConstraints": {
+    "maxVelocity": 0.75,
+    "maxAcceleration": 1.0,
+    "maxAngularVelocity": 360.0,
+    "maxAngularAcceleration": 360.0,
+    "nominalVoltage": 12.0,
+    "unlimited": false
+  },
+  "goalEndState": {
+    "velocity": 0,
+    "rotation": 179.5537867047405
+  },
+  "reversed": false,
+  "folder": "KIS Blue Paths",
+  "idealStartingState": {
+    "velocity": 0,
+    "rotation": -179.95691360533186
+  },
+  "useDefaultConstraints": true
+}

@@ -1,0 +1,69 @@
+{
+  "version": "2025.0",
+  "command": {
+    "type": "sequential",
+    "data": {
+      "commands": [
+        {
+          "type": "parallel",
+          "data": {
+            "commands": [
+              {
+                "type": "named",
+                "data": {
+                  "name": "deploy_intake"
+                }
+              },
+              {
+                "type": "named",
+                "data": {
+                  "name": "intake_rollers_on"
+                }
+              },
+              {
+                "type": "path",
+                "data": {
+                  "pathName": "top_start_to_depot"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "type": "named",
+          "data": {
+            "name": "hopper_on"
+          }
+        },
+        {
+          "type": "parallel",
+          "data": {
+            "commands": [
+              {
+                "type": "path",
+                "data": {
+                  "pathName": "depot_to_center_shoot"
+                }
+              },
+              {
+                "type": "named",
+                "data": {
+                  "name": "shooter_on"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "type": "named",
+          "data": {
+            "name": "feed_on"
+          }
+        }
+      ]
+    }
+  },
+  "resetOdom": true,
+  "folder": null,
+  "choreoAuto": false
+}
