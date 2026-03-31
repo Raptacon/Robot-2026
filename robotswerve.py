@@ -34,6 +34,7 @@ import wpilib
 from commands2.button import Trigger
 from pathplannerlib.auto import AutoBuilder
 from subsystem.intakeactions import IntakeSubsystem
+from wpimath.geometry import Rotation2d
 
 class RobotSwerve:
     # forward declare critical types for editors
@@ -245,7 +246,8 @@ class RobotSwerve:
                 lambda: determineShooterTargets2026(self.drivetrain.current_pose, self.alliance),
                 self.translate_x,
                 self.translate_y,
-                lambda: not self.robot_relative_btn()
+                lambda: not self.robot_relative_btn(),
+                alignment_angle=Rotation2d.fromDegrees(180)
             )
         )
 
