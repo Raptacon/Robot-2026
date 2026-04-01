@@ -53,9 +53,14 @@ class SmokeTests(commands2.SequentialCommandGroup):
         self.hopper = hopper
         self.shooter = shooter
 
+        self.allMotors = [self.shooter.feedMotor, self.shooter.leadFlywheelMotor, self.shooter.followerFlywheelMotor, self.intake.rollerMotor, self.intake.pivotMotor]
+        self.testResults = []
+        currentMotor = 0
+        possibleUnpluggedCanBus = False
+
         self.progress = False
         self.testMessage = ""
-        self.totaltests = 32
+        self.totaltests = 32 + len(self.allMotors)
         self.testNumber = 0
         # self.velocity_vector_x = velocity_vector_x
         # self.velocity_vector_y = velocity_vector_y
@@ -63,31 +68,27 @@ class SmokeTests(commands2.SequentialCommandGroup):
 
         # Test all Motors for feedback
         self.setElapsedTime()
-        self.allMotors = [self.shooter.feedMotor, self.shooter.leadFlywheelMotor, self.shooter.followerFlywheelMotor, self.intake.rollerMotor, self.intake.pivotMotor]
-        self.testResults = []
-        currentMotor = 0
-        possibleUnpluggedRio = False
         while currentMotor <= len(self.allMotors)-1:
-            if possibleUnpluggedRio == True and currentMotor <= len(self.allMotors) - 2:
+            if possibleUnpluggedCanBus == True and currentMotor <= len(self.allMotors) - 2:
                 self.testResults.append(">")
             else:
                 self.allMotors[currentMotor].set(0)
                 if self.allMotors[currentMotor].getLastError() == rev.REVLibError.kOk:
                     self.testResults.append(".")
-                    if possibleUnpluggedRio:
+                    if possibleUnpluggedCanBus:
                         currentMotor = 2
-                        possibleUnpluggedRio = False
+                        possibleUnpluggedCanBus = False
                 else:
                     self.testResults.append("F")
                     if currentMotor == 0:
-                        possibleUnpluggedRio = True
+                        possibleUnpluggedCanBus = True
             self.setMessage("Motor Feedback", ("".join(self.testResults)))
             currentMotor += 1
         if self.testResults.count("F") != 0:
-            if possibleUnpluggedRio == True:
+            if possibleUnpluggedCanBus == True:
                 self.resultsMessage(F"{self.testResults.count(".")} passed, {self.testResults.count("F")} failed, {self.testResults.count(">")} skipped in {self.getElapsedTime()}s",
                                     "Not all Motor Tests succeded. This is usually due to an issue with communicating with motors.",
-                                    "Did you plug in the RoboRio?")
+                                    "Did you plug in the CanBus?")
             else:
                 self.resultsMessage(F"{self.testResults.count(".")} passed, {self.testResults.count("F")} failed, {self.testResults.count(">")} skipped in {self.getElapsedTime()}s",
                                     "Not all Motor Tests succeded. This is usually due to an issue with communicating with motors."
@@ -182,6 +183,7 @@ class SmokeTests(commands2.SequentialCommandGroup):
             #Test Vision
             #Test LEDs
             #Test NavX?
+            commands2.cmd.runOnce(lambda: self.setMessage("NavX", "Rotate the Bot 90 Degrees", "Test confirms if NavX registers 90 degree rotation")),
         )
 
     # def execute(self):
