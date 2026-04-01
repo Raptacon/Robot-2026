@@ -34,9 +34,6 @@ import wpilib
 from commands2.button import Trigger
 from pathplannerlib.auto import AutoBuilder
 from subsystem.intakeactions import IntakeSubsystem
-from playsound3 import playsound
-from pydub import AudioSegment
-from pydub.playback import play
 
 import pygame
 
