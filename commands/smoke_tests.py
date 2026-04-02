@@ -55,8 +55,10 @@ class SmokeTests(commands2.SequentialCommandGroup):
 
         self.allMotors = [self.shooter.feedMotor, self.shooter.leadFlywheelMotor, self.shooter.followerFlywheelMotor, self.intake.rollerMotor, self.intake.pivotMotor]
         self.testResults = []
+        self.failedtests = False
         currentMotor = 0
         possibleUnpluggedCanBus = False
+        dontskiptests = False
 
         self.progress = False
         self.testMessage = ""
@@ -70,21 +72,30 @@ class SmokeTests(commands2.SequentialCommandGroup):
         self.setElapsedTime()
         while currentMotor <= len(self.allMotors)-1:
             if possibleUnpluggedCanBus == True and currentMotor <= len(self.allMotors) - 2:
-                self.testResults.append(">")
+                if not dontskiptests:
+                    self.testResults.append(">")
             else:
                 self.allMotors[currentMotor].set(0)
-                if self.allMotors[currentMotor].getLastError() == rev.REVLibError.kOk:
+                self.allMotors[currentMotor].getFaults()
+                self.allMotors[currentMotor].getStickyFaults()
+                time.sleep(0.2)
+
+                if str(self.allMotors[currentMotor].getLastError()) == str(rev.REVLibError.kOk):
                     self.testResults.append(".")
                     if possibleUnpluggedCanBus:
-                        currentMotor = 2
-                        possibleUnpluggedCanBus = False
+                        if not dontskiptests:
+                            currentMotor = 2
+                            possibleUnpluggedCanBus = False
                 else:
                     self.testResults.append("F")
                     if currentMotor == 0:
-                        possibleUnpluggedCanBus = True
+                        if not dontskiptests:
+                            possibleUnpluggedCanBus = True
             self.setMessage("Motor Feedback", ("".join(self.testResults)))
+            self.updateMessage()
             currentMotor += 1
         if self.testResults.count("F") != 0:
+            self.failedtests = True
             if possibleUnpluggedCanBus == True:
                 self.resultsMessage(F"{self.testResults.count(".")} passed, {self.testResults.count("F")} failed, {self.testResults.count(">")} skipped in {self.getElapsedTime()}s",
                                     "Not all Motor Tests succeded. This is usually due to an issue with communicating with motors.",
@@ -99,6 +110,12 @@ class SmokeTests(commands2.SequentialCommandGroup):
         self.addCommands(
             commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False))
         )
+        if self.failedtests:
+            self.addCommands(
+                commands2.InstantCommand(lambda: self.resultsMessage(F"{self.testResults.count(".")} passed, {self.testResults.count("F")} failed, {self.testResults.count(">")} skipped in {self.getElapsedTime()}s",
+                                    self.motorResults(self.allMotors),
+                                    "To test anyway, press the Start Button."))
+            )
         
         self.addRequirements(self.drivetrain)
         # Tests Swerve Modules (0-20)
@@ -252,6 +269,30 @@ class SmokeTests(commands2.SequentialCommandGroup):
         \n{row3}
         """
         print(self.testMessage)
+        
+    def motorResults(self, motorsToReturn: list):
+        """
+        Returns the status of all inputted motors.
+        
+        Motor Statuses can go something like 
+        'RevLibError.kOk' or 'RevLibError.kTimeout.' 
+        Whatever the motor status is, this method
+        will take it for each motor and bundle it 
+        in a fasion such as "Motor Name: Motor 
+        Status." Each motor is seperated by a 
+        newline.
+        
+        Args:
+            motorsToReturn: the motors to return statuses of
+            
+        Returns:
+            Statuses of all inputted motors seperated by newline
+        """
+        message = ""
+        for motors in motorsToReturn:
+            message = str(motorsToReturn[motors]) + ": " + str(motorsToReturn[motors].getLastError()) + "\n"
+        return message
+        
 
     def setElapsedTime(self) -> None:
         """
