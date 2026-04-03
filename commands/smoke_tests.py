@@ -59,7 +59,7 @@ class SmokeTests(commands2.SequentialCommandGroup):
         self.failedtests = False
         currentMotor = 0
         possibleUnpluggedCanBus = False
-        dontskiptests = False
+        dontskiptests = True
 
         self.progress = False
         self.testMessage = ""
