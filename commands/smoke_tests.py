@@ -102,7 +102,7 @@ class SmokeTests(commands2.SequentialCommandGroup):
             currentMotor += 1
         if self.testPassFail.count('F') != 0:
             self.failedtests = True
-            if possibleUnpluggedCanBus == True:
+            if possibleUnpluggedCanBus == True or self.testPassFail.count('.') == 0:
                 self.resultsMessage(F"{self.testPassFail.count('.')} passed, {self.testPassFail.count('F')} failed, {self.testPassFail.count('>')} skipped in {self.getElapsedTime()}s",
                                     "Not all Motor Tests succeded. This is usually due to an issue with communicating with motors.",
                                     "Did you plug in the CanBus?")
