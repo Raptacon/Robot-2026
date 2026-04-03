@@ -288,7 +288,7 @@ class SmokeTests(commands2.SequentialCommandGroup):
         """
         message = ""
         for index, motor in enumerate(motorsToReturn):
-            message = str(motorNames[index]) + ": " + str(motor.getLastError()) + "\n"
+            message = message + str(motorNames[index]) + ": " + str(motor.getLastError()) + "\n"
         return message
         
 
