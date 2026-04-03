@@ -119,7 +119,7 @@ class SmokeTests(commands2.SequentialCommandGroup):
         if self.failedtests:
             self.addCommands(
                 commands2.InstantCommand(lambda: self.resultsMessage(F"{self.testResults.count(".")} passed, {self.testResults.count("F")} failed, {self.testResults.count(">")} skipped in {self.getElapsedTime()}s",
-                                    self.motorResults(self.allMotors),
+                                    self.motorResults(self.allMotors, self.motorNames),
                                     "To test anyway, press the Start Button.")),
                 commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False))
             )
