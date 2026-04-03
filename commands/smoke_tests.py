@@ -54,6 +54,7 @@ class SmokeTests(commands2.SequentialCommandGroup):
         self.shooter = shooter
 
         self.allMotors = [self.shooter.feedMotor, self.shooter.leadFlywheelMotor, self.shooter.followerFlywheelMotor, self.intake.rollerMotor, self.intake.pivotMotor]
+        self.motorNames = ["Shooter - Feed Motor", "Shooter - Lead Flywheel Motor", "Shooter - Follower Flywheel Motor", "Intake - Roller Motor", "Intake - Pivot Motor"]
         self.testResults = []
         self.failedtests = False
         currentMotor = 0
@@ -68,6 +69,11 @@ class SmokeTests(commands2.SequentialCommandGroup):
         # self.velocity_vector_y = velocity_vector_y
         # self.angular_velocity = angular_velocity
 
+        # Starting Message
+        self.addCommands(
+            commands2.cmd.runOnce(lambda: self.setMessage(0)),
+            commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False)))
+        
         # Test all Motors for feedback
         self.setElapsedTime()
         while currentMotor <= len(self.allMotors)-1:
@@ -114,16 +120,13 @@ class SmokeTests(commands2.SequentialCommandGroup):
             self.addCommands(
                 commands2.InstantCommand(lambda: self.resultsMessage(F"{self.testResults.count(".")} passed, {self.testResults.count("F")} failed, {self.testResults.count(">")} skipped in {self.getElapsedTime()}s",
                                     self.motorResults(self.allMotors),
-                                    "To test anyway, press the Start Button."))
+                                    "To test anyway, press the Start Button.")),
+                commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False))
             )
         
         self.addRequirements(self.drivetrain)
         # Tests Swerve Modules (0-20)
         for index, swerve_module in enumerate(self.drivetrain.swerve_modules):
-            if index == 0:
-                self.addCommands(
-                    commands2.cmd.runOnce(lambda: self.setMessage(0)),
-                    commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False)))
             self.addCommands(
                 # Current swerve module's drive motor moves forward 0.2 meters per second until driver confirms 
                 commands2.InstantCommand(lambda swerve_module=swerve_module: swerve_module.set_state(SwerveModuleState(0.2, Rotation2d.fromDegrees(0)), apply_cosine_scaling=False),
@@ -270,7 +273,7 @@ class SmokeTests(commands2.SequentialCommandGroup):
         """
         print(self.testMessage)
         
-    def motorResults(self, motorsToReturn: list):
+    def motorResults(self, motorsToReturn: list, motorNames: list):
         """
         Returns the status of all inputted motors.
         
@@ -289,8 +292,8 @@ class SmokeTests(commands2.SequentialCommandGroup):
             Statuses of all inputted motors seperated by newline
         """
         message = ""
-        for motors in motorsToReturn:
-            message = str(motorsToReturn[motors]) + ": " + str(motorsToReturn[motors].getLastError()) + "\n"
+        for index, motor in enumerate(motorsToReturn):
+            message = str(motorNames[index]) + ": " + str(motor.getLastError()) + "\n"
         return message
         
 
