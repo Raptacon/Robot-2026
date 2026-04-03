@@ -56,6 +56,7 @@ class SmokeTests(commands2.SequentialCommandGroup):
         self.allMotors = [self.shooter.feedMotor, self.shooter.leadFlywheelMotor, self.shooter.followerFlywheelMotor, self.intake.rollerMotor, self.intake.pivotMotor]
         self.motorNames = ["Shooter - Feed Motor", "Shooter - Lead Flywheel Motor", "Shooter - Follower Flywheel Motor", "Intake - Roller Motor", "Intake - Pivot Motor"]
         self.testResults = []
+        self.testPassFail = ""
         self.failedtests = False
         currentMotor = 0
         possibleUnpluggedCanBus = False
@@ -74,47 +75,51 @@ class SmokeTests(commands2.SequentialCommandGroup):
         while currentMotor <= len(self.allMotors)-1:
             if possibleUnpluggedCanBus == True and currentMotor <= len(self.allMotors) - 2:
                 if not dontskiptests:
-                    self.testResults.append(">")
+                    self.testPassFail = self.testPassFail + ">"
             else:
                 self.allMotors[currentMotor].set(0)
                 self.allMotors[currentMotor].getFaults()
                 self.allMotors[currentMotor].getStickyFaults()
-                time.sleep(0.2)
+                time.sleep(0.267)
+                
+                testMotor = self.allMotors[currentMotor]
+                lastError = testMotor.getLastError()
+                self.testResults.append(lastError.name)
 
-                if str(self.allMotors[currentMotor].getLastError()) == str(rev.REVLibError.kOk):
-                    self.testResults.append(".")
+                if self.testResults[-1] == "kOk":
+                    self.testPassFail = self.testPassFail + "."
                     if possibleUnpluggedCanBus:
                         if not dontskiptests:
                             currentMotor = 2
                             possibleUnpluggedCanBus = False
                 else:
-                    self.testResults.append("F")
+                    self.testPassFail = self.testPassFail + "F"
                     if currentMotor == 0:
                         if not dontskiptests:
                             possibleUnpluggedCanBus = True
-            self.setMessage("Motor Feedback", ("".join(self.testResults)))
+            self.setMessage("Motor Feedback", self.testPassFail)
             self.updateMessage()
             currentMotor += 1
-        if self.testResults.count("F") != 0:
+        if self.testPassFail.count('F') != 0:
             self.failedtests = True
             if possibleUnpluggedCanBus == True:
-                self.resultsMessage(F"{self.testResults.count(".")} passed, {self.testResults.count("F")} failed, {self.testResults.count(">")} skipped in {self.getElapsedTime()}s",
+                self.resultsMessage(F"{self.testPassFail.count('.')} passed, {self.testPassFail.count('F')} failed, {self.testPassFail.count('>')} skipped in {self.getElapsedTime()}s",
                                     "Not all Motor Tests succeded. This is usually due to an issue with communicating with motors.",
                                     "Did you plug in the CanBus?")
             else:
-                self.resultsMessage(F"{self.testResults.count(".")} passed, {self.testResults.count("F")} failed, {self.testResults.count(">")} skipped in {self.getElapsedTime()}s",
+                self.resultsMessage(F"{self.testPassFail.count('.')} passed, {self.testPassFail.count('F')} failed, {self.testPassFail.count('>')} skipped in {self.getElapsedTime()}s",
                                     "Not all Motor Tests succeded. This is usually due to an issue with communicating with motors."
                                     )
         else:
-            self.resultsMessage(F"{self.testResults.count(".")} passed, {self.testResults.count("F")} failed, {self.testResults.count(">")} skipped in {self.getElapsedTime()}s",
-                            "All tests succeeded. Press confirm button to move onto manual tests.")
+            self.resultsMessage(F"{self.testPassFail.count('.')} passed, {self.testPassFail.count('F')} failed, {self.testPassFail.count('>')} skipped in {self.getElapsedTime()}s",
+                            "All Motor Communication tests succeeded. Press confirm button to move onto manual tests.")
         self.addCommands(
             commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False))
         )
         if self.failedtests:
             self.addCommands(
-                commands2.InstantCommand(lambda: self.resultsMessage(F"{self.testResults.count(".")} passed, {self.testResults.count("F")} failed, {self.testResults.count(">")} skipped in {self.getElapsedTime()}s",
-                                    self.motorResults(self.allMotors, self.motorNames),
+                commands2.InstantCommand(lambda: self.resultsMessage(F"{self.testPassFail.count('.')} passed, {self.testPassFail.count('F')} failed, {self.testPassFail.count('>')} skipped in {self.getElapsedTime()}s",
+                                    self.splitResults(self.testResults, self.motorNames),
                                     "To test anyway, press the Start Button.")),
                 commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False))
             )
@@ -268,27 +273,27 @@ class SmokeTests(commands2.SequentialCommandGroup):
         """
         print(self.testMessage)
         
-    def motorResults(self, motorsToReturn: list, motorNames: list):
+    def splitResults(self, motorStatuses: list, motorNames: list):
         """
         Returns the status of all inputted motors.
         
         Motor Statuses can go something like 
-        'RevLibError.kOk' or 'RevLibError.kTimeout.' 
-        Whatever the motor status is, this method
-        will take it for each motor and bundle it 
-        in a fasion such as "Motor Name: Motor 
-        Status." Each motor is seperated by a 
-        newline.
+        'kOk' or 'kTimeout.' This method will 
+        take inputted motor statuses (in the 
+        form of a list) and their associated 
+        names, and will bundle them in an 
+        "elegant fasion" ex: "Motor Name: kOk"
         
         Args:
-            motorsToReturn: the motors to return statuses of
+            motorStatuses: statuses of the motors
+            motorNames: names of the motors
             
         Returns:
-            Statuses of all inputted motors seperated by newline
+            Inputted Motor Names, and their status seperated by newline
         """
         message = ""
-        for index, motor in enumerate(motorsToReturn):
-            message = message + str(motorNames[index]) + ": " + str(motor.getLastError()) + "\n"
+        for index, motor in enumerate(motorStatuses):
+            message = message + motorNames[int(index)] + ": " + motor + "\n"
         return message
         
 
