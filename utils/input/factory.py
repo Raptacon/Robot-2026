@@ -40,6 +40,7 @@ from utils.input.shaping import build_shaping_pipeline
 from utils.input.virtual_analog import VirtualAnalogGenerator
 from utils.input._factory_helpers import (
     ControllerState,
+    format_binding_info,
     make_analog_nt_class,
     make_axis_accessor,
     make_button_condition,
@@ -140,14 +141,20 @@ class InputFactory:
         register_global: bool | None = None,
     ):
         # Load configuration and track source for error messages
+        # Resolve relative paths against the project root (two levels up from
+        # utils/input/) so callers don't depend on cwd.
+        _project_root = Path(__file__).resolve().parent.parent.parent
         if config is not None:
             self._config = config
             self._config_source = "<FullConfig object>"
             self._config_files: list[Path] = []
         elif config_path is not None:
-            self._config = load_config(config_path)
+            p = Path(config_path)
+            if not p.is_absolute():
+                p = _project_root / p
+            self._config = load_config(p)
             self._config_source = str(config_path)
-            self._config_files = [Path(config_path).resolve()]
+            self._config_files = [p.resolve()]
         elif actions_path is not None and assignments_path is not None:
             actions = load_actions_from_file(actions_path)
             controllers = load_assignments_from_file(assignments_path)
@@ -343,6 +350,7 @@ class InputFactory:
         nt_path = f"{_NT_BASE}/actions/{action.group}/{action.name}"
         klass = make_button_nt_class(nt_path, action)
         btn = klass(action, condition, default_value)
+        btn._binding_info = format_binding_info(state, input_name)
         if threshold_ref is not None:
             btn._threshold_ref = threshold_ref
         self._buttons[qn] = btn
@@ -453,6 +461,7 @@ class InputFactory:
             nt_path = f"{_NT_BASE}/actions/{action.group}/{action.name}"
             klass = make_analog_nt_class(nt_path, action)
             analog = klass(action, generator.get_value, default_value)
+            analog._binding_info = format_binding_info(state, input_name)
             self._analogs[qn] = analog
             self._mark_in_use(analog)
             return analog
@@ -475,6 +484,7 @@ class InputFactory:
         nt_path = f"{_NT_BASE}/actions/{action.group}/{action.name}"
         klass = make_analog_nt_class(nt_path, action)
         analog = klass(action, accessor, default_value)
+        analog._binding_info = format_binding_info(state, input_name)
         self._analogs[qn] = analog
         self._mark_in_use(analog)
         return analog
@@ -597,6 +607,7 @@ class InputFactory:
         nt_path = f"{_NT_BASE}/actions/{action.group}/{action.name}"
         klass = make_rumble_nt_class(nt_path, action)
         rumble = klass(action, setter)
+        rumble._binding_info = format_binding_info(state, input_name)
         self._rumbles[qn] = rumble
         self._mark_in_use(rumble)
         return rumble

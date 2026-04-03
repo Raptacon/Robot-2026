@@ -59,6 +59,7 @@ from utils.input.managed_rumble import ManagedRumble
 from utils.input.xbox_map import (
     AXIS_ACCESSORS,
     BUTTON_ACCESSORS,
+    HID_CHANNEL,
     OUTPUT_ACCESSORS,
     POV_ANGLE_MAP,
     get_input_category,
@@ -376,6 +377,19 @@ def make_output_setter(
 
     log.error("'%s' is not a rumble output", input_name)
     return lambda v: None
+
+
+def format_binding_info(state: ControllerState, input_name: str) -> str:
+    """Format a human-readable binding string for logging/display.
+
+    Returns a string like ``"Driver.left_stick_x (0)"`` showing the
+    controller name, xbox input name, and raw HID channel number.
+    """
+    ctrl_name = state.config.name or f"port{state.port}"
+    channel = HID_CHANNEL.get(input_name)
+    if channel is not None:
+        return f"{ctrl_name}.{input_name} ({channel})"
+    return f"{ctrl_name}.{input_name}"
 
 
 def publish_bindings_nt(

@@ -1346,15 +1346,27 @@ class ActionPanel(tk.Frame):
             if action.input_type == InputType.BOOLEAN_TRIGGER:
                 action.threshold = float(
                     self._threshold_var.get() or 0.5)
-            action.deadband = float(self._deadband_var.get() or 0)
-            action.inversion = self._inversion_var.get()
-            action.scale = float(self._scale_var.get() or 1.0)
-            action.slew_rate = float(self._slew_var.get() or 0.0)
-            if self._neg_slew_enable_var.get():
-                val = float(self._neg_slew_var.get() or 0.0)
-                action.extra[EXTRA_NEGATIVE_SLEW_RATE] = min(val, 0.0)
-            else:
+            # RAW mode bypasses all shaping — reset to defaults so
+            # the saved YAML doesn't contain misleading values.
+            if action.trigger_mode == EventTriggerMode.RAW:
+                action.deadband = 0.0
+                action.inversion = False
+                action.scale = 1.0
+                action.slew_rate = 0.0
                 action.extra.pop(EXTRA_NEGATIVE_SLEW_RATE, None)
+            else:
+                action.deadband = float(
+                    self._deadband_var.get() or 0)
+                action.inversion = self._inversion_var.get()
+                action.scale = float(self._scale_var.get() or 1.0)
+                action.slew_rate = float(
+                    self._slew_var.get() or 0.0)
+                if self._neg_slew_enable_var.get():
+                    val = float(self._neg_slew_var.get() or 0.0)
+                    action.extra[EXTRA_NEGATIVE_SLEW_RATE] = min(
+                        val, 0.0)
+                else:
+                    action.extra.pop(EXTRA_NEGATIVE_SLEW_RATE, None)
             # Virtual Analog extra fields
             if action.input_type == InputType.VIRTUAL_ANALOG:
                 action.extra[EXTRA_VA_BUTTON_MODE] = (

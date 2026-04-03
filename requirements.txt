@@ -20,6 +20,7 @@ Pillow
 # raptacon3200>=2025.0.1
 
 #FRC-specific packages
+# numpy
 robotpy[all]==2026.*
 robotpy-rev==2026.*
 robotpy-navx==2026.*

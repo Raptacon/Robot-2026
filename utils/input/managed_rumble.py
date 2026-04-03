@@ -28,6 +28,10 @@ class ManagedRumble:
         self._stop_time: float | None = None
         self._current_value: float = 0.0
 
+        # Binding info — set by the factory after construction.
+        # Format: "ControllerName.input_name (channel)"
+        self._binding_info: str = "unbound"
+
     @property
     def action(self) -> ActionDefinition | None:
         return self._action
@@ -57,6 +61,10 @@ class ManagedRumble:
         if (self._stop_time is not None
                 and time.monotonic() >= self._stop_time):
             self.stop()
+
+    def __str__(self) -> str:
+        name = self._action.qualified_name if self._action else "unbound"
+        return f"ManagedRumble('{name}', bind={self._binding_info})"
 
     def _rebind(self, setter: Callable[[float], None]) -> None:
         """Swap the output setter for dynamic remapping."""
