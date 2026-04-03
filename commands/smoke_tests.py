@@ -68,11 +68,6 @@ class SmokeTests(commands2.SequentialCommandGroup):
         # self.velocity_vector_x = velocity_vector_x
         # self.velocity_vector_y = velocity_vector_y
         # self.angular_velocity = angular_velocity
-
-        # Starting Message
-        self.addCommands(
-            commands2.cmd.runOnce(lambda: self.setMessage(0)),
-            commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False)))
         
         # Test all Motors for feedback
         self.setElapsedTime()
