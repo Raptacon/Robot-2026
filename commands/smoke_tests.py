@@ -273,7 +273,7 @@ class SmokeTests(commands2.SequentialCommandGroup):
         """
         print(self.testMessage)
         
-    def splitResults(self, motorStatuses: list, motorNames: list):
+    def splitResults(self, motorStatuses: list, motorNames: list) -> str:
         """
         Returns the status of all inputted motors.
         

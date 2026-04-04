@@ -155,3 +155,7 @@ class BallpitConstants:
     # list of constants for the ocalation constants for the addition area
     # ocs_consts =
     hopperCanId = 40
+
+class LEDConstants:
+    LEDPort = 1
+    LEDLength = 56
