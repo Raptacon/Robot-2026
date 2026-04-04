@@ -8,8 +8,8 @@ class AddressableLEDs:
         self.ledBuffer = []
         self.ledData = wpilib.AddressableLED.LEDData()
     
-        self.sonarOffset = 0
-        self.sonarSpeed = 1
+        self.blipOffset = 0
+        self.blipSpeed = 1
     def LEDConstantColor(self, color) -> None:
         for i in range(LEDConstants.LEDLength):
             self.ledData.setLED(color)
@@ -19,13 +19,13 @@ class AddressableLEDs:
         
     def LEDBlipPeriodic(self, color) -> None:
         for i in range(LEDConstants.LEDLength):
-            if (i + self.sonarOffset) % self.sonarSpeed == 0:
+            if (i + self.blipOffset) % self.blipSpeed == 0:
                 self.ledData.setLED(color)
             else:
                 self.ledData.setLED(wpilib.Color.kBlack)
         self.led.setData(self.ledBuffer)
         self.led.start()
         
-        self.sonarOffset += self.sonarSpeed
-        if self.sonarOffset == self.sonarSpeed:
-            self.sonarOffset = 0
+        self.blipOffset += self.blipSpeed
+        if self.blipOffset == self.blipSpeed:
+            self.blipOffset = 0
