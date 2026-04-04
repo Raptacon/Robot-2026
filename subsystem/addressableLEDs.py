@@ -1,5 +1,4 @@
 import wpilib
-import math
 from constants.swerve_constants import LEDConstants
 
 class AddressableLEDs:
@@ -9,8 +8,8 @@ class AddressableLEDs:
         self.ledBuffer = []
         self.ledData = wpilib.AddressableLED.LEDData()
     
-        self.sonarPosition = 0
-        self.sonarVelocity = 0.25
+        self.sonarOffset = 0
+        self.sonarSpeed = 1
     def LEDConstantColor(self, color) -> None:
         for i in range(LEDConstants.LEDLength):
             self.ledData.setLED(color)
@@ -18,17 +17,15 @@ class AddressableLEDs:
         self.led.setData(self.ledBuffer)
         self.led.start()
         
-    def LEDSonarPeriodic(self, color) -> None:
+    def LEDBlipPeriodic(self, color) -> None:
         for i in range(LEDConstants.LEDLength):
-            if math.floor(self.sonarPosition) == i:
+            if (i + self.sonarOffset) % self.sonarSpeed == 0:
                 self.ledData.setLED(color)
             else:
                 self.ledData.setLED(wpilib.Color.kBlack)
         self.led.setData(self.ledBuffer)
         self.led.start()
         
-        self.sonarPosition += self.sonarVelocity
-        if math.floor(self.sonarPosition) <= LEDConstants.LEDLength:
-            self.sonarVelocity *= -1
-        elif math.floor(self.sonarPosition) >= 0:
-            self.sonarVelocity *= -1
+        self.sonarOffset += self.sonarSpeed
+        if self.sonarOffset == self.sonarSpeed:
+            self.sonarOffset = 0
