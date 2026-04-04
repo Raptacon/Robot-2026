@@ -13,6 +13,7 @@ import commands2
 import wpilib
 import rev
 import time
+import navx
 
 class SmokeTests(commands2.SequentialCommandGroup):
     """    
@@ -35,6 +36,7 @@ class SmokeTests(commands2.SequentialCommandGroup):
                 intake: IntakeSubsystem,
                 hopper: BallPitHopper,
                 shooter: Shooter,
+                navx: navx
                 ) -> None:
         """
         This creates the tests and all associated objects.
@@ -52,12 +54,15 @@ class SmokeTests(commands2.SequentialCommandGroup):
         self.intake = intake
         self.hopper = hopper
         self.shooter = shooter
+        self.navx = navx
 
-        self.allMotors = [self.shooter.feedMotor, self.shooter.leadFlywheelMotor, self.shooter.followerFlywheelMotor, self.intake.rollerMotor, self.intake.pivotMotor]
-        self.motorNames = ["Shooter - Feed Motor", "Shooter - Lead Flywheel Motor", "Shooter - Follower Flywheel Motor", "Intake - Roller Motor", "Intake - Pivot Motor"]
+        self.allMotors = [self.intake.rollerMotor, self.intake.pivotMotor, self.hopper.hopperMotor, self.shooter.feedMotor, self.shooter.leadFlywheelMotor, self.shooter.followerFlywheelMotor, ]
+        self.motorNames = ["Intake - Roller Motor", "Intake - Pivot Motor", "Hopper - Hex Shaft Motor", "Shooter - Feed Motor", "Shooter - Lead Flywheel Motor", "Shooter - Follower Flywheel Motor",]
         self.testResults = []
         self.testPassFail = ""
         self.failedtests = False
+        self.targetAngle = None
+
         currentMotor = 0
         possibleUnpluggedCanBus = False
         dontskiptests = True
@@ -100,25 +105,26 @@ class SmokeTests(commands2.SequentialCommandGroup):
             self.setMessage("Motor Feedback", self.testPassFail)
             self.updateMessage()
             currentMotor += 1
+        self.testDuration = self.getElapsedTime()
         if self.testPassFail.count('F') != 0:
             self.failedtests = True
             if possibleUnpluggedCanBus == True or self.testPassFail.count('.') == 0:
-                self.resultsMessage(F"{self.testPassFail.count('.')} passed, {self.testPassFail.count('F')} failed, {self.testPassFail.count('>')} skipped in {self.getElapsedTime()}s",
+                self.resultsMessage(F"{self.testPassFail.count('.')} passed, {self.testPassFail.count('F')} failed, {self.testPassFail.count('>')} skipped in {self.testDuration}s",
                                     "Not all Motor Tests succeded. This is usually due to an issue with communicating with motors.",
                                     "Did you plug in the CanBus?")
             else:
-                self.resultsMessage(F"{self.testPassFail.count('.')} passed, {self.testPassFail.count('F')} failed, {self.testPassFail.count('>')} skipped in {self.getElapsedTime()}s",
+                self.resultsMessage(F"{self.testPassFail.count('.')} passed, {self.testPassFail.count('F')} failed, {self.testPassFail.count('>')} skipped in {self.testDuration}s",
                                     "Not all Motor Tests succeded. This is usually due to an issue with communicating with motors."
                                     )
         else:
-            self.resultsMessage(F"{self.testPassFail.count('.')} passed, {self.testPassFail.count('F')} failed, {self.testPassFail.count('>')} skipped in {self.getElapsedTime()}s",
+            self.resultsMessage(F"{self.testPassFail.count('.')} passed, {self.testPassFail.count('F')} failed, {self.testPassFail.count('>')} skipped in {self.testDuration}s",
                             "All Motor Communication tests succeeded. Press confirm button to move onto manual tests.")
         self.addCommands(
             commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False))
         )
         if self.failedtests:
             self.addCommands(
-                commands2.InstantCommand(lambda: self.resultsMessage(F"{self.testPassFail.count('.')} passed, {self.testPassFail.count('F')} failed, {self.testPassFail.count('>')} skipped in {self.getElapsedTime()}s",
+                commands2.InstantCommand(lambda: self.resultsMessage(F"{self.testPassFail.count('.')} passed, {self.testPassFail.count('F')} failed, {self.testPassFail.count('>')} skipped in {self.testDuration}s",
                                     self.splitResults(self.testResults, self.motorNames),
                                     "To test anyway, press the Start Button.")),
                 commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False))
@@ -204,6 +210,7 @@ class SmokeTests(commands2.SequentialCommandGroup):
             #Test LEDs
             #Test NavX?
             commands2.cmd.runOnce(lambda: self.setMessage("NavX", "Rotate the Bot 90 Degrees", "Test confirms if NavX registers 90 degree rotation")),
+            commands2.WaitUntilCommand(lambda: self.angleTestNavX(90)),
         )
 
     # def execute(self):
@@ -220,6 +227,34 @@ class SmokeTests(commands2.SequentialCommandGroup):
             None
         """
         self.progress = progress
+        
+    def angleTestNavX(self, turnAmount: int) -> bool:
+        """
+        Tests angle detection with NavX
+        
+        When calling for the first time, the "angle baseline" is
+        established, and for the function to return true, the
+        NavX reading must read a certain amount of degrees higher
+        than the angle baseline. This will be done by turning the
+        bot until it satisifes the condition.
+        
+        If the robot is not turned enough, the function will
+        return false.
+        
+        Args: 
+            turnAmount: the amount of degrees to turn robot
+        
+        Returns:
+            whether the robot has been turned the amount of degrees
+        """
+        
+        if self.targetAngle is None:
+            self.targetAngle == self.navx.AHRS.getAngle + turnAmount
+        if self.navx.AHRS.getAngle() >= self.targetAngle:
+            self.targetAngle = None
+            return True
+        else:
+            return False
 
     def setMessage(self, testComponent: str = "", row1: str = "", row2: str = "", test: bool = True) -> None:
         """

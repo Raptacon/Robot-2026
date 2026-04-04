@@ -24,13 +24,15 @@ from subsystem.shooter import Shooter
 from subsystem.ballpit import BallPitHopper as Hopper
 from utils.input import InputFactory
 from commands.smoke_tests import SmokeTests
+from subsystem.intakeactions import IntakeSubsystem
+import navx
+
 
 # Third-party imports
 import commands2
 import wpilib
 from commands2.button import Trigger
 from pathplannerlib.auto import AutoBuilder
-from subsystem.intakeactions import IntakeSubsystem
 
 class RobotSwerve:
     # forward declare critical types for editors
@@ -47,6 +49,8 @@ class RobotSwerve:
         self.shooter = Shooter()
         self.hopper = Hopper()
         self.intake = IntakeSubsystem()
+        
+        self.navx = navx
 
         # Alliance instantiation
         self.updateAlliance()
@@ -212,7 +216,7 @@ class RobotSwerve:
         #TODO Move to NT listener on change listener
         commands2.CommandScheduler.getInstance().cancelAll()
         self.updateAlliance()
-        self.SmokeCommand = SmokeTests(self.drivetrain, self.intake, self.hopper, self.shooter)
+        self.SmokeCommand = SmokeTests(self.drivetrain, self.intake, self.hopper, self.shooter, self.navx)
         # self.drivetrain.setDefaultCommand(
         #     DefaultDrive(
         #         self.drivetrain,
