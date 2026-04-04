@@ -28,10 +28,82 @@ actions:
       input_type: boolean_trigger
       trigger_mode: on_true
       threshold: 0.5
+    auto_align:
+      description: Automatically align the robot to a target rotation
+      input_type: boolean_trigger
+      trigger_mode: while_true
+      threshold: 0.25
     speed_toggle:
       description: Toggle between slow (0.25) and fast (0.8) drive scale
       input_type: button
       trigger_mode: on_true
+  shooter:
+    increment_RPM:
+      description: Manually increase the RPM on the flywheel by a small amount
+      input_type: button
+      trigger_mode: on_true
+    decrement_RPM:
+      description: Manually decrease the RPM on the flywheel by a small amount
+      input_type: button
+      trigger_mode: on_true
+    reset_RPM_offset:
+      description: Set the manual flywheel RPM adjustment back to zero
+      input_type: button
+      trigger_mode: on_true
+    cycle_flywheel_mode:
+      description: Switch the mode in which the RPM for the flywhel is determined
+      input_type: button
+      trigger_mode: on_true
+    toggle_flywheel:
+      description: Turn the flywheel on or off
+      input_type: button
+      trigger_mode: on_true
+    toggle_feed:
+      description: Turn the feed motor on or off
+      input_type: button
+      trigger_mode: on_true
+    cycle_shooter_fixed:
+      description: Cycle through fixed position options for RPM
+      input_type: boolean_trigger
+      trigger_mode: on_true
+      threshold: 0.5
+  hopper:
+    toggle_hopper: 
+      description: Turn the hopper on or off
+      input_type: button
+      trigger_mode: toggle_on_true
+    unjam_hopper:
+      description: Spin the hopper back and forth
+      input_type: button
+      trigger_mode: toggle_on_true
+  intake:
+    stow_intake:
+      description: Stow intake back into robot
+      input_type: boolean_trigger
+      trigger_mode: on_true
+      threshold: 0.5
+    deploy_intake:
+      description: Deploy intake
+      input_type: button
+      trigger_mode: on_true
+    deactivate_roller:
+      description: Turns off the intake
+      input_type: button
+      trigger_mode: on_true
+    activate_roller:
+      description: Turns on the intake
+      input_type: button
+      trigger_mode: on_true
+    ramp_intake:
+      description: Hold the intake halfway between being deployed and stowed
+      input_type: button
+      trigger_mode: on_true
+  hood:
+    angle:
+      description: Analog hood angle control (0..1 maps to min..max angle)
+      input_type: analog
+      trigger_mode: scaled
+
 
 controllers:
   0:
@@ -42,6 +114,24 @@ controllers:
       right_stick_x: [drivetrain.rotate]
       right_bumper: [drivetrain.robot_relative]
       left_trigger: [drivetrain.cancel_all]
+      right_trigger: [drivetrain.auto_align]
       y_button: [drivetrain.speed_toggle]
+      pov_up: [intake.stow_intake]
+      pov_down: [intake.deploy_intake]
+      x_button: [intake.deactivate_roller]
+      b_button: [intake.activate_roller]
+      a_button: [intake.ramp_intake]
+
   1:
     name: Operator
+    bindings:
+      pov_up: [shooter.increment_RPM]
+      pov_down: [shooter.decrement_RPM]
+      y_button: [shooter.reset_RPM_offset]
+      a_button: [shooter.cycle_flywheel_mode]
+      x_button: [shooter.toggle_flywheel]
+      b_button: [shooter.toggle_feed]
+      left_bumper: [hopper.toggle_hopper]
+      right_bumper: [hopper.unjam_hopper]
+      left_trigger: [shooter.cycle_shooter_fixed]
+      right_trigger: [hood.angle]

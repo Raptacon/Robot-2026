@@ -33,7 +33,7 @@ class TestTurret(unittest.TestCase):
     """
 
     # Test constants
-    MOTOR_CAN_ID = 40
+    MOTOR_CAN_ID = 15
     # Example: a 100:1 gear ratio turret
     # 1 motor rotation = 360/100 = 3.6 degrees of turret rotation
     POSITION_CONVERSION_FACTOR = 3.6  # degrees per motor rotation
@@ -56,6 +56,15 @@ class TestTurret(unittest.TestCase):
         )
         cls.motor_sim = rev.SparkSim(cls.motor, DCMotor.NEO())
         cls.motor_sim.setBusVoltage(12.0)
+
+    @classmethod
+    def tearDownClass(cls):
+        """Free the SparkMax so other test classes can reuse the CAN ID."""
+        import gc
+        del cls.motor_sim
+        del cls.turret
+        del cls.motor
+        gc.collect()
 
     def setUp(self):
         """Reset motor and turret state before each test."""

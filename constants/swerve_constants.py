@@ -128,8 +128,8 @@ class SwerveModuleMk4iL2Consts(SwerveModuleMk4iConsts):
 
 
 class CaptainPlanetConsts:
-    kIntakeMotorCanId = 11
-    kRollerMotorCanId = 56
+    kIntakeMotorCanId = 20
+    kRollerMotorCanId = 21
     kMotorInverted = False
     kCurrentLimitAmps = 30
     # kBreakBeam = 2
@@ -142,3 +142,46 @@ class CaptainPlanetConsts:
         DONOTHING = 1
         TOFRONT = 2
         TOBACK = 3
+
+class BallpitConstants:
+    # RPM
+    motorStop = 0
+    motorGo = 2000
+    motorOsc = 2000
+    # Seconds
+    oscillationduration_s = 0.5
+    #No Units
+    repeat = 1
+    # list of constants for the ocalation constants for the addition area
+    # ocs_consts =
+    hopperCanId = 40
+
+class PancakeShooterConstants:
+    flywheelLeadMotorId = 32
+    flywheelFollowerMotorId = 33
+    hoodMotorId = 34
+    feedLeadMotorId = 35
+    feedFolowerMotorId = 36
+    # Fly Lead, Fly Follower, Hood, Feed Lead, Feed Follower
+    shooterInverted = (False, True, False, False, True)
+    shooterOffsetDelta = 100
+    shooterFeedPercentOfFlywheel = 0.9
+    shooterFixedRPM = 3000
+    # TODO: Get rest and max positons for shooter
+    shooterHoodRestPosition = 0
+    shooterHoodMaxPosition = 1
+    shooterHoodPosition1 = 0.25
+    shooterHoodPosition2 = 0.5
+    shooterHoodPosition3 = 0.75
+    shooterPositionConversionFactor = 1 / 1.5
+
+
+class HoodConstants:
+    motorId = PancakeShooterConstants.hoodMotorId
+    inverted = PancakeShooterConstants.shooterInverted[2]
+    gearRatio = 1.7  # 1.7:1 — motor rotations per output rotation
+    # NEO 550 (42 CPR handled internally by SparkMax)
+    # Converts motor rotations to output degrees
+    positionConversionFactor = 360.0 / gearRatio
+    maxAngleDegrees = 30.0
+    minAngleDegrees = 0.0

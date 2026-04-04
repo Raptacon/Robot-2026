@@ -137,7 +137,7 @@ See `examples/inputFactory/` for a complete working example.
 
 ### CAN ID Convention
 
-Drivetrain modules start at CAN ID 50 with 3 consecutive IDs per module (drive, steer, encoder). Additional mechanisms count backwards from CAN ID 40. See `subsystem/CAN_CONFIG.md`.
+Drivetrain modules start at CAN ID 50 with 3 consecutive IDs per module (drive, steer, encoder). Additional mechanisms count backwards from CAN ID 40. CAN IDs 15-19 are reserved for unit tests and must not be used for hardware. See `subsystem/CAN_CONFIG.md`.
 
 ## Key Libraries
 
@@ -177,6 +177,64 @@ class MySubsystem:
 ```
 
 See `examples/nt-persistence-test/` for a comparison of persistence approaches.
+
+## WPILib Upstream Development
+
+### Repository & Fork
+
+- **Upstream:** `wpilibsuite/allwpilib` — the main WPILib C++/Java/Python library
+- **Our fork:** `tuffinmuffin/allwpilib` — cloned to `/Users/nbeasley/FRC/allwpilib`
+- **Docs:** WPILib docs are at https://docs.wpilib.org — source code docs are sparse, mostly inline comments
+- **Contribution policy:** BSD-3 license, no CLA required. Bug fixes generally accepted. Must pass `wpiformat` and `./gradlew check`.
+
+### Key Directories in allwpilib
+
+- `simulation/halsim_gui/` — Simulation GUI (driver station, joysticks, hardware viz)
+- `hal/` — Hardware Abstraction Layer
+- `wpigui/` — GLFW-based GUI framework used by halsim_gui
+- `wpilib/` — Main WPILib library (Java)
+- `wpimath/` — Math utilities
+- `cscore/` — Camera support (has Objective-C++ examples for macOS patterns)
+
+### Building & Installing (macOS)
+
+Requires Java 17 (Gradle 8.x does not support Java 25):
+
+```bash
+brew install openjdk@17
+export JAVA_HOME=/opt/homebrew/opt/openjdk@17
+export PATH="/opt/homebrew/opt/openjdk@17/bin:$PATH"
+
+cd /Users/nbeasley/FRC/allwpilib
+./gradlew :simulation:halsim_gui:build
+```
+
+Built binary: `simulation/halsim_gui/build/libs/halsim_gui/shared/osxuniversal/release/libhalsim_gui.dylib`
+
+**Installing into robotpy venv:**
+
+**The allwpilib branch must match your robotpy version to avoid ABI mismatches.**
+Check `pyproject.toml` for the robotpy version (e.g. `2026.2.1`) and build from the matching tag (e.g. `v2026.2.1`).
+
+```bash
+# Back up original
+cp venv/lib/python3.*/site-packages/halsim_gui/lib/libhalsim_gui.dylib \
+   venv/lib/python3.*/site-packages/halsim_gui/lib/libhalsim_gui.dylib.bak
+
+# Install built binary
+cp /Users/nbeasley/FRC/allwpilib/simulation/halsim_gui/build/libs/halsim_gui/shared/osxuniversal/release/libhalsim_gui.dylib \
+   venv/lib/python3.*/site-packages/halsim_gui/lib/libhalsim_gui.dylib
+
+# Restore original
+cp venv/lib/python3.*/site-packages/halsim_gui/lib/libhalsim_gui.dylib.bak \
+   venv/lib/python3.*/site-packages/halsim_gui/lib/libhalsim_gui.dylib
+```
+
+### Code Style
+
+- C++ formatting: run `wpiformat` (install via `pip install wpiformat`)
+- `wpiformat` needs `git remote set-head origin main` if origin/HEAD is not set
+- Gradle spotless checks run automatically during build
 
 ## Commit messages
  - Leave off Claude coauthor for main files
