@@ -35,10 +35,6 @@ from commands2.button import Trigger
 from pathplannerlib.auto import AutoBuilder
 from subsystem.intakeactions import IntakeSubsystem
 
-from pydub import AudioSegment
-from pydub import playback
-import pygame
-
 class RobotSwerve:
     # forward declare critical types for editors
     drivetrain: SwerveDrivetrain
@@ -57,8 +53,7 @@ class RobotSwerve:
         self.hopper = Hopper()
         self.intake = IntakeSubsystem()
 
-        self.imdisabled = AudioSegment.from_ogg("im disabled-Audio (High).ogg")
-
+        self.disabled = True
         # Alliance instantiation
         self.updateAlliance()
 
@@ -126,6 +121,8 @@ class RobotSwerve:
 
         self.field.setRobotPose(self.drivetrain.current_pose())
 
+        wpilib.SmartDashboard.putBoolean("Disabled", self.disabled)
+
     def disabledInit(self):
         self.updateAlliance()
         self.drivetrain.set_motor_stop_modes(to_drive=True, to_break=True, all_motor_override=True, burn_flash=False)
@@ -134,11 +131,12 @@ class RobotSwerve:
         self.shooter.setRPM(0)
         self.shooter.resetOffset()
 
-        self.hopper.zeroHopperVelocity()
-
-        playback.play(self.imdisabled)
+        self.hopper.zeroHopperVelocity()        
     def disabledPeriodic(self):
-        pass
+        if self.disabled == False:
+            print("I'm Disabled!")
+            self.disabled = True
+
 
     def autonomousInit(self):
         self.updateAlliance()
@@ -149,7 +147,7 @@ class RobotSwerve:
             self.drivetrain.reset_pose_estimator(self.drivetrain.get_default_starting_pose())
 
     def autonomousPeriodic(self):
-        pass
+        self.disabled = False
 
     def teleopInit(self):
         self.updateAlliance()
@@ -195,7 +193,7 @@ class RobotSwerve:
         ))
 
     def teleopPeriodic(self):
-        pass
+        self.disabled = False
 
     def testInit(self):
         #TODO Move to NT listener on change listener
@@ -217,7 +215,7 @@ class RobotSwerve:
             self.hood.manualTestCommand(self.hood_angle_input))
 
     def testPeriodic(self):
-        pass
+        self.disabled = False
 
     def _configure_controls(self) -> None:
         """Retrieve managed inputs from the factory and wire command bindings.
