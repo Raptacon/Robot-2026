@@ -35,6 +35,8 @@ from commands2.button import Trigger
 from pathplannerlib.auto import AutoBuilder
 from subsystem.intakeactions import IntakeSubsystem
 
+from pydub import AudioSegment
+from pydub import playback
 import pygame
 
 class RobotSwerve:
@@ -55,9 +57,7 @@ class RobotSwerve:
         self.hopper = Hopper()
         self.intake = IntakeSubsystem()
 
-        pygame.mixer.init()
-        self.imdisabled = pygame.mixer.Sound('im disabled-Audio (High).ogg')
-        self.imdisabled.set_volume(1.0)
+        self.imdisabled = AudioSegment.from_ogg("im disabled-Audio (High).ogg")
 
         # Alliance instantiation
         self.updateAlliance()
@@ -136,7 +136,7 @@ class RobotSwerve:
 
         self.hopper.zeroHopperVelocity()
 
-        self.imdisabled.play()
+        playback.play(self.imdisabled)
     def disabledPeriodic(self):
         pass
 
