@@ -5,6 +5,7 @@
     "data": {
       "commands": [
         {
+<<<<<<< HEAD
           "type": "named",
           "data": {
             "name": "deploy_intake"
@@ -13,7 +14,20 @@
         {
           "type": "path",
           "data": {
+<<<<<<<< HEAD:deploy/pathplanner/autos/left_back_up.auto
             "pathName": null
+========
+            "pathName": "right_back_up"
+>>>>>>>> 4bbeba30dfc74adbb250e7a7d4680618756c0c6b:deploy/pathplanner/autos/right_back_up.auto
+=======
+          "type": "path",
+          "data": {
+<<<<<<<< HEAD:deploy/pathplanner/autos/middle_drive_back.auto
+            "pathName": "middle_back_up"
+========
+            "pathName": "left_back_up"
+>>>>>>>> 4bbeba30dfc74adbb250e7a7d4680618756c0c6b:deploy/pathplanner/autos/left_back_up.auto
+>>>>>>> 4bbeba30dfc74adbb250e7a7d4680618756c0c6b
           }
         }
       ]

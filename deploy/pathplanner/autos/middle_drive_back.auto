@@ -7,7 +7,11 @@
         {
           "type": "path",
           "data": {
+<<<<<<<< HEAD:deploy/pathplanner/autos/middle_drive_back.auto
             "pathName": "middle_back_up"
+========
+            "pathName": "left_back_up"
+>>>>>>>> 4bbeba30dfc74adbb250e7a7d4680618756c0c6b:deploy/pathplanner/autos/left_back_up.auto
           }
         }
       ]
