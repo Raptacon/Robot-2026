@@ -156,6 +156,66 @@ class BallpitConstants:
     # ocs_consts =
     hopperCanId = 40
 
+class PancakeShooterConstants:
+    flywheelLeadMotorId = 32
+    flywheelFollowerMotorId = 33
+    hoodMotorId = 34
+    feedLeadMotorId = 35
+    feedFolowerMotorId = 36
+    # Fly Lead, Fly Follower, Hood, Feed Lead, Feed Follower
+    shooterInverted = (False, True, False, False, True)
+    shooterOffsetDelta = 100
+    shooterFeedPercentOfFlywheel = 0.9
+    shooterFixedRPM = 3000
+    # TODO: Get rest and max positons for shooter
+    shooterHoodRestPosition = 0
+    shooterHoodMaxPosition = 1
+    shooterHoodPosition1 = 0.25
+    shooterHoodPosition2 = 0.5
+    shooterHoodPosition3 = 0.75
+    shooterPositionConversionFactor = 1 / 1.5
+
+
+class HoodConstants:
+    motorId = PancakeShooterConstants.hoodMotorId
+    inverted = PancakeShooterConstants.shooterInverted[2]
+    gearRatio = 1.7  # 1.7:1 — motor rotations per output rotation
+    # NEO 550 (42 CPR handled internally by SparkMax)
+    # Converts motor rotations to output degrees
+    positionConversionFactor = 360.0 / gearRatio
+    maxAngleDegrees = 30.0
+    minAngleDegrees = 0.0
+
+class PancakeShooterConstants:
+    flywheelLeadMotorId = 32
+    flywheelFollowerMotorId = 33
+    hoodMotorId = 34
+    feedLeadMotorId = 35
+    feedFolowerMotorId = 36
+    # Fly Lead, Fly Follower, Hood, Feed Lead, Feed Follower
+    shooterInverted = (False, True, False, False, True)
+    shooterOffsetDelta = 100
+    shooterFeedPercentOfFlywheel = 0.9
+    shooterFixedRPM = 3000
+    # TODO: Get rest and max positons for shooter
+    shooterHoodRestPosition = 0
+    shooterHoodMaxPosition = 1
+    shooterHoodPosition1 = 0.25
+    shooterHoodPosition2 = 0.5
+    shooterHoodPosition3 = 0.75
+    shooterPositionConversionFactor = 1 / 1.5
+
+
+class HoodConstants:
+    motorId = PancakeShooterConstants.hoodMotorId
+    inverted = PancakeShooterConstants.shooterInverted[2]
+    gearRatio = 1.7  # 1.7:1 — motor rotations per output rotation
+    # NEO 550 (42 CPR handled internally by SparkMax)
+    # Converts motor rotations to output degrees
+    positionConversionFactor = 360.0 / gearRatio
+    maxAngleDegrees = 30.0
+    minAngleDegrees = 0.0
+    
 class LEDConstants:
     LEDPort = 1
     LEDLength = 56

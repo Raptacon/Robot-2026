@@ -14,25 +14,31 @@ import os
 from pathlib import Path
 from typing import Callable
 
-import wpimath
-
 # Internal imports
+from config import HoodConfig
+from constants.swerve_constants import BallpitConstants, HoodConstants
+from constants.swerve_constants import PancakeShooterConstants
 from data.telemetry import Telemetry
+from commands.auto.pid_to_angle import PIDAlignToTarget
 from commands.default_swerve_drive import DefaultDrive
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
-from subsystem.shooter import Shooter
+from subsystem.mechanisms.shooter.shooter import Shooter
+from subsystem.mechanisms.shooter.hood import createHood
 from subsystem.ballpit import BallPitHopper as Hopper
 from utils.input import InputFactory
 from commands.smoke_tests import SmokeTests
 from subsystem.intakeactions import IntakeSubsystem
 import navx
 
+from utils.odometry_logic_2026 import determineShooterTargets2026
 
 # Third-party imports
 import commands2
 import wpilib
 from commands2.button import Trigger
 from pathplannerlib.auto import AutoBuilder
+from subsystem.intakeactions import IntakeSubsystem
+from wpimath.geometry import Rotation2d
 
 class RobotSwerve:
     # forward declare critical types for editors
@@ -47,6 +53,8 @@ class RobotSwerve:
         # Subsystem instantiation
         self.drivetrain = SwerveDrivetrain()
         self.shooter = Shooter()
+        self.hood = createHood(HoodConstants, HoodConfig)
+        self.hood.setShooter(self.shooter)
         self.hopper = Hopper()
         self.intake = IntakeSubsystem()
         
@@ -54,6 +62,10 @@ class RobotSwerve:
 
         # Alliance instantiation
         self.updateAlliance()
+
+        # camera stream init — skip in sim to avoid test cleanup issues
+        if not wpilib.RobotBase.isSimulation():
+            wpilib.CameraServer.launch()
 
         # Initialize timer
         self.timer = wpilib.Timer()
@@ -122,8 +134,6 @@ class RobotSwerve:
 
         self.shooter.setRPM(0)
         self.shooter.resetOffset()
-        for motor in ["feed", "lead", "follower"]:
-            self.shooter.setMotorVoltage(motor, 0)
 
         self.hopper.zeroHopperVelocity()
 
@@ -142,9 +152,6 @@ class RobotSwerve:
         pass
 
     def teleopInit(self):
-        # TODO: getDefaultButtonLoop().clear() should not be needed — investigate
-        # what is relying on it and remove the dependency.
-        commands2.CommandScheduler.getInstance().getDefaultButtonLoop().clear()
         self.updateAlliance()
         if self.auto_command:
             self.auto_command.cancel()
@@ -159,55 +166,33 @@ class RobotSwerve:
             )
         )
 
-        # TODO: Convert all subsystem bindings below to use InputFactory.
-        # Add actions to data/inputs/2026bot.yaml and use self.factory.getButton()
-        # to wire them. See _configure_controls() for examples.
+        self.shooter.setDefaultCommand(commands2.cmd.select(
+            {
+                "autoRPM": commands2.cmd.run(
+                    lambda: self.shooter.setRpmUsingLookup(
+                        self.shooter.calculateRangeFromOdometry(
+                            self.drivetrain.current_pose,
+                            lambda: determineShooterTargets2026(self.drivetrain.current_pose, self.alliance)
+                        )
+                    ),
+                    self.shooter
+                ),
+                "fixedRPM": commands2.cmd.run(lambda: self.shooter.setRpmAtFixedPosition(), self.shooter)
+            },
+            self.shooter.getFlywheelMode
+        ))
 
-        # TODO: Get odometry from drivetrain and calculate range
-        # Will start shooter motors upon enabling
-        # self.shooter.setDefaultCommand(commands2.cmd.run(lambda: self.shooter.setRpmUsingLookup(1), self.shooter))
+        # Hood default: set angle from shooter's distance-based lookup
+        self.hood.setDefaultCommand(self.hood.autoAngleCommand())
+            
 
-        # Shooter bindings (mech_controller port 1)
-        # self.mech_controller.povUp().onTrue(commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(ShooterConfig.shooterOffsetDelta), self.shooter))
-        # self.mech_controller.povDown().onTrue(commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(-ShooterConfig.shooterOffsetDelta), self.shooter))
-        # self.mech_controller.y().onTrue(
-        #     commands2.cmd.runOnce(self.shooter.resetOffset, self.shooter)
-        # )
-        # self.mech_controller.a().onTrue(
-        #     commands2.cmd.runOnce(lambda: self.shooter.setRPM(3000), self.shooter)
-        # )
-        # self.mech_controller.x().onTrue(
-        #     commands2.cmd.runOnce(lambda: self.shooter.setRPM(0), self.shooter)
-        # )
-        # self.mech_controller.b().onTrue(
-        #     commands2.cmd.runOnce(self.shooter.toggleFeedActive, self.shooter)
-        # )
-
-        # Hopper bindings (mech_controller port 1)
-        # self.hopper.setDefaultCommand(self.hopper.hex_shaft_generator(BallpitConstants.motorStop))
-        # self.mech_controller.leftBumper().toggleOnTrue(
-        #     self.hopper.hex_shaft_generator(BallpitConstants.motorGo)
-        # )
-        # self.mech_controller.rightBumper().toggleOnTrue(
-        #     commands2.DeferredCommand(lambda: self.hopper.unjamHopper(BallpitConstants.motorOsc, BallpitConstants.repeat, BallpitConstants.duration), self.hopper)
-        # )
-
-        # Intake bindings (driver_controller port 0)
-        # self.driver_controller.y().onTrue(
-        #     commands2.cmd.runOnce(self.intake.stowIntake, self.intake)
-        # )
-        # self.driver_controller.a().onTrue(
-        #     commands2.cmd.runOnce(self.intake.deployIntake, self.intake)
-        # )
-        # self.driver_controller.x().onTrue(
-        #     commands2.cmd.runOnce(self.intake.deactivateRoller, self.intake)
-        # )
-        # self.driver_controller.b().onTrue(
-        #     commands2.cmd.runOnce(self.intake.activateRoller, self.intake)
-        # )
-        # self.driver_controller.start().onTrue(
-        #     commands2.cmd.run(self.intake.rampIntake, self.intake)
-        # )
+        self.hopper.setDefaultCommand(commands2.cmd.select(
+            {
+                "hopperMode": self.hopper.hex_shaft_generator(BallpitConstants.motorGo),
+                "unjamMode": self.hopper.unjamHopper(BallpitConstants.motorOsc, BallpitConstants.repeat, BallpitConstants.oscillationduration_s)
+            },
+            self.hopper.getHopperMode
+        ))
 
     def teleopPeriodic(self):
         pass
@@ -215,22 +200,20 @@ class RobotSwerve:
     def testInit(self):
         #TODO Move to NT listener on change listener
         commands2.CommandScheduler.getInstance().cancelAll()
-        self.updateAlliance()
-        self.SmokeCommand = SmokeTests(self.drivetrain, self.intake, self.hopper, self.shooter, self.navx)
-        # self.drivetrain.setDefaultCommand(
-        #     DefaultDrive(
-        #         self.drivetrain,
-        #         lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftY(), 0.06),
-        #         lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftX(), 0.06),
-        #         lambda: wpimath.applyDeadband(-1 * self.driver_controller.getRightX(), 0.1),
-        #         lambda: not self.driver_controller.getRightBumperButton()
-        #     )
-        # )
-        # commands2.cmd.run(lambda: self.drivetrain.drive(2, 0, 0, False), self.drivetrain).withTimeout(5).schedule()
-        self.factory.getButton("test.smoke_test_confirmation").onTrue(
-            commands2.cmd.runOnce(lambda: self.SmokeCommand.advance(True))
+        self.drivetrain.setDefaultCommand(
+            DefaultDrive(
+                self.drivetrain,
+                self.translate_x,
+                self.translate_y,
+                self.rotate,
+                lambda: not self.robot_relative_btn()
+            )
         )
-        self.SmokeCommand.schedule()
+        commands2.cmd.run(lambda: self.drivetrain.drive(2, 0, 0, False), self.drivetrain).withTimeout(5).schedule()
+
+        # Hood manual test: trigger analog overrides safety for manual control
+        self.hood.setDefaultCommand(
+            self.hood.manualTestCommand(self.hood_angle_input))
 
     def testPeriodic(self):
         self.SmokeCommand.updateMessage()
@@ -259,6 +242,71 @@ class RobotSwerve:
         # Speed toggle: Y button switches between slow and fast scale
         self.factory.getButton("drivetrain.speed_toggle").onTrue(
             commands2.cmd.runOnce(self._toggle_drive_scale)
+        )
+
+        # Auto-rotate: rotate the drivetrain until it faces
+        self.factory.getButton("drivetrain.auto_align").whileTrue(
+            PIDAlignToTarget(
+                self.drivetrain,
+                lambda: determineShooterTargets2026(self.drivetrain.current_pose, self.alliance),
+                self.translate_x,
+                self.translate_y,
+                lambda: not self.robot_relative_btn(),
+                alignment_angle=Rotation2d.fromDegrees(180)
+            )
+        )
+
+        # Shooter inputs
+        self.increment_shooter_offset = self.factory.getButton("shooter.increment_RPM").onTrue(
+            commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(PancakeShooterConstants.shooterOffsetDelta), self.shooter)
+        )
+        self.decrement_shooter_offset = self.factory.getButton("shooter.decrement_RPM").onTrue(
+            commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(-PancakeShooterConstants.shooterOffsetDelta), self.shooter)
+        )
+        self.reset_shooter_offset = self.factory.getButton("shooter.reset_RPM_offset").onTrue(
+            commands2.cmd.runOnce(self.shooter.resetOffset, self.shooter)
+        )
+        self.shooter_cycle_flywheel_mode = self.factory.getButton("shooter.cycle_flywheel_mode").onTrue(
+            commands2.cmd.runOnce(self.shooter.cycleFlywheelMode, self.shooter)
+        )
+        self.toggle_shooter_flywheel = self.factory.getButton("shooter.toggle_flywheel").onTrue(
+            commands2.cmd.runOnce(self.shooter.toggleFlywheelActive, self.shooter)
+        )
+        self.toggle_shooter_feed = self.factory.getButton("shooter.toggle_feed").onTrue(
+                commands2.cmd.sequence(
+                    commands2.cmd.runOnce(self.shooter.toggleFeedActive, self.shooter),
+                    commands2.cmd.runOnce(lambda: self.hopper.setHopperToggle(self.shooter.feedActive), self.hopper)
+            ))
+        self.shooter_cycle_fixed_RPM = self.factory.getButton("shooter.cycle_shooter_fixed").onTrue(
+            commands2.cmd.runOnce(self.shooter.cycleFixedShootingPosition, self.shooter)
+        )
+
+        # Hood input — right trigger analog mapped to hood angle
+        self.hood_angle_input = self.factory.getAnalog("hood.angle")
+
+        # Hopper inputs
+        self.toggle_hopper = self.factory.getButton("hopper.toggle_hopper").onTrue(
+            commands2.cmd.runOnce(self.hopper.toggleHopperMotor, self.hopper)
+        )
+        self.unjam_hopper = self.factory.getButton("hopper.unjam_hopper").onTrue(
+            commands2.cmd.runOnce(lambda: self.hopper.setHopperMode("unjamMode"), self.hopper)
+        )
+
+        # Intake inputs
+        self.stow_intake = self.factory.getButton("intake.stow_intake").onTrue(
+            commands2.cmd.runOnce(self.intake.stowIntake, self.intake)
+        )
+        self.deploy_intake = self.factory.getButton("intake.deploy_intake").onTrue(
+            commands2.cmd.runOnce(self.intake.deployIntake, self.intake)
+        )
+        self.deactivate_roller = self.factory.getButton("intake.deactivate_roller").onTrue(
+            commands2.cmd.runOnce(self.intake.requestRollerOff, self.intake)
+        )
+        self.activate_roller = self.factory.getButton("intake.activate_roller").onTrue(
+            commands2.cmd.runOnce(self.intake.requestRollerOn, self.intake)
+        )
+        self.ramp_intake = self.factory.getButton("intake.ramp_intake").onTrue(
+            commands2.cmd.run(self.intake.rampIntake, self.intake)
         )
 
         # Map all drive axes' scale to a shared SmartDashboard entry.
@@ -312,4 +360,3 @@ class RobotSwerve:
         """
         self.alliance = wpilib.DriverStation.getAlliance()
         self.drivetrain.update_alliance_flag(self.alliance)
-

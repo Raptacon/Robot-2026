@@ -51,12 +51,25 @@ class OperatorRobotConfig:
 
     intake_pivot_pid: Tuple[float] = [0, 0, 0, 1 / 565]
 
+class HoodConfig:
+    # PID gains for hood position control (WPILib PIDController)
+    hoodPID = (0.5, 0, 0)
+    # ArmFeedforward gains: (kS, kG, kV, kA)
+    # kS = static friction compensation (volts)
+    # kG = gravity compensation at horizontal (volts)
+    # kV = velocity feedforward (volts per deg/s)
+    # kA = acceleration feedforward (volts per deg/s^2)
+    hoodFeedforward = (0, 0, 0, 0)
+    # Offset in degrees from hood 0-position to true horizontal.
+    # 0 degrees hood position is approximately horizontal.
+    # Positive degrees lift toward vertical.
+    # ArmFeedforward expects 0 = horizontal, so this offset adjusts
+    # the angle passed to the feedforward calculation.
+    horizontalOffsetDegrees = 0.0
+
+
 class ShooterConfig:
     # Configs for shooter
     shooterFeedMotorPIDF = (0, 0, 0, 1 / 473)
     shooterFlywheelMotorPIDF = (0, 0, 0, 1 / 560)
-    # Feed, Lead, Follower
-    shooterInverted = (True, False, False)
-    shooterRangeInterval = 0.2
-    shooterOffsetDelta = 100
-    shooterFeedPercentOfFlywheel = 0.9
+    shooterHoodMotorPIDF = (0, 0, 0, 1/917)
