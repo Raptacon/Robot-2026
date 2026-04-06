@@ -28,6 +28,7 @@ from subsystem.ballpit import BallPitHopper as Hopper
 from utils.input import InputFactory
 from commands.smoke_tests import SmokeTests
 from subsystem.intakeactions import IntakeSubsystem
+from subsystem.addressableLEDs import AddressableLEDs
 import navx
 
 from utils.odometry_logic_2026 import determineShooterTargets2026
@@ -58,7 +59,8 @@ class RobotSwerve:
         self.hopper = Hopper()
         self.intake = IntakeSubsystem()
         
-        self.navx = navx
+        self.navx = navx.AHRS.create_spi()
+        self.addressableLEDs = AddressableLEDs(self.intake, self.hood)
 
         # Alliance instantiation
         self.updateAlliance()
@@ -126,6 +128,7 @@ class RobotSwerve:
             self.telemetry.runDefaultDataCollections()
 
         self.field.setRobotPose(self.drivetrain.current_pose())
+        self.addressableLEDs.defaultLighting()
 
     def disabledInit(self):
         self.updateAlliance()
@@ -200,7 +203,7 @@ class RobotSwerve:
     def testInit(self):
         #TODO Move to NT listener on change listener
         commands2.CommandScheduler.getInstance().cancelAll()
-        self.SmokeCommand = SmokeTests(self.drivetrain, self.intake, self.hopper, self.shooter, self.hood, self.navx)
+        self.SmokeCommand = SmokeTests(self.drivetrain, self.intake, self.hopper, self.shooter, self.hood, self.addressableLEDs, self.navx)
         self.drivetrain.setDefaultCommand(
             DefaultDrive(
                 self.drivetrain,

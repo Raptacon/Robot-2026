@@ -58,5 +58,6 @@
         "wpilib",
         "wpilog",
         "wpimath"
-    ]
+    ],
+    "python-envs.defaultEnvManager": "ms-python.python:pyenv"
 }

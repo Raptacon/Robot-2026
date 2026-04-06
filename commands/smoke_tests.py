@@ -7,6 +7,7 @@ from subsystem.intakeactions import IntakeSubsystem
 from subsystem.ballpit import BallPitHopper
 from subsystem.mechanisms.shooter.shooter import Shooter
 from subsystem.mechanisms.shooter.hood import Hood
+from subsystem.addressableLEDs import AddressableLEDs
 
 from wpimath.kinematics import SwerveModuleState
 
@@ -38,10 +39,16 @@ class SmokeTests(commands2.SequentialCommandGroup):
                 hopper: BallPitHopper,
                 shooter: Shooter,
                 hood: Hood,
+                led: AddressableLEDs,
                 navx: navx
                 ) -> None:
         """
         This creates the tests and all associated objects.
+        
+        These include:
+            - 8 Motor Communication Tests
+            - 20 Drivetrain Tests
+            - 9 Subsystem Tests
 
         Args:
             None
@@ -57,6 +64,7 @@ class SmokeTests(commands2.SequentialCommandGroup):
         self.hopper = hopper
         self.shooter = shooter
         self.hood = hood
+        self.led = led
         self.navx = navx
 
         self.allMotors = [self.intake.rollerMotor, self.intake.pivotMotor, self.hopper.hopperMotor, 
@@ -71,12 +79,10 @@ class SmokeTests(commands2.SequentialCommandGroup):
         self.targetAngle = None
 
         currentMotor = 0
-        possibleUnpluggedCanBus = False
-        dontskiptests = True
 
         self.progress = False
         self.testMessage = ""
-        self.totaltests = 32 + len(self.allMotors)
+        self.totaltests = 29 + len(self.allMotors)
         self.testNumber = 0
         # self.velocity_vector_x = velocity_vector_x
         # self.velocity_vector_y = velocity_vector_y
@@ -85,37 +91,26 @@ class SmokeTests(commands2.SequentialCommandGroup):
         # Test all Motors for feedback
         self.setElapsedTime()
         while currentMotor <= len(self.allMotors)-1:
-            if possibleUnpluggedCanBus == True and currentMotor <= len(self.allMotors) - 2:
-                if not dontskiptests:
-                    self.testPassFail = self.testPassFail + ">"
-            else:
-                self.allMotors[currentMotor].set(0)
-                self.allMotors[currentMotor].getFaults()
-                self.allMotors[currentMotor].getStickyFaults()
-                time.sleep(0.267)
-                
-                testMotor = self.allMotors[currentMotor]
-                lastError = testMotor.getLastError()
-                self.testResults.append(lastError.name)
+            self.allMotors[currentMotor].set(0)
+            self.allMotors[currentMotor].getFaults()
+            self.allMotors[currentMotor].getStickyFaults()
+            time.sleep(0.267)
+            
+            testMotor = self.allMotors[currentMotor]
+            lastError = testMotor.getLastError()
+            self.testResults.append(lastError.name)
 
-                if self.testResults[-1] == "kOk":
-                    self.testPassFail = self.testPassFail + "."
-                    if possibleUnpluggedCanBus:
-                        if not dontskiptests:
-                            currentMotor = 2
-                            possibleUnpluggedCanBus = False
-                else:
-                    self.testPassFail = self.testPassFail + "F"
-                    if currentMotor == 0:
-                        if not dontskiptests:
-                            possibleUnpluggedCanBus = True
+            if self.testResults[-1] == "kOk":
+                self.testPassFail = self.testPassFail + "."
+            else:
+                self.testPassFail = self.testPassFail + "F"
             self.setMessage("Motor Feedback", self.testPassFail)
             self.updateMessage()
             currentMotor += 1
         self.testDuration = self.getElapsedTime()
         if self.testPassFail.count('F') != 0:
             self.failedtests = True
-            if possibleUnpluggedCanBus == True or self.testPassFail.count('.') == 0:
+            if self.testPassFail.count('.') == 0:
                 self.resultsMessage(F"{self.testPassFail.count('.')} passed, {self.testPassFail.count('F')} failed, {self.testPassFail.count('>')} skipped in {self.testDuration}s",
                                     "Not all Motor Tests succeded. This is usually due to an issue with communicating with motors.",
                                     "Did you plug in the CanBus?")
@@ -138,7 +133,7 @@ class SmokeTests(commands2.SequentialCommandGroup):
             )
         
         self.addRequirements(self.drivetrain)
-        # Tests Swerve Modules (0-20)
+        # Tests Swerve Modules
         for index, swerve_module in enumerate(self.drivetrain.swerve_modules):
             self.addCommands(
                 # Current swerve module's drive motor moves forward 0.2 meters per second until driver confirms 
@@ -174,7 +169,10 @@ class SmokeTests(commands2.SequentialCommandGroup):
         self.addRequirements(intake)
         self.addRequirements(hopper)
         self.addRequirements(shooter)
-        # Test Onboard Sensors (21-24)
+        self.addRequirements(led)
+        self.addRequirements(hood)
+
+        # Test Onboard Sensor
         # self.addCommands(
             # Test confirms after Feed sensor activation
             # commands2.runOnce(lambda: self.setMessage(21, "Onboard Sensors", "Trigger Breakbeam Sensors at Feed", "Successful Activation of Feed Breakbeam Sensors")),
@@ -188,12 +186,17 @@ class SmokeTests(commands2.SequentialCommandGroup):
             # commands2.runOnce(lambda: self.setMessage(24, "Onboard Sensors", "Trigger Reverse Hall-Effects Sensor at Turret", "Successful Activation of Turret Reverse Hall-Effects Sensor")),
             # commands2.WaitUntilCommand(lambda: turret.motor.getReverseLimitSwitch().get()),
         # )
-        # Test Components (25-)
+        # Test Components
         self.addCommands(
             #Test Intake Deployment
             commands2.InstantCommand(lambda intake=intake: intake.deployIntake(), self.intake),
             commands2.cmd.runOnce(lambda: self.setMessage("Intake", "Check for Intake deployment...", "Test confirms when Start Button is pressed")),
             commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False)),
+            #Test Intake Roller Activation
+            commands2.InstantCommand(lambda intake=intake: intake.requestRollerOn(), self.intake),
+            commands2.cmd.runOnce(lambda: self.setMessage("Intake", "Check for activation of Intake Rollers...", "Test confirms when Start Button is pressed")),
+            commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False)),
+            commands2.InstantCommand(lambda intake=intake: intake.requestRollerOff(), self.intake),
             #Test Intake Stow
             commands2.InstantCommand(lambda intake=intake: intake.stowIntake(), self.intake),
             commands2.cmd.runOnce(lambda: self.setMessage("Intake", "Check for Intake stow...", "Test confirms when Start Button is pressed")),
@@ -220,13 +223,14 @@ class SmokeTests(commands2.SequentialCommandGroup):
             commands2.InstantCommand(lambda hood=hood: hood.setAngleNormalized(0.0), self.hood),
             #Test Vision
             #Test LEDs
+            commands2.InstantCommand(lambda led=led: led.LEDConstantColor(wpilib.Color.kRed), self.hood),
+            commands2.cmd.runOnce(lambda: self.setMessage("LEDs", "Check for the lighting up of LEDs to Red", "Test confirms when Start Button is pressed")),
+            commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False)),
+            commands2.InstantCommand(lambda hood=hood: hood.setAngleNormalized(0.0), self.hood),
             #Test NavX
             commands2.cmd.runOnce(lambda: self.setMessage("NavX", "Rotate the Bot 90 Degrees", "Test confirms if NavX registers rotation")),
             commands2.WaitUntilCommand(lambda: self.angleTestNavX(90)),
         )
-
-    # def execute(self):
-    #     self.drivetrain.swerve_modules[0].set_state(SwerveModuleState(0.2, Rotation2d.fromDegrees(0)))
 
     def advance(self, progress: bool = True) -> None:
         """
@@ -261,12 +265,13 @@ class SmokeTests(commands2.SequentialCommandGroup):
         """
         
         if self.targetAngle is None:
-            self.targetAngle == self.navx.AHRS.getAngle + turnAmount
-        if self.navx.AHRS.getAngle() >= self.targetAngle:
-            self.targetAngle = None
-            return True
+            self.targetAngle == self.navx.getAngle() + turnAmount
         else:
-            return False
+            if self.navx.getAngle() >= self.targetAngle:
+                self.targetAngle = None
+                return True
+            else:
+                return False
 
     def setMessage(self, testComponent: str = "", row1: str = "", row2: str = "", test: bool = True) -> None:
         """
