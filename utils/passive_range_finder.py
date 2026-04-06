@@ -77,6 +77,8 @@ class PassiveRangeFinderCommand(Command):
             ca.encoder.getPositionConversionFactor())
 
         # Set conversion factor to 1.0 for raw encoder units, coast mode
+        # position: 1.0 = raw rotations
+        # velocity: 1/60 = rotations/sec (from RPM)
         cfg = rev.SparkMaxConfig()
         cfg.setIdleMode(rev.SparkBaseConfig.IdleMode.kCoast)
         (
@@ -178,6 +180,8 @@ class PassiveRangeFinderCommand(Command):
         else:
             cf = self._original_conversion_factor
 
+        # position: cf units/rotation (deg or normalized)
+        # velocity: cf/60 = units/sec (from RPM)
         (
             cfg.encoder
             .positionConversionFactor(cf)
