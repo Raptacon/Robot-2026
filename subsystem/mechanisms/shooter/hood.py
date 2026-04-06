@@ -13,7 +13,7 @@ from wpilib.sysid import SysIdRoutineLog
 from wpimath.controller import ArmFeedforward, PIDController
 
 # Internal imports
-from subsystem.mechanisms.turret import GetSparkSignalsPositionControlConfig
+from utils.spark_utils import GetSparkSignalsPositionControlConfig
 
 
 class Hood(Subsystem):
@@ -71,6 +71,8 @@ class Hood(Subsystem):
         max_angle_degrees: float,
         pid: tuple,
         feedforward: tuple,
+        inverted: bool = False,
+        min_angle_degrees: float = 0.0,
         horizontal_offset_degrees: float = 0.0,
     ) -> None:
         """
@@ -84,6 +86,9 @@ class Hood(Subsystem):
                 (forward soft limit)
             pid: (P, I, D) gains for the WPILib PIDController
             feedforward: (kS, kG, kV, kA) gains for ArmFeedforward
+            inverted: whether the motor direction is inverted
+            min_angle_degrees: the minimum hood angle in degrees
+                (reverse soft limit)
             horizontal_offset_degrees: offset from hood 0-position to
                 true horizontal for feedforward calculation
         """
@@ -92,7 +97,7 @@ class Hood(Subsystem):
         self.encoder = self.motor.getEncoder()
 
         self.max_angle_degrees = max_angle_degrees
-        self.min_angle_degrees = 0.0
+        self.min_angle_degrees = min_angle_degrees
         self._horizontal_offset_degrees = horizontal_offset_degrees
 
         # Control
@@ -113,6 +118,7 @@ class Hood(Subsystem):
         config = rev.SparkMaxConfig()
         (
             config
+            .inverted(inverted)
             .setIdleMode(rev.SparkBaseConfig.IdleMode.kBrake)
             .voltageCompensation(12.0)
             .smartCurrentLimit(20)
@@ -133,7 +139,7 @@ class Hood(Subsystem):
             config.softLimit
             .forwardSoftLimit(max_angle_degrees)
             .forwardSoftLimitEnabled(True)
-            .reverseSoftLimit(0.0)
+            .reverseSoftLimit(min_angle_degrees)
             .reverseSoftLimitEnabled(True)
         )
 
@@ -439,5 +445,7 @@ def createHood(constants, config) -> Hood:
         max_angle_degrees=constants.maxAngleDegrees,
         pid=config.hoodPID,
         feedforward=config.hoodFeedforward,
+        inverted=constants.inverted,
+        min_angle_degrees=constants.minAngleDegrees,
         horizontal_offset_degrees=config.horizontalOffsetDegrees,
     )

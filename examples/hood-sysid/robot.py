@@ -24,12 +24,12 @@ class MyRobot(TimedCommandRobot):
 
     def robotInit(self):
         # Create adjustable release motor and subsystem
-        self.adjustableRelease_motor = rev.SparkMax(
+        self.hood_motor = rev.SparkMax(
             MOTOR_CAN_ID,
             rev.SparkLowLevel.MotorType.kBrushless
         )
-        self.adjustableRelease = Hood(
-            motor=self.adjustableRelease_motor,
+        self.hood = Hood(
+            motor=self.hood_motor,
             position_conversion_factor=POSITION_CONVERSION_FACTOR,
             max_angle_degrees=MAX_ANGLE_DEGREES,
             pid=PID,
@@ -44,9 +44,9 @@ class MyRobot(TimedCommandRobot):
         # Config: ramp rate 0.2 V/s, step voltage 4V, timeout 30s
         sysIdConfig = SysIdRoutine.Config(0.1, 1, 30.0, None)
         sysIdMechanism = SysIdRoutine.Mechanism(
-            self.adjustableRelease.setMotorVoltage,
-            self.adjustableRelease.sysIdLog,
-            self.adjustableRelease,
+            self.hood.setMotorVoltage,
+            self.hood.sysIdLog,
+            self.hood,
             "hood"
         )
         self.sysId = SysIdRoutine(sysIdConfig, sysIdMechanism)
@@ -56,40 +56,40 @@ class MyRobot(TimedCommandRobot):
 
         # A/B: Quasistatic forward/reverse
         self.controller.a().whileTrue(
-            self.adjustableRelease.sysIdQuasistaticCommand(
+            self.hood.sysIdQuasistaticCommand(
                 SysIdRoutine.Direction.kForward, self.sysId
             )
         )
         self.controller.b().whileTrue(
-            self.adjustableRelease.sysIdQuasistaticCommand(
+            self.hood.sysIdQuasistaticCommand(
                 SysIdRoutine.Direction.kReverse, self.sysId
             )
         )
 
         # X/Y: Dynamic forward/reverse
         self.controller.x().whileTrue(
-            self.adjustableRelease.sysIdDynamicCommand(
+            self.hood.sysIdDynamicCommand(
                 SysIdRoutine.Direction.kForward, self.sysId
             )
         )
         self.controller.y().whileTrue(
-            self.adjustableRelease.sysIdDynamicCommand(
+            self.hood.sysIdDynamicCommand(
                 SysIdRoutine.Direction.kReverse, self.sysId
             )
         )
 
         # Start button: manual position control with right trigger
         self.controller.start().toggleOnTrue(
-            self.adjustableRelease.manualTestCommand(
+            self.hood.manualTestCommand(
                 self.controller.getRightTriggerAxis)
         )
 
         # Back button: toggle passive range finder (start/stop)
         self.controller.back().toggleOnTrue(
             PassiveRangeFinderCommand(
-                self.adjustableRelease_motor,
+                self.hood_motor,
                 "AdjustableRelease",
-                self.adjustableRelease,
+                self.hood,
                 zero_on_end=True,
                 full_range=MAX_ANGLE_DEGREES)
         )
@@ -104,18 +104,18 @@ class MyRobot(TimedCommandRobot):
         # Test mode: manual position control
         self.controller.a().onTrue(
             commands2.cmd.run(
-                lambda: self.adjustableRelease.setAngleDegrees(0.0),
-                self.adjustableRelease)
+                lambda: self.hood.setAngleDegrees(0.0),
+                self.hood)
         )
         self.controller.b().onTrue(
             commands2.cmd.run(
-                lambda: self.adjustableRelease.setAngleDegrees(15.0),
-                self.adjustableRelease)
+                lambda: self.hood.setAngleDegrees(15.0),
+                self.hood)
         )
         self.controller.x().onTrue(
             commands2.cmd.run(
-                lambda: self.adjustableRelease.setAngleDegrees(30.0),
-                self.adjustableRelease)
+                lambda: self.hood.setAngleDegrees(30.0),
+                self.hood)
         )
 
     def testPeriodic(self):
