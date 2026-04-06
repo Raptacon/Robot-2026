@@ -64,7 +64,7 @@ class SmokeTests(commands2.SequentialCommandGroup):
                           self.shooter.followerFlywheelMotor, self.hood.motor]
         self.motorNames = ["Intake - Roller Motor", "Intake - Pivot Motor", "Hopper - Hex Shaft Motor", 
                            "Shooter - Lead Feed Motor", "Shooter - Follower Feed Motor", "Shooter - Lead Flywheel Motor", 
-                           "Shooter - Follower Flywheel Motor", "Hood - Driver Motor"]
+                           "Shooter - Follower Flywheel Motor", "Shooter - Hood Motor"]
         self.testResults = []
         self.testPassFail = ""
         self.failedtests = False
