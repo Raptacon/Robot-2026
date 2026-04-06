@@ -223,10 +223,10 @@ class SmokeTests(commands2.SequentialCommandGroup):
             commands2.InstantCommand(lambda hood=hood: hood.setAngleNormalized(0.0), self.hood),
             #Test Vision
             #Test LEDs
-            commands2.InstantCommand(lambda led=led: led.LEDConstantColor(wpilib.Color.kRed), self.hood),
+            commands2.InstantCommand(lambda led=led: led.LEDConstantColor(wpilib.Color.kRed), self.led),
             commands2.cmd.runOnce(lambda: self.setMessage("LEDs", "Check for the lighting up of LEDs to Red", "Test confirms when Start Button is pressed")),
             commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False)),
-            commands2.InstantCommand(lambda hood=hood: hood.setAngleNormalized(0.0), self.hood),
+            commands2.InstantCommand(lambda led=led: led.LEDConstantColor(wpilib.Color.kBlack), self.led),
             #Test NavX
             commands2.cmd.runOnce(lambda: self.setMessage("NavX", "Rotate the Bot 90 Degrees", "Test confirms if NavX registers rotation")),
             commands2.WaitUntilCommand(lambda: self.angleTestNavX(90)),
