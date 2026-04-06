@@ -5,7 +5,8 @@ from wpimath.geometry import Rotation2d
 # from subsystem.mechanisms.turret import Turret
 from subsystem.intakeactions import IntakeSubsystem
 from subsystem.ballpit import BallPitHopper
-from subsystem.shooter import Shooter
+from subsystem.mechanisms.shooter.shooter import Shooter
+from subsystem.mechanisms.shooter.hood import Hood
 
 from wpimath.kinematics import SwerveModuleState
 
@@ -36,6 +37,7 @@ class SmokeTests(commands2.SequentialCommandGroup):
                 intake: IntakeSubsystem,
                 hopper: BallPitHopper,
                 shooter: Shooter,
+                hood: Hood,
                 navx: navx
                 ) -> None:
         """
@@ -54,10 +56,15 @@ class SmokeTests(commands2.SequentialCommandGroup):
         self.intake = intake
         self.hopper = hopper
         self.shooter = shooter
+        self.hood = hood
         self.navx = navx
 
-        self.allMotors = [self.intake.rollerMotor, self.intake.pivotMotor, self.hopper.hopperMotor, self.shooter.feedMotor, self.shooter.leadFlywheelMotor, self.shooter.followerFlywheelMotor, ]
-        self.motorNames = ["Intake - Roller Motor", "Intake - Pivot Motor", "Hopper - Hex Shaft Motor", "Shooter - Feed Motor", "Shooter - Lead Flywheel Motor", "Shooter - Follower Flywheel Motor",]
+        self.allMotors = [self.intake.rollerMotor, self.intake.pivotMotor, self.hopper.hopperMotor, 
+                          self.shooter.leadFeedMotor, self.shooter.followerFeedMotor, self.shooter.leadFlywheelMotor, 
+                          self.shooter.followerFlywheelMotor, self.hood.motor]
+        self.motorNames = ["Intake - Roller Motor", "Intake - Pivot Motor", "Hopper - Hex Shaft Motor", 
+                           "Shooter - Lead Feed Motor", "Shooter - Follower Feed Motor", "Shooter - Lead Flywheel Motor", 
+                           "Shooter - Follower Flywheel Motor", "Hood - Driver Motor"]
         self.testResults = []
         self.testPassFail = ""
         self.failedtests = False
@@ -185,31 +192,36 @@ class SmokeTests(commands2.SequentialCommandGroup):
         self.addCommands(
             #Test Intake Deployment
             commands2.InstantCommand(lambda intake=intake: intake.deployIntake(), self.intake),
-            commands2.cmd.runOnce(lambda: self.setMessage("Intake", "Check to see if Intake begins deploying...", "Test confirms when Start Button is pressed")),
+            commands2.cmd.runOnce(lambda: self.setMessage("Intake", "Check for Intake deployment...", "Test confirms when Start Button is pressed")),
             commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False)),
             #Test Intake Stow
             commands2.InstantCommand(lambda intake=intake: intake.stowIntake(), self.intake),
-            commands2.cmd.runOnce(lambda: self.setMessage("Intake", "Check to see if Intake begins stowing...", "Test confirms when Start Button is pressed")),
+            commands2.cmd.runOnce(lambda: self.setMessage("Intake", "Check for Intake stow...", "Test confirms when Start Button is pressed")),
             commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False)),
             #Test Hopper Activation
             commands2.InstantCommand(lambda hopper=hopper: hopper.setHexShaftSpeed(0.2), self.hopper),
-            commands2.cmd.runOnce(lambda: self.setMessage("Hopper", "Check to see if Hopper activates...", "Test confirms when Start Button is pressed")),
+            commands2.cmd.runOnce(lambda: self.setMessage("Hopper", "Check for Hopper activation...", "Test confirms when Start Button is pressed")),
             commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False)),
             commands2.InstantCommand(lambda hopper=hopper: hopper.zeroHopperVelocity(), self.hopper),
             #Test Shooter Feed Activation
             commands2.InstantCommand(lambda shooter=shooter: shooter.toggleFeedActive(), self.shooter),
-            commands2.cmd.runOnce(lambda: self.setMessage("Shooter", "Check to see if Feed activates...", "Test confirms when Start Button is pressed")),
+            commands2.cmd.runOnce(lambda: self.setMessage("Shooter", "Check for activation of BOTH Feed Motors...", "Test confirms when Start Button is pressed")),
             commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False)),
             commands2.InstantCommand(lambda shooter=shooter: shooter.toggleFeedActive(), self.shooter),
             #Test Shooter Flywheel Activation
             commands2.InstantCommand(lambda shooter=shooter: shooter.setRPM(3000), self.shooter),
-            commands2.cmd.runOnce(lambda: self.setMessage("Shooter", "Check to see if BOTH Flywheels activate...", "Test confirms when Start Button is pressed")),
+            commands2.cmd.runOnce(lambda: self.setMessage("Shooter", "Check for activation of BOTH flywheels...", "Test confirms when Start Button is pressed")),
             commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False)),
             commands2.InstantCommand(lambda shooter=shooter: shooter.setRPM(0), self.shooter),
+            #Test Shooter Hood Activation
+            commands2.InstantCommand(lambda hood=hood: hood.setAngleNormalized(1.0), self.hood),
+            commands2.cmd.runOnce(lambda: self.setMessage("Shooter", "Check for extension of Hood", "Test confirms when Start Button is pressed")),
+            commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False)),
+            commands2.InstantCommand(lambda hood=hood: hood.setAngleNormalized(0.0), self.hood),
             #Test Vision
             #Test LEDs
-            #Test NavX?
-            commands2.cmd.runOnce(lambda: self.setMessage("NavX", "Rotate the Bot 90 Degrees", "Test confirms if NavX registers 90 degree rotation")),
+            #Test NavX
+            commands2.cmd.runOnce(lambda: self.setMessage("NavX", "Rotate the Bot 90 Degrees", "Test confirms if NavX registers rotation")),
             commands2.WaitUntilCommand(lambda: self.angleTestNavX(90)),
         )
 

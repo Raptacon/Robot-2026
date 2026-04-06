@@ -200,6 +200,7 @@ class RobotSwerve:
     def testInit(self):
         #TODO Move to NT listener on change listener
         commands2.CommandScheduler.getInstance().cancelAll()
+        self.SmokeCommand = SmokeTests(self.drivetrain, self.intake, self.hopper, self.shooter, self.hood, self.navx)
         self.drivetrain.setDefaultCommand(
             DefaultDrive(
                 self.drivetrain,
@@ -245,7 +246,7 @@ class RobotSwerve:
         )
 
         # Auto-rotate: rotate the drivetrain until it faces
-        self.factory.getButton("drivetrain.auto_align").whileTrue(
+        self.factory.getButton("test.auto_align").whileTrue(
             PIDAlignToTarget(
                 self.drivetrain,
                 lambda: determineShooterTargets2026(self.drivetrain.current_pose, self.alliance),
