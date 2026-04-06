@@ -64,6 +64,13 @@ class Hood(Subsystem):
         '/Hood/safetyRpmThreshold', 5.0,
         writeDefault=False, persistent=True)
 
+    # Dashboard tuning: set ntControlEnabled=True on dashboard,
+    # then adjust ntControlAngle to drive hood to a specific angle.
+    nt_control_enabled = ntproperty(
+        '/Hood/ntControlEnabled', False, writeDefault=True)
+    nt_control_angle = ntproperty(
+        '/Hood/ntControlAngle', 0.0, writeDefault=True)
+
     def __init__(
         self,
         motor: rev.SparkMax,
@@ -256,6 +263,13 @@ class Hood(Subsystem):
         if not self._enabled:
             self._updateTelemetry()
             return
+
+        # Dashboard tuning override
+        if self.nt_control_enabled:
+            self._target_degrees = max(
+                self.min_angle_degrees,
+                min(self.max_angle_degrees, self.nt_control_angle)
+            )
 
         # Safety interlock: stow hood when shooter setpoint is low
         if (self.nt_safety_enabled
