@@ -160,7 +160,7 @@ class Hood(Subsystem):
         self._shooter = None
 
         # Mechanism2d visualization
-        self.configureMechanism2d()
+        self._configureMechanism2d()
 
     # -- Setpoint methods --
 
@@ -254,7 +254,7 @@ class Hood(Subsystem):
         Drive PID + feedforward to target, update viz and telemetry.
         """
         if not self._enabled:
-            self.updateTelemetry()
+            self._updateTelemetry()
             return
 
         # Safety interlock: stow hood when shooter setpoint is low
@@ -285,11 +285,11 @@ class Hood(Subsystem):
         else:
             self.motor.setVoltage(total_volts)
 
-        self.updateTelemetry()
+        self._updateTelemetry()
 
     # -- Mechanism2d --
 
-    def configureMechanism2d(self) -> None:
+    def _configureMechanism2d(self) -> None:
         """
         Create and publish a Mechanism2d widget for hood visualization.
 
@@ -321,7 +321,7 @@ class Hood(Subsystem):
 
     # -- Telemetry --
 
-    def updateTelemetry(self) -> None:
+    def _updateTelemetry(self) -> None:
         """Publish telemetry via ntproperty and update Mechanism2d."""
         position_deg = self.encoder.getPosition()
         velocity_dps = self.encoder.getVelocity()
@@ -348,12 +348,12 @@ class Hood(Subsystem):
 
     # -- SysId --
 
-    def setMotorVoltage(self, volts: float) -> None:
+    def _setMotorVoltage(self, volts: float) -> None:
         """Set motor voltage directly. Used by SysId routines."""
         self._commanded_volts = volts
         self.motor.setVoltage(volts)
 
-    def sysIdLog(self, sys_id_routine: SysIdRoutineLog) -> None:
+    def _sysIdLog(self, sys_id_routine: SysIdRoutineLog) -> None:
         """
         Log a frame of data for SysId characterization.
 
@@ -379,7 +379,7 @@ class Hood(Subsystem):
                    position_deg / self.max_angle_degrees, "")
         )
 
-    def sysIdQuasistaticCommand(
+    def _sysIdQuasistaticCommand(
         self,
         direction: SysIdRoutine.Direction,
         sysIdRoutine: SysIdRoutine
@@ -387,7 +387,7 @@ class Hood(Subsystem):
         """Create a quasistatic SysId command for the hood."""
         return sysIdRoutine.quasistatic(direction)
 
-    def sysIdDynamicCommand(
+    def _sysIdDynamicCommand(
         self,
         direction: SysIdRoutine.Direction,
         sysIdRoutine: SysIdRoutine

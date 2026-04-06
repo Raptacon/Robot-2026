@@ -44,8 +44,8 @@ class MyRobot(TimedCommandRobot):
         # Config: ramp rate 0.2 V/s, step voltage 4V, timeout 30s
         sysIdConfig = SysIdRoutine.Config(0.1, 1, 30.0, None)
         sysIdMechanism = SysIdRoutine.Mechanism(
-            self.hood.setMotorVoltage,
-            self.hood.sysIdLog,
+            self.hood._setMotorVoltage,
+            self.hood._sysIdLog,
             self.hood,
             "hood"
         )
@@ -56,24 +56,24 @@ class MyRobot(TimedCommandRobot):
 
         # A/B: Quasistatic forward/reverse
         self.controller.a().whileTrue(
-            self.hood.sysIdQuasistaticCommand(
+            self.hood._sysIdQuasistaticCommand(
                 SysIdRoutine.Direction.kForward, self.sysId
             )
         )
         self.controller.b().whileTrue(
-            self.hood.sysIdQuasistaticCommand(
+            self.hood._sysIdQuasistaticCommand(
                 SysIdRoutine.Direction.kReverse, self.sysId
             )
         )
 
         # X/Y: Dynamic forward/reverse
         self.controller.x().whileTrue(
-            self.hood.sysIdDynamicCommand(
+            self.hood._sysIdDynamicCommand(
                 SysIdRoutine.Direction.kForward, self.sysId
             )
         )
         self.controller.y().whileTrue(
-            self.hood.sysIdDynamicCommand(
+            self.hood._sysIdDynamicCommand(
                 SysIdRoutine.Direction.kReverse, self.sysId
             )
         )

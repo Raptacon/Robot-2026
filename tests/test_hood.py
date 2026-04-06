@@ -196,7 +196,7 @@ class TestHood(unittest.TestCase):
     def test_telemetry_runs_without_error(self):
         self.hood.setAngleDegrees(15.0)
         self.motor_sim.getRelativeEncoderSim().setPosition(10.0)
-        self.hood.updateTelemetry()
+        self.hood._updateTelemetry()
 
     # -- Periodic --
 
