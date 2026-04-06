@@ -127,6 +127,16 @@ class SwerveModuleMk4iL2Consts(SwerveModuleMk4iConsts):
 #############################
 
 
+class HoodConstants:
+    motorId = 34
+    inverted = False
+    # Position conversion factor — set by calibration or known gear ratio.
+    # Use PassiveRangeFinderCommand with full_range to measure this.
+    positionConversionFactor = 9.53  # deg/rotation (from calibration)
+    maxAngleDegrees = 20.0
+    minAngleDegrees = 0.0
+
+
 class CaptainPlanetConsts:
     kIntakeMotorCanId = 11
     kRollerMotorCanId = 56
