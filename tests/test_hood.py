@@ -26,6 +26,8 @@ import wpilib.simulation
 from wpimath.system.plant import DCMotor
 
 # Internal imports
+from config import HoodConfig
+from constants.swerve_constants import HoodConstants
 from subsystem.mechanisms.shooter.hood import Hood
 
 
@@ -37,10 +39,10 @@ class TestHood(unittest.TestCase):
     """
 
     MOTOR_CAN_ID = 19
-    POSITION_CONVERSION_FACTOR = 360.0 / 1.7  # degrees per motor rotation
-    MAX_ANGLE_DEGREES = 30.0
-    PID = (0.5, 0, 0)
-    FEEDFORWARD = (0, 0, 0, 0)
+    POSITION_CONVERSION_FACTOR = HoodConstants.positionConversionFactor
+    MAX_ANGLE_DEGREES = HoodConstants.maxAngleDegrees
+    PID = HoodConfig.hoodPID
+    FEEDFORWARD = HoodConfig.hoodFeedforward
 
     @classmethod
     def setUpClass(cls):

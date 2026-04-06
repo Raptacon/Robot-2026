@@ -20,6 +20,7 @@ import wpilib.simulation
 from commands2 import Subsystem
 from wpimath.system.plant import DCMotor
 
+from constants.swerve_constants import HoodConstants
 from utils.passive_range_finder import PassiveRangeFinderCommand
 
 
@@ -27,7 +28,7 @@ class TestPassiveRangeFinder(unittest.TestCase):
     """Test suite for PassiveRangeFinderCommand."""
 
     MOTOR_CAN_ID = 18
-    POSITION_CONVERSION_FACTOR = 360.0 / 1.7
+    POSITION_CONVERSION_FACTOR = HoodConstants.positionConversionFactor
 
     @classmethod
     def setUpClass(cls):
