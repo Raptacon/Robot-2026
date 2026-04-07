@@ -46,7 +46,7 @@ class SmokeTests(commands2.SequentialCommandGroup):
         This creates the tests and all associated objects.
         
         These include:
-            - 8 Motor Communication Tests
+            - 16 Motor Communication Tests
             - 20 Drivetrain Tests
             - 9 Subsystem Tests
 
@@ -67,12 +67,19 @@ class SmokeTests(commands2.SequentialCommandGroup):
         self.led = led
         self.navx = navx
 
+        #Add all motors (including drivetrain motors) used for communication tests
         self.allMotors = [self.intake.rollerMotor, self.intake.pivotMotor, self.hopper.hopperMotor, 
                           self.shooter.leadFeedMotor, self.shooter.followerFeedMotor, self.shooter.leadFlywheelMotor, 
                           self.shooter.followerFlywheelMotor, self.hood.motor]
         self.motorNames = ["Intake - Roller Motor", "Intake - Pivot Motor", "Hopper - Hex Shaft Motor", 
                            "Shooter - Lead Feed Motor", "Shooter - Follower Feed Motor", "Shooter - Lead Flywheel Motor", 
                            "Shooter - Follower Flywheel Motor", "Shooter - Hood Motor"]
+        for swerve_module in self.drivetrain.swerve_modules:
+            self.allMotors.append(swerve_module.drive_motor)
+            self.motorNames.append(F"{str(swerve_module.getName())} Swerve Module - Drive Motor")
+            self.allMotors.append(swerve_module.steer_motor)
+            self.motorNames.append(F"{str(swerve_module.getName())} Swerve Module - Steer Motor")
+        
         self.testResults = []
         self.testPassFail = ""
         self.failedtests = False
@@ -94,7 +101,7 @@ class SmokeTests(commands2.SequentialCommandGroup):
             self.allMotors[currentMotor].set(0)
             self.allMotors[currentMotor].getFaults()
             self.allMotors[currentMotor].getStickyFaults()
-            time.sleep(0.267)
+            time.sleep(0.269)
             
             testMotor = self.allMotors[currentMotor]
             lastError = testMotor.getLastError()
@@ -134,7 +141,7 @@ class SmokeTests(commands2.SequentialCommandGroup):
         
         self.addRequirements(self.drivetrain)
         # Tests Swerve Modules
-        for index, swerve_module in enumerate(self.drivetrain.swerve_modules):
+        for swerve_module in self.drivetrain.swerve_modules:
             self.addCommands(
                 # Current swerve module's drive motor moves forward 0.2 meters per second until driver confirms 
                 commands2.InstantCommand(lambda swerve_module=swerve_module: swerve_module.set_state(SwerveModuleState(0.2, Rotation2d.fromDegrees(0)), apply_cosine_scaling=False),
