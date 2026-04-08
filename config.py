@@ -49,6 +49,7 @@ class OperatorRobotConfig:
     # max angular velocity (dps), max angular acceleration (dps^2).
     teleop_pathplan_constraints: Tuple[float] = (2.5, 2.0, 360.0, 360.0)
 
+<<<<<<< HEAD
     intake_pivot_pid: Tuple[float] = [0, 0, 0, 1 / 565]
 
 class HoodConfig:
@@ -65,6 +66,14 @@ class HoodConfig:
     # Positive degrees lift toward vertical.
     # ArmFeedforward expects 0 = horizontal, so this offset adjusts
     # the angle passed to the feedforward calculation.
+=======
+class HoodConfig:
+    # PID gains for hood position control (WPILib PIDController)
+    hoodPID = (0.3, 0.02, 0)
+    # ArmFeedforward gains: (kS, kG, kV, kA)
+    hoodFeedforward = (0.4, 0.04, 0, 0)
+    # Offset in degrees from hood 0-position to true horizontal.
+>>>>>>> main
     horizontalOffsetDegrees = 0.0
 
 

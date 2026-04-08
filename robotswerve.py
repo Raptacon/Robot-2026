@@ -16,15 +16,23 @@ from typing import Callable
 
 # Internal imports
 from config import HoodConfig
+<<<<<<< HEAD
 from constants.swerve_constants import BallpitConstants, HoodConstants
 from constants.swerve_constants import PancakeShooterConstants
+=======
+from constants.swerve_constants import HoodConstants
+>>>>>>> main
 from data.telemetry import Telemetry
 from commands.auto.pid_to_angle import PIDAlignToTarget
 from commands.default_swerve_drive import DefaultDrive
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
+<<<<<<< HEAD
 from subsystem.mechanisms.shooter.shooter import Shooter
 from subsystem.mechanisms.shooter.hood import createHood
 from subsystem.ballpit import BallPitHopper as Hopper
+=======
+from subsystem.mechanisms.shooter.hood import createHood
+>>>>>>> main
 from utils.input import InputFactory
 from utils.odometry_logic_2026 import determineShooterTargets2026
 
@@ -48,11 +56,15 @@ class RobotSwerve:
 
         # Subsystem instantiation
         self.drivetrain = SwerveDrivetrain()
+<<<<<<< HEAD
         self.shooter = Shooter()
         self.hood = createHood(HoodConstants, HoodConfig)
         self.hood.setShooter(self.shooter)
         self.hopper = Hopper()
         self.intake = IntakeSubsystem()
+=======
+        self.hood = createHood(HoodConstants, HoodConfig)
+>>>>>>> main
 
         # Alliance instantiation
         self.updateAlliance()
