@@ -54,7 +54,7 @@ class OperatorRobotConfig:
 
 class HoodConfig:
     # PID gains for hood position control (WPILib PIDController)
-    hoodPID = (0.3, 0.02, 0)
+    hoodPID = (0.2, 0.02, 0)
     # ArmFeedforward gains: (kS, kG, kV, kA)
     hoodFeedforward = (0.4, 0.04, 0, 0)
     # Offset in degrees from hood 0-position to true horizontal.
