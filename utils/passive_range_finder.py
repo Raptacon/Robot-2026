@@ -29,22 +29,16 @@ class PassiveRangeFinderCommand(Command):
         motor: rev.SparkMax,
         name: str,
         subsystem: Subsystem,
-<<<<<<< HEAD
-=======
         zero_on_end: bool = False,
         full_range: float = None,
->>>>>>> main
     ) -> None:
         super().__init__()
         self.motor = motor
         self.encoder = motor.getEncoder()
         self._name = name
-<<<<<<< HEAD
-=======
         self._subsystem = subsystem
         self._zero_on_end = zero_on_end
         self._full_range = full_range
->>>>>>> main
         self.addRequirements(subsystem)
 
         # State
@@ -83,11 +77,8 @@ class PassiveRangeFinderCommand(Command):
             ca.encoder.getPositionConversionFactor())
 
         # Set conversion factor to 1.0 for raw encoder units, coast mode
-<<<<<<< HEAD
-=======
         # position: 1.0 = raw rotations
         # velocity: 1/60 = rotations/sec (from RPM)
->>>>>>> main
         cfg = rev.SparkMaxConfig()
         cfg.setIdleMode(rev.SparkBaseConfig.IdleMode.kCoast)
         (
@@ -101,14 +92,9 @@ class PassiveRangeFinderCommand(Command):
             rev.PersistMode.kNoPersistParameters
         )
 
-<<<<<<< HEAD
-        # Reset tracking
-        pos = self.encoder.getPosition()
-=======
         # Zero encoder and reset tracking
         self.encoder.setPosition(0)
         pos = 0.0
->>>>>>> main
         self._min_raw = pos
         self._max_raw = pos
         self._hit_forward_limit = False
@@ -166,13 +152,6 @@ class PassiveRangeFinderCommand(Command):
         """Apply discovered range as soft limits and restore idle mode."""
         self.motor.stopMotor()
 
-<<<<<<< HEAD
-        cf = self._original_conversion_factor
-        cfg = rev.SparkMaxConfig()
-
-        # Restore original conversion factor and idle mode
-        cfg.setIdleMode(self._original_idle_mode)
-=======
         cfg = rev.SparkMaxConfig()
         cfg.setIdleMode(self._original_idle_mode)
 
@@ -203,65 +182,12 @@ class PassiveRangeFinderCommand(Command):
 
         # position: cf units/rotation (deg or normalized)
         # velocity: cf/60 = units/sec (from RPM)
->>>>>>> main
         (
             cfg.encoder
             .positionConversionFactor(cf)
             .velocityConversionFactor(cf / 60.0)
         )
 
-<<<<<<< HEAD
-        if not interrupted:
-            # Determine best limits: prefer hard limit positions
-            fwd_raw = (self._forward_limit_position
-                       if self._hit_forward_limit else self._max_raw)
-            rev_raw = (self._reverse_limit_position
-                       if self._hit_reverse_limit else self._min_raw)
-
-            # Scale to original units and apply as soft limits
-            fwd_scaled = fwd_raw * cf
-            rev_scaled = rev_raw * cf
-
-            (
-                cfg.softLimit
-                .forwardSoftLimit(fwd_scaled)
-                .forwardSoftLimitEnabled(True)
-                .reverseSoftLimit(rev_scaled)
-                .reverseSoftLimitEnabled(True)
-            )
-
-            elapsed = wpilib.Timer.getFPGATimestamp() - self._start_time
-            range_raw = self._max_raw - self._min_raw
-
-            summary = (
-                f"[PassiveRangeFinder/{self._name}] Complete.\n"
-                f"  Raw:        min={self._min_raw:.4f}  "
-                f"max={self._max_raw:.4f}  range={range_raw:.4f}\n"
-                f"  Normalized: min={self._min_raw * cf:.2f}  "
-                f"max={self._max_raw * cf:.2f}  "
-                f"range={range_raw * cf:.2f}\n"
-                f"  Soft limits set: [{rev_scaled:.2f}, {fwd_scaled:.2f}]\n"
-                f"  Forward limit hit: {self._hit_forward_limit}\n"
-                f"  Reverse limit hit: {self._hit_reverse_limit}\n"
-                f"  Elapsed: {elapsed:.1f}s"
-            )
-            print(summary)
-
-            limits_str = (
-                'fwd+rev' if self._hit_forward_limit
-                and self._hit_reverse_limit
-                else 'fwd' if self._hit_forward_limit
-                else 'rev' if self._hit_reverse_limit
-                else 'none')
-            self._result_alert.setText(
-                f"PassiveRangeFinder/{self._name}: "
-                f"range=[{rev_scaled:.2f}, {fwd_scaled:.2f}] "
-                f"hardLimits={limits_str}")
-            self._result_alert.set(True)
-        else:
-            print(f"[PassiveRangeFinder/{self._name}] Interrupted. "
-                  f"No soft limits applied.")
-=======
         # Apply soft limits in the new units
         fwd_scaled = fwd_raw * cf
         rev_scaled = rev_raw * cf
@@ -306,7 +232,6 @@ class PassiveRangeFinderCommand(Command):
             f"range=[{rev_scaled:.2f}, {fwd_scaled:.2f}] {unit} "
             f"hardLimits={limits_str}")
         self._result_alert.set(True)
->>>>>>> main
 
         self.motor.configure(
             cfg,
@@ -314,8 +239,6 @@ class PassiveRangeFinderCommand(Command):
             rev.PersistMode.kNoPersistParameters
         )
 
-<<<<<<< HEAD
-=======
         # Zero the encoder after config is applied so soft limits
         # are relative to the new zero position.
         if self._zero_on_end:
@@ -327,7 +250,6 @@ class PassiveRangeFinderCommand(Command):
                 self._subsystem.disable):
             self._subsystem.disable()
 
->>>>>>> main
         # Final NT update
         self._table.putBoolean("active", False)
 
@@ -337,29 +259,6 @@ class PassiveRangeFinderCommand(Command):
     def _publish_nt(self, position: float) -> None:
         """Publish all telemetry to NetworkTables."""
         t = self._table
-<<<<<<< HEAD
-        cf = self._original_conversion_factor
-        elapsed = wpilib.Timer.getFPGATimestamp() - self._start_time
-        range_raw = self._max_raw - self._min_raw
-
-        t.putBoolean("active", True)
-        t.putNumber("currentPosition", position)
-        t.putNumber("min", self._min_raw)
-        t.putNumber("max", self._max_raw)
-        t.putNumber("range", range_raw)
-        t.putNumber("normalizedMin", self._min_raw * cf)
-        t.putNumber("normalizedMax", self._max_raw * cf)
-        t.putNumber("normalizedRange", range_raw * cf)
-        t.putNumber("elapsedTime", elapsed)
-        t.putBoolean("passedForwardHardLimit", self._hit_forward_limit)
-        t.putBoolean("passedReverseHardLimit", self._hit_reverse_limit)
-        t.putNumber("forwardLimitPosition", self._forward_limit_position)
-        t.putNumber("reverseLimitPosition", self._reverse_limit_position)
-        t.putNumber("forwardLimitNormalized",
-                    self._forward_limit_position * cf)
-        t.putNumber("reverseLimitNormalized",
-                    self._reverse_limit_position * cf)
-=======
         elapsed = wpilib.Timer.getFPGATimestamp() - self._start_time
         range_raw = self._max_raw - self._min_raw
 
@@ -380,4 +279,3 @@ class PassiveRangeFinderCommand(Command):
         t.putBoolean("passedReverseHardLimit", self._hit_reverse_limit)
         t.putNumber("forwardLimitRaw", self._forward_limit_position)
         t.putNumber("reverseLimitRaw", self._reverse_limit_position)
->>>>>>> main
