@@ -68,10 +68,11 @@ actions:
       trigger_mode: on_true
       threshold: 0.5
   hopper:
-    toggle_hopper: 
+    toggle_hopper:
       description: Turn the hopper on or off
-      input_type: button
+      input_type: boolean_trigger
       trigger_mode: toggle_on_true
+      threshold: 0.5
     unjam_hopper:
       description: Spin the hopper back and forth
       input_type: button
@@ -113,7 +114,8 @@ controllers:
       left_stick_x: [drivetrain.translate_y]
       right_stick_x: [drivetrain.rotate]
       right_bumper: [drivetrain.robot_relative]
-      left_trigger: [drivetrain.cancel_all]
+      left_trigger: [hopper.toggle_hopper]
+      back_button: [drivetrain.cancel_all]
       right_trigger: [drivetrain.auto_align]
       y_button: [drivetrain.speed_toggle]
       pov_up: [intake.stow_intake]
@@ -131,7 +133,6 @@ controllers:
       a_button: [shooter.cycle_flywheel_mode]
       x_button: [shooter.toggle_flywheel]
       b_button: [shooter.toggle_feed]
-      left_bumper: [hopper.toggle_hopper]
       right_bumper: [hopper.unjam_hopper]
       left_trigger: [shooter.cycle_shooter_fixed]
       right_trigger: [hood.angle]
