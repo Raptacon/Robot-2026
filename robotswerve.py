@@ -214,6 +214,9 @@ class RobotSwerve:
             )
         )
         commands2.cmd.run(lambda: self.drivetrain.drive(2, 0, 0, False), self.drivetrain).withTimeout(5).schedule()
+        self.factory.getButton("test.smoke_test_confirmation").onTrue(
+            commands2.cmd.runOnce(lambda: self.SmokeCommand.advance(True))
+        )
 
         # Hood manual test: trigger analog overrides safety for manual control
         self.hood.setDefaultCommand(
@@ -259,6 +262,7 @@ class RobotSwerve:
                 alignment_angle=Rotation2d.fromDegrees(180)
             )
         )
+        
 
         # Shooter inputs
         self.increment_shooter_offset = self.factory.getButton("shooter.increment_RPM").onTrue(
