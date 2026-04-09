@@ -21,8 +21,14 @@ from constants.swerve_constants import PancakeShooterConstants
 from data.telemetry import Telemetry
 from commands.auto.pid_to_angle import PIDAlignToTarget
 from commands.default_swerve_drive import DefaultDrive
+from commands.integration_commands import (
+    toggle_intake_deploy,
+    toggle_spinup,
+    run_hopper_and_feed,
+)
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
 from subsystem.mechanisms.shooter.shooter import Shooter
+from subsystem.mechanisms.shooter.feed import Feed
 from subsystem.mechanisms.shooter.hood import createHood
 from subsystem.ballpit import BallPitHopper as Hopper
 from utils.input import InputFactory
@@ -49,6 +55,7 @@ class RobotSwerve:
         # Subsystem instantiation
         self.drivetrain = SwerveDrivetrain()
         self.shooter = Shooter()
+        self.feed = Feed()
         self.hood = createHood(HoodConstants, HoodConfig)
         self.hood.setShooter(self.shooter)
         self.hopper = Hopper()
@@ -56,10 +63,6 @@ class RobotSwerve:
 
         # Alliance instantiation
         self.updateAlliance()
-
-        # camera stream init — skip in sim to avoid test cleanup issues
-        if not wpilib.RobotBase.isSimulation():
-            wpilib.CameraServer.launch()
 
         # Initialize timer
         self.timer = wpilib.Timer()
@@ -128,6 +131,7 @@ class RobotSwerve:
 
         self.shooter.setRPM(0)
         self.shooter.resetOffset()
+        self.feed.stop()
 
         self.hopper.zeroHopperVelocity()
 
@@ -252,27 +256,16 @@ class RobotSwerve:
         )
 
         # Shooter inputs
-        self.increment_shooter_offset = self.factory.getButton("shooter.increment_RPM").onTrue(
+        self.factory.getButton("shooter.increment_RPM").onTrue(
             commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(PancakeShooterConstants.shooterOffsetDelta), self.shooter)
         )
-        self.decrement_shooter_offset = self.factory.getButton("shooter.decrement_RPM").onTrue(
+        self.factory.getButton("shooter.decrement_RPM").onTrue(
             commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(-PancakeShooterConstants.shooterOffsetDelta), self.shooter)
         )
-        self.reset_shooter_offset = self.factory.getButton("shooter.reset_RPM_offset").onTrue(
+        self.factory.getButton("shooter.reset_RPM_offset").onTrue(
             commands2.cmd.runOnce(self.shooter.resetOffset, self.shooter)
         )
-        self.shooter_cycle_flywheel_mode = self.factory.getButton("shooter.cycle_flywheel_mode").onTrue(
-            commands2.cmd.runOnce(self.shooter.cycleFlywheelMode, self.shooter)
-        )
-        self.toggle_shooter_flywheel = self.factory.getButton("shooter.toggle_flywheel").onTrue(
-            commands2.cmd.runOnce(self.shooter.toggleFlywheelActive, self.shooter)
-        )
-        self.toggle_shooter_feed = self.factory.getButton("shooter.toggle_feed").onTrue(
-                commands2.cmd.sequence(
-                    commands2.cmd.runOnce(self.shooter.toggleFeedActive, self.shooter),
-                    commands2.cmd.runOnce(lambda: self.hopper.setHopperToggle(self.shooter.feedActive), self.hopper)
-            ))
-        self.shooter_cycle_fixed_RPM = self.factory.getButton("shooter.cycle_shooter_fixed").onTrue(
+        self.factory.getButton("shooter.cycle_shooter_fixed").onTrue(
             commands2.cmd.runOnce(self.shooter.cycleFixedShootingPosition, self.shooter)
         )
 
@@ -287,21 +280,28 @@ class RobotSwerve:
             commands2.cmd.runOnce(lambda: self.hopper.setHopperMode("unjamMode"), self.hopper)
         )
 
-        # Intake inputs
-        self.stow_intake = self.factory.getButton("intake.stow_intake").onTrue(
-            commands2.cmd.runOnce(self.intake.stowIntake, self.intake)
+        # Integration: toggle intake deploy/retract (Operator A)
+        self.factory.getButton("integration.toggle_intake_deploy").onTrue(
+            toggle_intake_deploy(self.intake)
         )
-        self.deploy_intake = self.factory.getButton("intake.deploy_intake").onTrue(
-            commands2.cmd.runOnce(self.intake.deployIntake, self.intake)
-        )
-        self.deactivate_roller = self.factory.getButton("intake.deactivate_roller").onTrue(
-            commands2.cmd.runOnce(self.intake.requestRollerOff, self.intake)
-        )
-        self.activate_roller = self.factory.getButton("intake.activate_roller").onTrue(
+
+        # Integration: intake rollers while held (Operator B)
+        intake_roller_btn = self.factory.getButton("integration.hold_intake_roller")
+        intake_roller_btn.onTrue(
             commands2.cmd.runOnce(self.intake.requestRollerOn, self.intake)
         )
-        self.ramp_intake = self.factory.getButton("intake.ramp_intake").onTrue(
-            commands2.cmd.run(self.intake.rampIntake, self.intake)
+        intake_roller_btn.onFalse(
+            commands2.cmd.runOnce(self.intake.requestRollerOff, self.intake)
+        )
+
+        # Integration: flywheel spinup toggle (Operator X)
+        self.factory.getButton("integration.spinup_shooter").onTrue(
+            toggle_spinup(self.shooter, self.hood)
+        )
+
+        # Integration: hopper + feed while held (Driver LB)
+        self.factory.getButton("integration.run_hopper_feed").whileTrue(
+            run_hopper_and_feed(self.hopper, self.feed)
         )
 
         # Map all drive axes' scale to a shared SmartDashboard entry.

@@ -40,7 +40,7 @@ class IntakeSubsystem(commands2.SubsystemBase):
         self.jamReversalTime = 3 #Amount of time to have motors reverse when a ball inside the intake has gotten stuck
         self.unjam = 1500 #Minimum sustained rpm before assuming rollers have been unjammed
         self.pivotBaseSpeed = 0.3 #Base speed for pivot motor, used when setting setpoints
-        self.rollerBaseSpeed = 0.3 #Base speed for roller motor, used when setting setpoints
+        self.rollerBaseSpeed = 0.45 #Base speed for roller motor, used when setting setpoints
         # RPM below which the roller is considered stopped. Accounts for
         # small rocking motion when the robot moves. Tune as needed.
         self.rollerStoppedThreshold = 0.5

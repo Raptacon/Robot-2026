@@ -18,6 +18,7 @@ class BallPitHopper(commands2.Subsystem):
         """
         self.hopperMotor = rev.SparkMax(BallpitConstants.hopperCanId, rev.SparkLowLevel.MotorType.kBrushless)
         self.hopperConfig = rev.SparkBaseConfig()
+        self.hopperConfig.inverted(True)
         self.hopperConfig.closedLoop.pidf(0, 0, 0, 1/473, rev.ClosedLoopSlot.kSlot0)
         self.hopperMotorPIDF = self.hopperMotor.getClosedLoopController()
         self.hopperMotor.configure(self.hopperConfig, rev.ResetMode.kResetSafeParameters, rev.PersistMode.kPersistParameters)

@@ -170,10 +170,12 @@ class PancakeShooterConstants:
     flywheelLeadMotorId = 32
     flywheelFollowerMotorId = 33
     hoodMotorId = 34
-    feedLeadMotorId = 35
-    feedFolowerMotorId = 36
-    # Fly Lead, Fly Follower, Hood, Feed Lead, Feed Follower
-    shooterInverted = (False, True, False, False, True)
+    feedUpperMotorId = 35
+    feedLowerMotorId = 36
+    flywheelLeadInverted = False
+    flywheelFollowerInverted = True
+    feedUpperInverted = False
+    feedLowerInverted = False
     shooterOffsetDelta = 100
     shooterFeedPercentOfFlywheel = 0.9
     shooterFixedRPM = 3000
