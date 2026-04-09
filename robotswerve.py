@@ -23,6 +23,7 @@ from data.telemetry import Telemetry
 from commands.default_swerve_drive import DefaultDrive
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
 from subsystem.mechanisms.shooter.hood import createHood
+from subsystem.robot_state import RobotState
 from utils.input import InputFactory
 
 # Third-party imports
@@ -44,6 +45,7 @@ class RobotSwerve:
         # Subsystem instantiation
         self.drivetrain = SwerveDrivetrain()
         self.hood = createHood(HoodConstants, HoodConfig)
+        self.robot_state = RobotState()
 
         # Alliance instantiation
         self.updateAlliance()
