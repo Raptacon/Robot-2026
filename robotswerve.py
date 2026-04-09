@@ -132,7 +132,7 @@ class RobotSwerve:
         self.shooter.setRPM(0)
         self.shooter.resetOffset()
 
-        self.hopper.zeroHopperVelocity()        
+        self.hopper.zeroHopperVelocity()
     def disabledPeriodic(self):
         if self.disabled == False:
             print("I'm Disabled!")
