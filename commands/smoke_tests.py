@@ -49,6 +49,9 @@ class SmokeTests(commands2.SequentialCommandGroup):
             - 16 Motor Communication Tests
             - 20 Drivetrain Tests
             - 9 Subsystem Tests
+        
+        If Swerve Module Instantiation fails, all tests
+        related to that module are skipped.
 
         Args:
             None
@@ -74,11 +77,24 @@ class SmokeTests(commands2.SequentialCommandGroup):
         self.motorNames = ["Intake - Roller Motor", "Intake - Pivot Motor", "Hopper - Hex Shaft Motor", 
                            "Shooter - Lead Feed Motor", "Shooter - Follower Feed Motor", "Shooter - Lead Flywheel Motor", 
                            "Shooter - Follower Flywheel Motor", "Shooter - Hood Motor"]
-        for swerve_module in self.drivetrain.swerve_modules:
-            self.allMotors.append(swerve_module.drive_motor)
-            self.motorNames.append(F"{str(swerve_module.getName())} Swerve Module - Drive Motor")
-            self.allMotors.append(swerve_module.steer_motor)
-            self.motorNames.append(F"{str(swerve_module.getName())} Swerve Module - Steer Motor")
+        
+        self.progress = False
+        try:  
+            for swerve_module in self.drivetrain.swerve_modules:
+                print(swerve_module)
+                self.allMotors.append(swerve_module.drive_motor)
+                self.motorNames.append(F"{str(swerve_module.getName())} Swerve Module - Drive Motor")
+                self.allMotors.append(swerve_module.steer_motor)
+                self.motorNames.append(F"{str(swerve_module.getName())} Swerve Module - Steer Motor")             
+            if len(self.drivetrain.swerve_modules) != 4:
+                raise ValueError("Not all Swerve Modules could be instantiated!")
+        except ValueError:
+            self.addCommands(
+                commands2.InstantCommand(self.resultsMessage("Internal Error:", F"Swerve Modules could not be instantiated! Expected 4, got {len(self.drivetrain.swerve_modules)}",
+                                F"This may indicate a wiring issue with the Swerve Modules. Check for CANbus errors.", 
+                                "Testing anyway will result in all tests relating to uninstantiated swerve modules getting skipped.")),
+                commands2.WaitUntilCommand(lambda: self.progress).finallyDo(lambda _: self.advance(False))
+            )
         
         self.testResults = []
         self.testPassFail = ""
@@ -87,9 +103,8 @@ class SmokeTests(commands2.SequentialCommandGroup):
 
         currentMotor = 0
 
-        self.progress = False
         self.testMessage = ""
-        self.totaltests = 29 + len(self.allMotors)
+        self.totaltests = 9 + len(self.allMotors) + (len(self.drivetrain.swerve_modules) * 5)
         self.testNumber = 0
         # self.velocity_vector_x = velocity_vector_x
         # self.velocity_vector_y = velocity_vector_y
