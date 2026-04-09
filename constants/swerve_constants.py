@@ -127,6 +127,16 @@ class SwerveModuleMk4iL2Consts(SwerveModuleMk4iConsts):
 #############################
 
 
+class HoodConstants:
+    motorId = 34
+    inverted = False
+    # Position conversion factor — set by calibration or known gear ratio.
+    # Use PassiveRangeFinderCommand with full_range to measure this.
+    positionConversionFactor = 9.53  # deg/rotation (from calibration)
+    maxAngleDegrees = 20.0
+    minAngleDegrees = 0.0
+
+
 class CaptainPlanetConsts:
     kIntakeMotorCanId = 20
     kRollerMotorCanId = 21
@@ -174,14 +184,3 @@ class PancakeShooterConstants:
     shooterHoodPosition2 = 0.5
     shooterHoodPosition3 = 0.75
     shooterPositionConversionFactor = 1 / 1.5
-
-
-class HoodConstants:
-    motorId = PancakeShooterConstants.hoodMotorId
-    inverted = PancakeShooterConstants.shooterInverted[2]
-    gearRatio = 1.7  # 1.7:1 — motor rotations per output rotation
-    # NEO 550 (42 CPR handled internally by SparkMax)
-    # Converts motor rotations to output degrees
-    positionConversionFactor = 360.0 / gearRatio
-    maxAngleDegrees = 30.0
-    minAngleDegrees = 0.0

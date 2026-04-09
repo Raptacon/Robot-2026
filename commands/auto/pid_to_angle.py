@@ -11,7 +11,7 @@ from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
 from commands2 import Command
 from wpimath import applyDeadband
 from wpimath.controller import ProfiledPIDController
-from wpimath.geometry import Translation2d
+from wpimath.geometry import Rotation2d, Translation2d
 from wpimath.kinematics import ChassisSpeeds
 from wpimath.trajectory import TrapezoidProfile
 
@@ -25,24 +25,35 @@ class PIDAlignToTarget(Command):
         velocity_vector_y: Callable[[], float],
         field: Callable[[], bool],
         rotation_pid_config: tuple = OperatorRobotConfig.pid_to_pose_rotation_pid_profile,
-        setpoint_tolerances: tuple = OperatorRobotConfig.pid_to_pose_setpoint_tolerances
+        setpoint_tolerances: tuple = OperatorRobotConfig.pid_to_pose_setpoint_tolerances,
+        alignment_angle: Rotation2d = Rotation2d.fromDegrees(0)
     ) -> None:
         """
-        Align to a target rotation using PID. In this control system, the objective function is the
-        absolute error between the current and goal x, y, and omega coordinates, separately. This
-        objective function is minimized until all errors are within a given tolerance. The decision
-        variables of the control system are the translational and rotational velocities of the
-        drivetrain. The contraints are a trapezoidal motion profiles for translational and rotational
-        motion, where slopes represent max acceleration and the plateaus represent max velocity.
+        Align rotationally to a target location using PID. In this control system, the objective function is the
+        absolute error between the current and goal omega value. This objective function is minimized
+        until rotational error is within a given tolerance. The decision variable of the control system
+        is rotational velocity of the drivetrain. The contraint is a trapezoidal motion profile for
+        rotational motion, where slopes represent max acceleration and the plateaus represent max
+        velocity.
 
         Note that the robot will rotate to the target orientation as quickly as possible.
 
         Args:
             drivetrain: the drivetrain subsystem that effects movement from current rotation to target rotation
-            target_rotation: the desired always-blue orientation of the robot
+            target_location: the desired always-blue location to which the robot's heading should align
+            velocity_vector_x: live poll of the percentage of max translation velocity that the
+                drivetrain should go in the X (+ forward-backward -) direction. Has
+                domain [-1, 1]
+            velocity_vector_y: live poll of the percentage of max translation velocity that the
+                drivetrain should go in the Y (+ left-right -) direction. Has
+                domain [-1, 1]
+            field: live poll. if True, the drivetrain should move in field relative mode. If False,
+                the robot should move in robot relative mode
             rotation_pid_config: the PID and trapezoidal profile constants for rotational motion
             setpoint_tolerances: the threshold for omega below which absolute
                 rotational error is low enough for the robot to be considered arrived at the target rotation
+            alignment_angle: which angle, CCW positive, offset the robot's base heading to align
+                with the target
 
         Returns:
             None: class initialization executed upon construction
@@ -57,6 +68,7 @@ class PIDAlignToTarget(Command):
         self.rotation_pid = ProfiledPIDController(
             *rotation_pid_config[0:3], TrapezoidProfile.Constraints(*rotation_pid_config[3:5])
         )
+        self.alignment_angle = alignment_angle
 
         self.rotation_pid.enableContinuousInput(-pi, pi)
         self.rotation_pid.setTolerance(setpoint_tolerances[2])
@@ -75,8 +87,9 @@ class PIDAlignToTarget(Command):
         if self.target_location:
             self.target_rotation = (self.target_location() - self.drivetrain.current_pose().translation()).angle()
             current_rotation = self.drivetrain.current_pose().rotation()
+            offset_current_rotation = current_rotation + self.alignment_angle
 
-            rotation_error = (self.target_rotation - current_rotation).radians()
+            rotation_error = (self.target_rotation - offset_current_rotation).radians()
             rotation_output = -applyDeadband(self.rotation_pid.calculate(rotation_error, 0), 0.04, inf)
 
             new_rotation_velocity = ChassisSpeeds.fromFieldRelativeSpeeds(0, 0, rotation_output, current_rotation)
