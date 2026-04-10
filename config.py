@@ -24,16 +24,31 @@ class OperatorRobotConfig:
     pathplanner_translation_pid: Tuple[float] = (4.0, 0.0, 0.0)
     pathplanner_rotation_pid: Tuple[float] = (5.0, 0.0, 0.0)
 
-    robot_Cam_Translation_Left: Tuple[float] = (0.203716, 0.3063875, 0.365125)
-    robot_Cam_Translation_Right: Tuple[float] = (0.203716, -0.3063875, 0.365125)
-    robot_Cam_Rotation_Degress_Left: Tuple[float] = (0.0, 0.0, 0.0)
-    robot_Cam_Rotation_Degress_Right: Tuple[float] = (0.0, 0.0, 0.0)
+    # Camera mount positions relative to robot center (x forward, y left, z up) in meters
+    # and rotations (roll, pitch, yaw) in degrees.
+    # TODO: Verify rotation angles match actual camera mounting orientation.
+    back_cam_name: str = "Back_Camera"
+    # Rear left corner: behind center (-X), left of center (+Y), above center (+Z)
+    back_cam_translation: Tuple[float] = (-0.297, 0.297, 0.263)
+    back_cam_rotation_deg: Tuple[float] = (0.0, 0.0, 0.0)
 
-    vision_default_std_dev: float = 3.0 # pose estimator sigma to use if no distance is available
-    vision_distance_threshold_m: float = 1.0 # meters; how far away a tag can be before its data is discarded
-    vision_ambiguity_threshold: float = 0.1 # the max ambiguity score a tag estimate can have before its data is discarded
-    vision_std_dev_basis: float = 1.1
-    vision_std_dev_scale_factor: float = 1
+    side_cam_name: str = "Side_Camera"
+    # Right side behind center: behind center (-X), right of center (-Y), above center (+Z)
+    side_cam_translation: Tuple[float] = (-0.061, -0.320, 0.309)
+    side_cam_rotation_deg: Tuple[float] = (0.0, 0.0, 0.0)
+
+    # Vision filtering thresholds (see subsystem/localization/VISION.md)
+    vision_ambiguity_threshold: float = 0.2
+    vision_single_tag_max_distance_m: float = 4.0
+    vision_field_border_margin_m: float = 0.5
+    vision_max_z_error_m: float = 0.5
+    vision_max_rotation_error_deg: float = 20.0
+
+    # Dynamic standard deviation base values (x meters, y meters, theta radians)
+    # See VISION.md for how these are scaled with distance.
+    vision_single_tag_std_devs: Tuple[float] = (4.0, 4.0, float('inf'))
+    vision_multi_tag_std_devs: Tuple[float] = (0.5, 0.5, 1.0)
+    vision_std_dev_distance_factor: float = 30.0
     # First three elements are PID, last two elements are trapezoidal profile
     # Translation trapezoidal profile units are mps and mps^2, rotation are rps and rps^2
     pid_to_pose_translation_pid_profile: Tuple[float] = (2.0, 0.0, 0.0, 3, 1.5)
@@ -49,6 +64,7 @@ class OperatorRobotConfig:
     # max angular velocity (dps), max angular acceleration (dps^2).
     teleop_pathplan_constraints: Tuple[float] = (2.5, 2.0, 360.0, 360.0)
 
+    # Placeholder: not yet wired into IntakePosition (uses hardcoded gains)
     intake_pivot_pid: Tuple[float] = [0, 0, 0, 1 / 565]
 
 

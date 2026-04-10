@@ -165,3 +165,6 @@ images/*.ico
 # NetworkTables persistence and backup
 networktables.json
 networktables.json.bck
+
+# WPILib IDE preferences
+.wpilib/

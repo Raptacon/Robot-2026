@@ -73,32 +73,45 @@ class PIDAlignToTarget(Command):
         self.rotation_pid.enableContinuousInput(-pi, pi)
         self.rotation_pid.setTolerance(setpoint_tolerances[2])
 
+        self.target_rotation = None
+
         self.addRequirements(self.drivetrain)
 
     def execute(self) -> None:
         """
         If a target rotation is available, run the profiled PID control system to move from the
-        current rotation to the target rotation.
+        current rotation to the target rotation. When no target is available, pass through
+        driver translation inputs with zero rotation so the drivetrain is not left uncontrolled.
 
         Returns:
             None: translational and rotational velocities are passed into the drivetrain's drive
                 method, which runs the motors accordingly
         """
-        if self.target_location:
-            self.target_rotation = (self.target_location() - self.drivetrain.current_pose().translation()).angle()
-            current_rotation = self.drivetrain.current_pose().rotation()
-            offset_current_rotation = current_rotation + self.alignment_angle
-
-            rotation_error = (self.target_rotation - offset_current_rotation).radians()
-            rotation_output = -applyDeadband(self.rotation_pid.calculate(rotation_error, 0), 0.04, inf)
-
-            new_rotation_velocity = ChassisSpeeds.fromFieldRelativeSpeeds(0, 0, rotation_output, current_rotation)
+        target = self.target_location() if self.target_location else None
+        if target is None:
+            self.target_rotation = None
             self.drivetrain.drive(
                 self.velocity_vector_x() * SwerveDriveConsts.maxTranslationMPS,
                 self.velocity_vector_y() * SwerveDriveConsts.maxTranslationMPS,
-                new_rotation_velocity.omega,
+                0,
                 self.field()
             )
+            return
+
+        self.target_rotation = (target - self.drivetrain.current_pose().translation()).angle()
+        current_rotation = self.drivetrain.current_pose().rotation()
+        offset_current_rotation = current_rotation + self.alignment_angle
+
+        rotation_error = (self.target_rotation - offset_current_rotation).radians()
+        rotation_output = -applyDeadband(self.rotation_pid.calculate(rotation_error, 0), 0.04, inf)
+
+        new_rotation_velocity = ChassisSpeeds.fromFieldRelativeSpeeds(0, 0, rotation_output, current_rotation)
+        self.drivetrain.drive(
+            self.velocity_vector_x() * SwerveDriveConsts.maxTranslationMPS,
+            self.velocity_vector_y() * SwerveDriveConsts.maxTranslationMPS,
+            new_rotation_velocity.omega,
+            self.field()
+        )
 
     def end(self, interrupted: bool) -> None:
         """
@@ -121,5 +134,5 @@ class PIDAlignToTarget(Command):
             True if the command is complete according to the definition above, False otherwise.
         """
         at_setpoints = self.rotation_pid.atSetpoint()
-        no_target_rotation = True if not self.target_rotation else False
-        return at_setpoints or no_target_rotation
+        no_target = self.target_rotation is None
+        return at_setpoints or no_target

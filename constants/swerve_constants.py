@@ -4,7 +4,10 @@ Physical constants and identifiers for the swerve drivetrain.
 
 # Native imports
 import math
-from enum import Enum, StrEnum
+from enum import StrEnum
+
+# Third-party imports
+import rev
 
 # Internal imports
 from .robot_constants import RobotConstants
@@ -137,50 +140,59 @@ class HoodConstants:
     minAngleDegrees = 0.0
 
 
-class CaptainPlanetConsts:
-    kIntakeMotorCanId = 20
-    kRollerMotorCanId = 21
-    kMotorInverted = False
-    kCurrentLimitAmps = 30
-    # kBreakBeam = 2
-    # kFrontBreakBeam = 2
-    # kBackBreakBeam = 0
-    # kHallEffectSensor = 6
-    kDefaultSpeed = 0.15
-    kOperatorDampener = 0.15
-    class BreakBeamActionOptions(Enum):
-        DONOTHING = 1
-        TOFRONT = 2
-        TOBACK = 3
+class IntakePivotConstants:
+    name = "intake_pivot"
+    canId = 20
+    inverted = False
+    motorClass = rev.SparkFlex
+    currentLimitAmps = 30
+    # Degrees per motor rotation — measure or calculate from gear ratio
+    positionConversionFactor = 1.0  # TODO: calibrate on hardware
+    # Mechanical safety boundaries (degrees)
+    minSoftLimit = 0.0
+    maxSoftLimit = 155.0
+    # Target positions for commands (degrees)
+    stowedPosition = 0.0
+    deployedPosition = 155.0
 
-class BallpitConstants:
-    # RPM
-    motorStop = 0
-    motorGo = 2000
-    motorOsc = 2000
-    # Seconds
-    oscillationduration_s = 0.5
-    #No Units
-    repeat = 1
-    # list of constants for the ocalation constants for the addition area
-    # ocs_consts =
-    hopperCanId = 40
 
-class PancakeShooterConstants:
+class IntakeRollerConstants:
+    name = "intake_roller"
+    canId = 21
+    inverted = False
+    motorClass = rev.SparkFlex
+    defaultPower = 0.6
+
+
+class HopperConstants:
+    name = "hopper"
+    canId = 40
+    inverted = True
+    defaultPower = 0.5
+
+
+class ShooterConstants:
+    name = "shooter"
     flywheelLeadMotorId = 32
     flywheelFollowerMotorId = 33
-    hoodMotorId = 34
-    feedLeadMotorId = 35
-    feedFolowerMotorId = 36
-    # Fly Lead, Fly Follower, Hood, Feed Lead, Feed Follower
-    shooterInverted = (False, True, False, False, True)
-    shooterOffsetDelta = 100
-    shooterFeedPercentOfFlywheel = 0.9
-    shooterFixedRPM = 3000
-    # TODO: Get rest and max positons for shooter
-    shooterHoodRestPosition = 0
-    shooterHoodMaxPosition = 1
-    shooterHoodPosition1 = 0.25
-    shooterHoodPosition2 = 0.5
-    shooterHoodPosition3 = 0.75
-    shooterPositionConversionFactor = 1 / 1.5
+    flywheelLeadInverted = False
+    flywheelFollowerInverted = True
+    currentLimitAmps = 40
+    offsetDelta = 100
+    fixedRPM = 6500
+    # TODO: Get rest and max positions for shooter
+    hoodRestPosition = 0
+    hoodMaxPosition = 1
+    hoodPosition1 = 0.25
+    hoodPosition2 = 0.5
+    hoodPosition3 = 0.75
+    positionConversionFactor = 1 / 1.5
+
+
+class FeedConstants:
+    name = "feed"
+    upperMotorId = 35
+    lowerMotorId = 36
+    upperInverted = True
+    lowerInverted = True
+    currentLimitAmps = 30

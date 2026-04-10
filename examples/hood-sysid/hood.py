@@ -307,7 +307,7 @@ class Hood(Subsystem):
         # Safety interlock: stow hood when shooter setpoint is low
         if (self.nt_safety_enabled
                 and self._shooter is not None
-                and self._shooter.RPM < self.nt_safety_rpm_threshold):
+                and self._shooter.targetRPM < self.nt_safety_rpm_threshold):
             self._target_degrees = self.nt_stowed_angle_degrees
 
         position_deg = self.encoder.getPosition()

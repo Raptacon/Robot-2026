@@ -1,5 +1,5 @@
 import wpilib
-from wpimath.geometry import Pose2d, Translation2d
+from wpimath.geometry import Pose2d
 from constants.field_target_constants_2026 import FieldTargets2026
 from typing import Callable
 
@@ -17,7 +17,6 @@ def determineShooterTargets2026(odometry: Callable[[],Pose2d], alliance: wpilib.
         target: the field location the shooter should target
     """
     odometryTranslation = odometry().translation()
-    target = Translation2d(8.270494, 4.034536)
     if alliance == wpilib.DriverStation.Alliance.kRed:
         if odometryTranslation.X() > FieldTargets2026.redHubTarget[0]:
             target = FieldTargets2026.redHubTarget
