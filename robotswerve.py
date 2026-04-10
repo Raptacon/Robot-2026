@@ -28,7 +28,6 @@ import commands2
 import wpilib
 from commands2.button import Trigger
 from pathplannerlib.auto import AutoBuilder
-import rev
 from wpimath.geometry import Rotation2d
 
 class RobotSwerve:
@@ -55,13 +54,6 @@ class RobotSwerve:
         self.hood.setShooter(self.shooter)
         self.hopper = subsystem.Hopper()
         self.intake_roller = subsystem.IntakeRoller()
-        # TODO: replace with real turret code
-        self.turret = subsystem.mechanisms.turret.Turret(
-            rev.SparkMax(12, rev.SparkMax.MotorType.kBrushless), 0, 0, 1)
-
-        # Vision pose estimation
-        self.localization = subsystem.localization.localization.Localization(
-            self.drivetrain, field=self.field)
 
         # Alliance instantiation
         self.updateAlliance()
