@@ -48,13 +48,14 @@ class RobotSwerve:
 
         # Subsystem instantiation
         self.drivetrain = subsystem.drivetrain.swerve_drivetrain.SwerveDrivetrain()
-        self.shooter = subsystem.mechanisms.shooter.Shooter()
-        self.feed = subsystem.mechanisms.shooter.Feed()
-        self.hood = subsystem.mechanisms.shooter.createHood(consts.HoodConstants, HoodConfig)
-        self.hood.setShooter(self.shooter)
-        self.hopper = subsystem.Hopper()
-        self.intake_position = subsystem.IntakePosition()
-        self.intake_roller = subsystem.IntakeRoller()
+        # TODO: Re-enable mechanisms after input delay debugging
+        # self.shooter = subsystem.mechanisms.shooter.Shooter()
+        # self.feed = subsystem.mechanisms.shooter.Feed()
+        # self.hood = subsystem.mechanisms.shooter.createHood(consts.HoodConstants, HoodConfig)
+        # self.hood.setShooter(self.shooter)
+        # self.hopper = subsystem.Hopper()
+        # self.intake_position = subsystem.IntakePosition()
+        # self.intake_roller = subsystem.IntakeRoller()
         # Alliance instantiation
         self.updateAlliance()
 
@@ -127,13 +128,12 @@ class RobotSwerve:
         self.drivetrain.set_motor_stop_modes(to_drive=True, to_break=True, all_motor_override=True, burn_flash=False)
         self.drivetrain.stop_driving()
 
-        self.shooter.setRPM(0)
-        self.shooter.resetOffset()
-        self.feed.stop()
-
-        self.hopper.stop()
-        self.intake_roller.stop()
-        self.intake_position.disable()
+        # self.shooter.setRPM(0)
+        # self.shooter.resetOffset()
+        # self.feed.stop()
+        # self.hopper.stop()
+        # self.intake_roller.stop()
+        # self.intake_position.disable()
 
     def disabledPeriodic(self):
         pass
@@ -154,8 +154,11 @@ class RobotSwerve:
         if self.auto_command:
             self.auto_command.cancel()
 
+        # DefaultDrive: raw square input (diagonals get full per-axis output)
+        # DefaultDriveCircular: remaps circular stick input so diagonals
+        #   reach full speed (use when stick hardware caps diagonal ~70%)
         self.drivetrain.setDefaultCommand(
-            commands.default_swerve_drive.DefaultDrive(
+            commands.default_swerve_drive.DefaultDrive(  # TODO: switch back to DefaultDriveCircular
                 self.drivetrain,
                 self.translate_x,
                 self.translate_y,
@@ -164,8 +167,8 @@ class RobotSwerve:
             )
         )
 
-        # Hood default: set angle from shooter's distance-based lookup
-        self.hood.setDefaultCommand(self.hood.autoAngleCommand())
+        # # Hood default: set angle from shooter's distance-based lookup
+        # self.hood.setDefaultCommand(self.hood.autoAngleCommand())
             
 
     def teleopPeriodic(self):
@@ -175,8 +178,9 @@ class RobotSwerve:
         #TODO Move to NT listener on change listener
         self.updateAlliance()
         commands2.CommandScheduler.getInstance().cancelAll()
+        # See teleopInit for DefaultDrive vs DefaultDriveCircular notes
         self.drivetrain.setDefaultCommand(
-            commands.default_swerve_drive.DefaultDrive(
+            commands.default_swerve_drive.DefaultDrive(  # TODO: switch back to DefaultDriveCircular
                 self.drivetrain,
                 self.translate_x,
                 self.translate_y,
@@ -186,9 +190,9 @@ class RobotSwerve:
         )
         commands2.cmd.run(lambda: self.drivetrain.drive(2, 0, 0, False), self.drivetrain).withTimeout(5).schedule()
 
-        # Hood manual test: trigger analog overrides safety for manual control
-        self.hood.setDefaultCommand(
-            self.hood.manualTestCommand(self.hood_angle_input))
+        # # Hood manual test: trigger analog overrides safety for manual control
+        # self.hood.setDefaultCommand(
+        #     self.hood.manualTestCommand(self.hood_angle_input))
 
     def testPeriodic(self):
         pass
@@ -231,43 +235,44 @@ class RobotSwerve:
             )
         )
 
-        # Shooter inputs
-        self.factory.getButton("shooter.increment_RPM").bind(
-            commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(consts.ShooterConstants.offsetDelta), self.shooter)
-        )
-        self.factory.getButton("shooter.decrement_RPM").bind(
-            commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(-consts.ShooterConstants.offsetDelta), self.shooter)
-        )
-        self.factory.getButton("shooter.reset_RPM_offset").bind(
-            commands2.cmd.runOnce(self.shooter.resetOffset, self.shooter)
-        )
-        # Hood input — right trigger analog mapped to hood angle
-        self.hood_angle_input = self.factory.getAnalog("hood.angle")
-
-        # Hopper toggle: on/off via left bumper (toggle_on_true in YAML)
-        self.factory.getButton("hopper.toggle_hopper").bind(
-            commands.ball_transport.run_hopper_while_active(self.hopper)
-        )
-
-        # Intake: toggle deploy/retract
-        self.factory.getButton("intake.toggle_deploy").bind(
-            commands.intake_commands.toggle_intake_deploy(self.intake_position)
-        )
-
-        # Ball transport: roller while held
-        self.factory.getButton("ball_transport.hold_roller").bind(
-            commands.ball_transport.run_roller_while_held(self.intake_roller)
-        )
-
-        # Shooter: flywheel spinup toggle
-        self.factory.getButton("shooter.spinup_toggle").bind(
-            commands.shooter_commands.toggle_spinup(self.shooter, self.hood)
-        )
-
-        # Ball transport: hopper + feed while held
-        self.factory.getButton("ball_transport.run_hopper_feed").bind(
-            commands.ball_transport.run_hopper_and_feed(self.hopper, self.feed)
-        )
+        # TODO: Re-enable mechanism controls after input delay debugging
+        # # Shooter inputs
+        # self.factory.getButton("shooter.increment_RPM").bind(
+        #     commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(consts.ShooterConstants.offsetDelta), self.shooter)
+        # )
+        # self.factory.getButton("shooter.decrement_RPM").bind(
+        #     commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(-consts.ShooterConstants.offsetDelta), self.shooter)
+        # )
+        # self.factory.getButton("shooter.reset_RPM_offset").bind(
+        #     commands2.cmd.runOnce(self.shooter.resetOffset, self.shooter)
+        # )
+        # # Hood input — right trigger analog mapped to hood angle
+        # self.hood_angle_input = self.factory.getAnalog("hood.angle")
+        #
+        # # Hopper toggle: on/off via left bumper (toggle_on_true in YAML)
+        # self.factory.getButton("hopper.toggle_hopper").bind(
+        #     commands.ball_transport.run_hopper_while_active(self.hopper)
+        # )
+        #
+        # # Intake: toggle deploy/retract
+        # self.factory.getButton("intake.toggle_deploy").bind(
+        #     commands.intake_commands.toggle_intake_deploy(self.intake_position)
+        # )
+        #
+        # # Ball transport: roller while held
+        # self.factory.getButton("ball_transport.hold_roller").bind(
+        #     commands.ball_transport.run_roller_while_held(self.intake_roller)
+        # )
+        #
+        # # Shooter: flywheel spinup toggle
+        # self.factory.getButton("shooter.spinup_toggle").bind(
+        #     commands.shooter_commands.toggle_spinup(self.shooter, self.hood)
+        # )
+        #
+        # # Ball transport: hopper + feed while held
+        # self.factory.getButton("ball_transport.run_hopper_feed").bind(
+        #     commands.ball_transport.run_hopper_and_feed(self.hopper, self.feed)
+        # )
 
         #Turret stop
         # Map all drive axes' scale to a shared SmartDashboard entry.
