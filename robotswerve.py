@@ -16,7 +16,7 @@ from typing import Callable
 
 # Internal imports
 from config import HoodConfig
-from constants.swerve_constants import BallpitConstants, HoodConstants
+from constants.swerve_constants import HoodConstants, HopperConstants
 from constants.swerve_constants import PancakeShooterConstants
 from data.telemetry import Telemetry
 from commands.auto.pid_to_angle import PIDAlignToTarget
@@ -30,7 +30,7 @@ from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
 from subsystem.mechanisms.shooter.shooter import Shooter
 from subsystem.mechanisms.shooter.feed import Feed
 from subsystem.mechanisms.shooter.hood import createHood
-from subsystem.ballpit import BallPitHopper as Hopper
+from subsystem.hopper import Hopper
 from utils.input import InputFactory
 from utils.odometry_logic_2026 import determineShooterTargets2026
 
@@ -133,7 +133,7 @@ class RobotSwerve:
         self.shooter.resetOffset()
         self.feed.stop()
 
-        self.hopper.zeroHopperVelocity()
+        self.hopper.stop()
 
     def disabledPeriodic(self):
         pass
@@ -183,14 +183,6 @@ class RobotSwerve:
         # Hood default: set angle from shooter's distance-based lookup
         self.hood.setDefaultCommand(self.hood.autoAngleCommand())
             
-
-        self.hopper.setDefaultCommand(commands2.cmd.select(
-            {
-                "hopperMode": self.hopper.hex_shaft_generator(BallpitConstants.motorGo),
-                "unjamMode": self.hopper.unjamHopper(BallpitConstants.motorOsc, BallpitConstants.repeat, BallpitConstants.oscillationduration_s)
-            },
-            self.hopper.getHopperMode
-        ))
 
     def teleopPeriodic(self):
         pass
@@ -272,12 +264,13 @@ class RobotSwerve:
         # Hood input — right trigger analog mapped to hood angle
         self.hood_angle_input = self.factory.getAnalog("hood.angle")
 
-        # Hopper inputs
-        self.toggle_hopper = self.factory.getButton("hopper.toggle_hopper").onTrue(
-            commands2.cmd.runOnce(self.hopper.toggleHopperMotor, self.hopper)
+        # Hopper toggle: on/off via left bumper
+        hopper_btn = self.factory.getButton("hopper.toggle_hopper")
+        hopper_btn.onTrue(
+            commands2.cmd.runOnce(lambda: self.hopper.setPower(HopperConstants.defaultPower), self.hopper)
         )
-        self.unjam_hopper = self.factory.getButton("hopper.unjam_hopper").onTrue(
-            commands2.cmd.runOnce(lambda: self.hopper.setHopperMode("unjamMode"), self.hopper)
+        hopper_btn.onFalse(
+            commands2.cmd.runOnce(self.hopper.stop, self.hopper)
         )
 
         # Integration: toggle intake deploy/retract (Operator A)

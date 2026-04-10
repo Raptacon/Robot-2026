@@ -11,7 +11,7 @@ Bindings (see data/inputs/2026bot.yaml):
 
 import commands2
 
-from constants.swerve_constants import BallpitConstants
+from constants.swerve_constants import HopperConstants
 
 
 # -- Intake toggle deploy/retract -------------------------------------------
@@ -52,8 +52,8 @@ def toggle_spinup(shooter, hood):
 
 # -- Hopper + feed while held ------------------------------------------------
 
-_HOPPER_SPEED = BallpitConstants.motorGo * 0.5   # 50% of full speed
-_FEED_DUTY_CYCLE = 0.3                            # 30% duty cycle
+_HOPPER_POWER = HopperConstants.defaultPower
+_FEED_DUTY_CYCLE = 0.3
 
 
 def run_hopper_and_feed(hopper, feed):
@@ -63,13 +63,11 @@ def run_hopper_and_feed(hopper, feed):
     on end (interrupted or cancelled).
     """
     def _start():
-        hopper.setHopperToggle(True)
-        hopper.setHexShaftSpeed(_HOPPER_SPEED)
+        hopper.setPower(_HOPPER_POWER)
         feed.setPower(_FEED_DUTY_CYCLE)
 
     def _end():
-        hopper.setHopperToggle(False)
-        hopper.zeroHopperVelocity()
+        hopper.stop()
         feed.stop()
 
     return commands2.cmd.startEnd(_start, _end, hopper, feed)

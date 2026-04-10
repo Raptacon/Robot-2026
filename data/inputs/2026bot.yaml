@@ -72,10 +72,6 @@ actions:
       description: Turn the hopper on or off
       input_type: button
       trigger_mode: toggle_on_true
-    unjam_hopper:
-      description: Spin the hopper back and forth
-      input_type: button
-      trigger_mode: toggle_on_true
   intake:
     stow_intake:
       description: Stow intake back into robot
@@ -151,6 +147,5 @@ controllers:
       a_button: [integration.toggle_intake_deploy]
       b_button: [integration.hold_intake_roller]
       x_button: [integration.spinup_shooter]
-      right_bumper: [hopper.unjam_hopper]
       left_trigger: [shooter.cycle_shooter_fixed]
       right_trigger: [hood.angle]
