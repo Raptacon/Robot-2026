@@ -5,6 +5,7 @@ Simple duty-cycle control only (no PID). Each motor is independently
 controllable but can be set to the same power for convenience."""
 
 from commands2 import Subsystem
+import ntcore
 import rev
 import wpilib
 
@@ -12,6 +13,10 @@ from constants.swerve_constants import PancakeShooterConstants
 
 
 class Feed(Subsystem):
+    _MECH_WIDTH = 100
+    _MECH_HEIGHT = 80
+    _MECH_MAX_LENGTH = 40
+
     def __init__(self):
         super().__init__()
         self._upperPower = 0.0
@@ -39,6 +44,33 @@ class Feed(Subsystem):
             self.lowerMotor,
             PancakeShooterConstants.feedLowerInverted,
         )
+
+        # NT telemetry under /subsystems/feed/
+        table = ntcore.NetworkTableInstance.getDefault().getTable(
+            f"subsystems/{PancakeShooterConstants.name}"
+        )
+        self._nt_upper_power = table.getDoubleTopic("upper_power").publish()
+        self._nt_lower_power = table.getDoubleTopic("lower_power").publish()
+        self._nt_upper_velocity = table.getDoubleTopic("upper_velocity").publish()
+        self._nt_lower_velocity = table.getDoubleTopic("lower_velocity").publish()
+
+        # Mechanism2d with two ligaments for upper/lower motors
+        self._mech = wpilib.Mechanism2d(self._MECH_WIDTH, self._MECH_HEIGHT)
+        upper_root = self._mech.getRoot("upper", self._MECH_WIDTH / 2, 60)
+        self._mech_upper = upper_root.appendLigament(
+            "upper_power", 0, 0, 6,
+            wpilib.Color8Bit(128, 128, 128)
+        )
+        lower_root = self._mech.getRoot("lower", self._MECH_WIDTH / 2, 20)
+        self._mech_lower = lower_root.appendLigament(
+            "lower_power", 0, 0, 6,
+            wpilib.Color8Bit(128, 128, 128)
+        )
+        wpilib.SmartDashboard.putData(
+            f"{PancakeShooterConstants.name}/mechanism", self._mech
+        )
+
+        self.setName(PancakeShooterConstants.name)
 
     @staticmethod
     def _configureMotor(motor, invert):
@@ -75,7 +107,18 @@ class Feed(Subsystem):
         self.upperMotor.set(self._upperPower)
         self.lowerMotor.set(self._lowerPower)
 
-        wpilib.SmartDashboard.putNumber("Feed_Upper_Power", self._upperPower)
-        wpilib.SmartDashboard.putNumber("Feed_Lower_Power", self._lowerPower)
-        wpilib.SmartDashboard.putNumber("Feed_Upper_Velocity", self.upperEncoder.getVelocity())
-        wpilib.SmartDashboard.putNumber("Feed_Lower_Velocity", self.lowerEncoder.getVelocity())
+        self._nt_upper_power.set(self._upperPower)
+        self._nt_lower_power.set(self._lowerPower)
+        self._nt_upper_velocity.set(self.upperEncoder.getVelocity())
+        self._nt_lower_velocity.set(self.lowerEncoder.getVelocity())
+
+        # Update Mechanism2d
+        for power, lig in ((self._upperPower, self._mech_upper),
+                           (self._lowerPower, self._mech_lower)):
+            lig.setLength(abs(power) * self._MECH_MAX_LENGTH)
+            if power > 0:
+                lig.setColor(wpilib.Color8Bit(wpilib.Color.kGreen))
+            elif power < 0:
+                lig.setColor(wpilib.Color8Bit(wpilib.Color.kRed))
+            else:
+                lig.setColor(wpilib.Color8Bit(128, 128, 128))

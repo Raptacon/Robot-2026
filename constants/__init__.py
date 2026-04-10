@@ -17,7 +17,8 @@ from .swerve_constants import (
     SwerveModuleMk4iConsts,
     SwerveModuleMk4iL1Consts,
     SwerveModuleMk4iL2Consts,
-    CaptainPlanetConsts,
+    IntakePivotConstants,
+    IntakeRollerConstants,
 )
 
 __all__ = [
@@ -27,5 +28,6 @@ __all__ = [
     "SwerveModuleMk4iConsts",
     "SwerveModuleMk4iL1Consts",
     "SwerveModuleMk4iL2Consts",
-    "CaptainPlanetConsts",
+    "IntakePivotConstants",
+    "IntakeRollerConstants",
 ]

@@ -4,7 +4,10 @@ Physical constants and identifiers for the swerve drivetrain.
 
 # Native imports
 import math
-from enum import Enum, StrEnum
+from enum import StrEnum
+
+# Third-party imports
+import rev
 
 # Internal imports
 from .robot_constants import RobotConstants
@@ -137,28 +140,31 @@ class HoodConstants:
     minAngleDegrees = 0.0
 
 
-class CaptainPlanetConsts:
-    kIntakeMotorCanId = 20
-    kRollerMotorCanId = 21
-    kMotorInverted = False
-    kCurrentLimitAmps = 30
-    # kBreakBeam = 2
-    # kFrontBreakBeam = 2
-    # kBackBreakBeam = 0
-    # kHallEffectSensor = 6
-    kDefaultSpeed = 0.15
-    kOperatorDampener = 0.15
-    class BreakBeamActionOptions(Enum):
-        DONOTHING = 1
-        TOFRONT = 2
-        TOBACK = 3
+class IntakePivotConstants:
+    name = "intake_pivot"
+    canId = 20
+    inverted = False
+    currentLimitAmps = 30
+    defaultSpeed = 0.15
+
+
+class IntakeRollerConstants:
+    name = "intake_roller"
+    canId = 21
+    inverted = False
+    motorClass = rev.SparkFlex
+    defaultPower = 0.6
+
 
 class HopperConstants:
+    name = "hopper"
     canId = 40
     inverted = True
     defaultPower = 0.5
 
+
 class PancakeShooterConstants:
+    name = "feed"
     flywheelLeadMotorId = 32
     flywheelFollowerMotorId = 33
     hoodMotorId = 34

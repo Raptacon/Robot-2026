@@ -16,8 +16,7 @@ from typing import Callable
 
 # Internal imports
 from config import HoodConfig
-from constants.swerve_constants import HoodConstants, HopperConstants
-from constants.swerve_constants import PancakeShooterConstants
+import constants.swerve_constants as consts
 from data.telemetry import Telemetry
 from commands.auto.pid_to_angle import PIDAlignToTarget
 from commands.default_swerve_drive import DefaultDrive
@@ -26,11 +25,9 @@ from commands.integration_commands import (
     toggle_spinup,
     run_hopper_and_feed,
 )
-from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
-from subsystem.mechanisms.shooter.shooter import Shooter
-from subsystem.mechanisms.shooter.feed import Feed
-from subsystem.mechanisms.shooter.hood import createHood
-from subsystem.hopper import Hopper
+import subsystem
+import subsystem.drivetrain.swerve_drivetrain
+import subsystem.mechanisms.shooter
 from utils.input import InputFactory
 from utils.odometry_logic_2026 import determineShooterTargets2026
 
@@ -39,27 +36,23 @@ import commands2
 import wpilib
 from commands2.button import Trigger
 from pathplannerlib.auto import AutoBuilder
-from subsystem.intakeactions import IntakeSubsystem
 from wpimath.geometry import Rotation2d
 
 class RobotSwerve:
-    # forward declare critical types for editors
-    drivetrain: SwerveDrivetrain
-    hopper: Hopper
-
     def __init__(self, is_disabled: Callable[[], bool]) -> None:
         # networktables setup
         self.field = wpilib.Field2d()
         wpilib.SmartDashboard.putData("Field", self.field)
 
         # Subsystem instantiation
-        self.drivetrain = SwerveDrivetrain()
-        self.shooter = Shooter()
-        self.feed = Feed()
-        self.hood = createHood(HoodConstants, HoodConfig)
+        self.drivetrain = subsystem.drivetrain.swerve_drivetrain.SwerveDrivetrain()
+        self.shooter = subsystem.mechanisms.shooter.Shooter()
+        self.feed = subsystem.mechanisms.shooter.Feed()
+        self.hood = subsystem.mechanisms.shooter.createHood(consts.HoodConstants, HoodConfig)
         self.hood.setShooter(self.shooter)
-        self.hopper = Hopper()
-        self.intake = IntakeSubsystem()
+        self.hopper = subsystem.Hopper()
+        self.intake = subsystem.IntakeSubsystem()
+        self.intake_roller = subsystem.IntakeRoller()
 
         # Alliance instantiation
         self.updateAlliance()
@@ -134,6 +127,7 @@ class RobotSwerve:
         self.feed.stop()
 
         self.hopper.stop()
+        self.intake_roller.stop()
 
     def disabledPeriodic(self):
         pass
@@ -249,10 +243,10 @@ class RobotSwerve:
 
         # Shooter inputs
         self.factory.getButton("shooter.increment_RPM").onTrue(
-            commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(PancakeShooterConstants.shooterOffsetDelta), self.shooter)
+            commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(consts.PancakeShooterConstants.shooterOffsetDelta), self.shooter)
         )
         self.factory.getButton("shooter.decrement_RPM").onTrue(
-            commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(-PancakeShooterConstants.shooterOffsetDelta), self.shooter)
+            commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(-consts.PancakeShooterConstants.shooterOffsetDelta), self.shooter)
         )
         self.factory.getButton("shooter.reset_RPM_offset").onTrue(
             commands2.cmd.runOnce(self.shooter.resetOffset, self.shooter)
@@ -267,7 +261,7 @@ class RobotSwerve:
         # Hopper toggle: on/off via left bumper
         hopper_btn = self.factory.getButton("hopper.toggle_hopper")
         hopper_btn.onTrue(
-            commands2.cmd.runOnce(lambda: self.hopper.setPower(HopperConstants.defaultPower), self.hopper)
+            commands2.cmd.runOnce(lambda: self.hopper.setPower(consts.HopperConstants.defaultPower), self.hopper)
         )
         hopper_btn.onFalse(
             commands2.cmd.runOnce(self.hopper.stop, self.hopper)
@@ -281,10 +275,13 @@ class RobotSwerve:
         # Integration: intake rollers while held (Operator B)
         intake_roller_btn = self.factory.getButton("integration.hold_intake_roller")
         intake_roller_btn.onTrue(
-            commands2.cmd.runOnce(self.intake.requestRollerOn, self.intake)
+            commands2.cmd.runOnce(
+                lambda: self.intake_roller.setPower(consts.IntakeRollerConstants.defaultPower),
+                self.intake_roller
+            )
         )
         intake_roller_btn.onFalse(
-            commands2.cmd.runOnce(self.intake.requestRollerOff, self.intake)
+            commands2.cmd.runOnce(self.intake_roller.stop, self.intake_roller)
         )
 
         # Integration: flywheel spinup toggle (Operator X)
