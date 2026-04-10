@@ -1,27 +1,17 @@
 # Native imports
 from enum import StrEnum
 import numpy as np
-from typing import Dict, Callable
+from typing import Callable
 
 # Internal imports
 from config import ShooterConfig
-from constants.swerve_constants import PancakeShooterConstants
+from constants.swerve_constants import ShooterConstants
 
 # Third-party imports
 from commands2 import Subsystem
 import rev
 import wpilib
 from wpimath.geometry import Pose2d, Translation2d
-
-class ShooterMotorNames(StrEnum):
-    """
-    Create consistent names for shooter motor references
-    """
-
-    LEAD_FLYWHEEL = "lead_flywheel"
-    FOLLOWER_FLYWHEEL = "follower_flywheel"
-    LEAD_FEED = "lead_feed"
-    FOLLOWER_FEED = "follower_feed"
 
 class FlywheelModes(StrEnum):
     """
@@ -53,6 +43,11 @@ class TargetMode(StrEnum):
     GROUND = "ground"
 
 class Shooter(Subsystem):
+    """Flywheel shooter — controls only the two flywheel motors.
+
+    Feed motors are managed by the separate Feed subsystem.
+    """
+
     def __init__(self):
         super().__init__()
         self.offsetAmount = 0
@@ -62,7 +57,6 @@ class Shooter(Subsystem):
         self.flywheelMode = FlywheelModes.FIXED_RPM
         self.targetMode = TargetMode.AIR
         self.fixedRPMPosition = FixedShootingPositions.DEFAULT
-        self.feedActive = False
         self.flywheelActive = False
 
         # Lookup tables: (distance_meters, rpm, hood_angle_degrees)
@@ -103,105 +97,47 @@ class Shooter(Subsystem):
             FixedShootingPositions.FAR_FEED: 4500,
         }
 
-        # Instantiate motors
-        self.leadFlywheelMotor = rev.SparkFlex(PancakeShooterConstants.flywheelLeadMotorId, rev.SparkLowLevel.MotorType.kBrushless)
-        self.followerFlywheelMotor = rev.SparkFlex(PancakeShooterConstants.flywheelFollowerMotorId, rev.SparkLowLevel.MotorType.kBrushless)
-        self.leadFeedMotor = rev.SparkMax(PancakeShooterConstants.feedLeadMotorId, rev.SparkLowLevel.MotorType.kBrushless)
-        self.followerFeedMotor = rev.SparkMax(PancakeShooterConstants.feedFolowerMotorId, rev.SparkLowLevel.MotorType.kBrushless)
+        # Flywheel motors
+        self.leadMotor = rev.SparkFlex(
+            ShooterConstants.flywheelLeadMotorId,
+            rev.SparkLowLevel.MotorType.kBrushless,
+        )
+        self.followerMotor = rev.SparkFlex(
+            ShooterConstants.flywheelFollowerMotorId,
+            rev.SparkLowLevel.MotorType.kBrushless,
+        )
 
-        # Set up configs for each motor
-        self.configureMotor(self.leadFlywheelMotor, ShooterConfig.shooterFlywheelMotorPIDF, PancakeShooterConstants.shooterInverted[0])
-        self.configureMotor(self.followerFlywheelMotor, ShooterConfig.shooterFlywheelMotorPIDF, PancakeShooterConstants.shooterInverted[1], leader=self.leadFlywheelMotor)
-        self.configureMotor(self.leadFeedMotor, ShooterConfig.shooterFeedMotorPIDF, PancakeShooterConstants.shooterInverted[3])
-        self.configureMotor(self.followerFeedMotor, ShooterConfig.shooterFeedMotorPIDF, PancakeShooterConstants.shooterInverted[4], leader=self.leadFeedMotor)
+        self._configureMotor(
+            self.leadMotor,
+            ShooterConfig.shooterFlywheelMotorPIDF,
+            ShooterConstants.flywheelLeadInverted,
+        )
+        self._configureMotor(
+            self.followerMotor,
+            ShooterConfig.shooterFlywheelMotorPIDF,
+            ShooterConstants.flywheelFollowerInverted,
+            leader=self.leadMotor,
+        )
 
-        self.motors: Dict[str, rev.SparkFlex | rev.SparkMax] = {
-            ShooterMotorNames.LEAD_FLYWHEEL: self.leadFlywheelMotor,
-            ShooterMotorNames.FOLLOWER_FLYWHEEL: self.followerFlywheelMotor,
-            ShooterMotorNames.LEAD_FEED: self.leadFeedMotor,
-            ShooterMotorNames.FOLLOWER_FEED: self.followerFeedMotor
-        }
+        self.leadEncoder = self.leadMotor.getEncoder()
+        self.leadPID = self.leadMotor.getClosedLoopController()
 
-        # Get encoders from each motor to read data
-        self.leadFlywheelEncoder = self.leadFlywheelMotor.getEncoder()
-        self.followerFlywheelEncoder = self.followerFlywheelMotor.getEncoder()
-        self.leadFeedEncoder = self.leadFeedMotor.getEncoder()
-        self.followerFeedEncoder = self.followerFeedMotor.getEncoder()
-        self.encoders = {
-            ShooterMotorNames.LEAD_FLYWHEEL: self.leadFlywheelEncoder,
-            ShooterMotorNames.FOLLOWER_FLYWHEEL: self.followerFlywheelEncoder,
-            ShooterMotorNames.LEAD_FEED: self.leadFeedEncoder,
-            ShooterMotorNames.FOLLOWER_FEED: self.followerFeedEncoder,
-        }
-
-        # Create closed loop controllers to be able to set a reference/goal for pid
-        self.leadFlywheelPID = self.leadFlywheelMotor.getClosedLoopController()
-        self.leadFeedPID = self.leadFeedMotor.getClosedLoopController()
-        self.PIDs = {
-            ShooterMotorNames.LEAD_FLYWHEEL: self.leadFlywheelPID,
-            ShooterMotorNames.LEAD_FEED: self.leadFeedPID,
-            # Avoid key errors
-            ShooterMotorNames.FOLLOWER_FLYWHEEL: self.leadFlywheelPID,
-            ShooterMotorNames.FOLLOWER_FEED: self.leadFeedPID
-        }
-
-    def configureMotor(
-        self, motor: rev.SparkFlex | rev.SparkMax,
-        pidf: tuple,
-        invert: bool,
-        positionConversionFactor: float = None,
-        leader: rev.SparkFlex | rev.SparkMax = None
-    ):
-        """
-        Configure the PIDF constants and inversion for the given motor.
-        
-        Args:
-            motor: the motor on the shooter to configure
-            pidf: the PIDF constants to set on the given motor
-            invert: if True, invert the rotation direction of the given motor
-            leader: the motor to follow. If None, do not set this motor as a follower
-
-        Returns:
-            None
-        """
+    @staticmethod
+    def _configureMotor(motor, pidf, invert, leader=None):
         configs = rev.SparkBaseConfig()
-
+        configs.setIdleMode(rev.SparkBaseConfig.IdleMode.kCoast)
+        configs.voltageCompensation(12.0)
+        configs.smartCurrentLimit(ShooterConstants.currentLimitAmps)
         if leader is not None:
             configs.follow(leader=leader, invert=invert)
         else:
             configs.inverted(invert)
             configs.closedLoop.pidf(*pidf, rev.ClosedLoopSlot.kSlot0)
-
-        if positionConversionFactor is not None:
-            configs.encoder.positionConversionFactor(positionConversionFactor)
-
-        motor.configure(configs, rev.ResetMode.kResetSafeParameters, rev.PersistMode.kPersistParameters)
-
-    def setMotorVoltage(self, motorName: str, voltage: float):
-        """
-        Sets the voltage of the motor
-
-        Args:
-            motorName: Name of the motor to set a voltage for (ie: 'feed')
-            voltage: Voltage to set the motor at
-
-        Returns:
-            None
-        """
-        self.motors[motorName].setVoltage(voltage)
-
-    def setMotorReference(self, motorName: str, setpoint: float, controlType: rev.SparkLowLevel.ControlType):
-        """
-        Give a custom setpoint for PID to achieve
-
-        Args:
-            motorName: Name of the motor
-            setpoint: The PID setpoint for the target motor
-
-        Returns:
-            None
-        """
-        self.PIDs[motorName].setReference(setpoint, controlType, rev.ClosedLoopSlot.kSlot0)
+        motor.configure(
+            configs,
+            rev.ResetMode.kResetSafeParameters,
+            rev.PersistMode.kPersistParameters,
+        )
 
     def setRPM(self, rpm: float):
         """
@@ -215,20 +151,9 @@ class Shooter(Subsystem):
         """
         self.RPM = rpm
 
-    def getVelocity(self, motorName: str):
-        """
-        Get the current velocity of a motor in RPM
-
-        Args:
-            motorName: Name of the motor
-
-        Returns:
-            Velocity of the motor in RPM
-        """
-        return self.encoders[motorName].getVelocity()
-
-    def getPosition(self, motorName: str):
-        return self.encoders[motorName].getPosition()
+    def getVelocity(self) -> float:
+        """Get the current flywheel velocity in RPM."""
+        return self.leadEncoder.getVelocity()
 
     def _getActiveTableArrays(self):
         """Return (distances, rpms, angles) arrays for the active target mode."""
@@ -344,8 +269,9 @@ class Shooter(Subsystem):
     def toggleFlywheelActive(self):
         self.flywheelActive = not self.flywheelActive
 
-    def toggleFeedActive(self):
-        self.feedActive = not self.feedActive
+    def getEffectiveRPM(self) -> float:
+        """Return RPM + offset, useful for other subsystems (e.g. Feed)."""
+        return self.RPM + self.offsetAmount
 
     def calculateRangeFromOdometry(
         self,
@@ -356,27 +282,24 @@ class Shooter(Subsystem):
 
     def periodic(self):
         newRPM = self.RPM + self.offsetAmount
-        if self.feedActive:
-            feedRPM = int(newRPM * PancakeShooterConstants.shooterFeedPercentOfFlywheel)
-            self.setMotorReference(ShooterMotorNames.LEAD_FEED, feedRPM, rev.SparkLowLevel.ControlType.kVelocity)
-        else:
-            feedRPM = 0
-            self.setMotorVoltage(ShooterMotorNames.LEAD_FEED, 0)
 
         if self.flywheelActive:
-            self.setMotorReference(ShooterMotorNames.LEAD_FLYWHEEL, newRPM, rev.SparkLowLevel.ControlType.kVelocity)
+            self.leadPID.setReference(
+                newRPM,
+                rev.SparkLowLevel.ControlType.kVelocity,
+                rev.ClosedLoopSlot.kSlot0,
+            )
         else:
             newRPM = 0
-            self.setMotorVoltage(ShooterMotorNames.LEAD_FLYWHEEL, 0)
+            self.leadMotor.setVoltage(0)
 
         wpilib.SmartDashboard.putNumber("Shooter_RPM", newRPM)
-        wpilib.SmartDashboard.putNumber("Shooter_Feed_RPM", feedRPM)
         wpilib.SmartDashboard.putNumber("Shooter_Offset", self.offsetAmount)
         wpilib.SmartDashboard.putNumber("Shooter_Offset_Delta", self.offsetDelta)
-        wpilib.SmartDashboard.putBoolean("Shooter_Feed_Active", self.feedActive)
         wpilib.SmartDashboard.putBoolean("Shooter_Flywheel_Active", self.flywheelActive)
         wpilib.SmartDashboard.putString("Shooter_Flywheel_Mode", self.flywheelMode)
         wpilib.SmartDashboard.putString("Shooter_Fixed_RPM_Position", self.fixedRPMPosition)
         wpilib.SmartDashboard.putNumber("Shooter_Target_Distance", self.targetDistance)
         wpilib.SmartDashboard.putString("Shooter_Target_Mode", self.targetMode)
         wpilib.SmartDashboard.putNumber("Shooter_Hood_Angle", self.getHoodAngleForDistance(self.targetDistance))
+        wpilib.SmartDashboard.putNumber("Shooter_Velocity", self.leadEncoder.getVelocity())
