@@ -125,8 +125,6 @@ class RobotSwerve:
 
         self.field.setRobotPose(self.drivetrain.current_pose())
 
-        wpilib.SmartDashboard.putBoolean("Disabled", self.disabled)
-
     def disabledInit(self):
         self.updateAlliance()
         self.drivetrain.set_motor_stop_modes(to_drive=True, to_break=True, all_motor_override=True, burn_flash=False)
