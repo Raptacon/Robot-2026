@@ -418,9 +418,7 @@ class Hood(Subsystem):
         """Command that sets hood angle from shooter's distance lookup."""
         def _action():
             if self._shooter is not None:
-                self.setAngleDegrees(
-                    self._shooter.getHoodAngleForDistance(
-                        self._shooter.targetDistance))
+                self.setAngleDegrees(self._shooter.getHoodAngle())
 
         return commands2.cmd.run(_action, self)
 

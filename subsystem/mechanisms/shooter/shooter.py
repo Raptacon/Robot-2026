@@ -1,7 +1,6 @@
 # Native imports
-from enum import StrEnum
 import numpy as np
-from typing import Callable
+from enum import StrEnum
 
 # Internal imports
 from config import ShooterConfig
@@ -11,39 +10,20 @@ from constants.swerve_constants import ShooterConstants
 from commands2 import Subsystem
 import rev
 import wpilib
-from wpimath.geometry import Pose2d, Translation2d
 
-class FlywheelModes(StrEnum):
-    """
-    Create consistent names for flywheel operating modes
-    """
-
-    AUTO_RPM = "autoRPM"
-    FIXED_RPM = "fixedRPM"
-
-class FixedShootingPositions(StrEnum):
-    """
-    Define a set of postiions on the field to tie fixed RPMs to
-    """
-
-    DEFAULT = "default"
-    HUB = "hub"
-    TOWER = "tower"
-    ALLIANCE_CORNER = "alliance_corner"
-    CLOSE_FEED = "close_feed"
-    MID_FEED = "mid_feed"
-    FAR_FEED = "far_feed"
 
 class TargetMode(StrEnum):
-    """
-    Target profile for distance-based RPM and hood angle lookup.
-    """
-
+    """Target profile for distance-based RPM and hood angle lookup."""
     AIR = "air"
     GROUND = "ground"
 
+
 class Shooter(Subsystem):
     """Flywheel shooter — controls only the two flywheel motors.
+
+    Two operating modes (setRange takes priority over setRPM):
+      - setRPM(rpm): direct RPM control, used for manual/fixed shooting
+      - setRange(distance): calculates RPM and hood angle from lookup table
 
     Feed motors are managed by the separate Feed subsystem.
     """
@@ -51,12 +31,11 @@ class Shooter(Subsystem):
     def __init__(self):
         super().__init__()
         self.offsetAmount = 0
-        self.offsetDelta = 0
         self.targetRPM = 0
-        self.targetDistance = 0.0
-        self.flywheelMode = FlywheelModes.FIXED_RPM
+        self._range_rpm = None  # When set, takes priority over targetRPM
+        self._range_distance = 0.0
+        self._range_hood_angle = 0.0
         self.targetMode = TargetMode.AIR
-        self.fixedRPMPosition = FixedShootingPositions.DEFAULT
         self.flywheelActive = False
 
         # Lookup tables: (distance_meters, rpm, hood_angle_degrees)
@@ -85,17 +64,6 @@ class Shooter(Subsystem):
         self.groundDistances = np.array([d for d, _, _ in self.groundTargetTable])
         self.groundRpms = np.array([r for _, r, _ in self.groundTargetTable])
         self.groundAngles = np.array([a for _, _, a in self.groundTargetTable])
-
-        # Create a lookup for fixed location RPMs
-        self.lookupFixedPositionRPMs = {
-            FixedShootingPositions.DEFAULT: 3000,
-            FixedShootingPositions.HUB: 1500,
-            FixedShootingPositions.TOWER: 2250,
-            FixedShootingPositions.ALLIANCE_CORNER: 3500,
-            FixedShootingPositions.CLOSE_FEED: 1750,
-            FixedShootingPositions.MID_FEED: 2750,
-            FixedShootingPositions.FAR_FEED: 4500,
-        }
 
         # Flywheel motors
         self.leadMotor = rev.SparkFlex(
@@ -139,126 +107,49 @@ class Shooter(Subsystem):
             rev.PersistMode.kPersistParameters,
         )
 
+    # -- Public API --
+
     def setRPM(self, rpm: float):
-        """
-        Directly set the RPM using the given value
-
-        Args:
-            rpm: The velocity setpoint for the motor in RPM
-
-        Returns:
-            None
-        """
+        """Set flywheel RPM directly. Cleared if setRange() is called."""
+        self._range_rpm = None
         self.targetRPM = rpm
+
+    def setRange(self, distance: float):
+        """Set RPM and hood angle from distance lookup. Takes priority over setRPM.
+
+        TODO: Add overload that accepts robot Pose2d and target Translation2d,
+        computes distance internally, so callers don't need to do the math.
+        """
+        self._range_distance = distance
+        distances, rpms, angles = self._getActiveTableArrays()
+        self._range_rpm = float(np.interp(distance, distances, rpms))
+        self._range_hood_angle = float(np.interp(distance, distances, angles))
+
+    def clearRange(self):
+        """Clear range mode, revert to direct RPM control."""
+        self._range_rpm = None
+
+    def getEffectiveRPM(self) -> float:
+        """Return the RPM that will be commanded (range or direct + offset)."""
+        base = self._range_rpm if self._range_rpm is not None else self.targetRPM
+        return base + self.offsetAmount
+
+    def getHoodAngle(self) -> float:
+        """Return hood angle — from range lookup or 0 if in direct RPM mode."""
+        return self._range_hood_angle if self._range_rpm is not None else 0.0
 
     def getVelocity(self) -> float:
         """Get the current flywheel velocity in RPM."""
         return self.leadEncoder.getVelocity()
 
-    def _getActiveTableArrays(self):
-        """Return (distances, rpms, angles) arrays for the active target mode."""
-        if self.targetMode == TargetMode.AIR:
-            return self.airDistances, self.airRpms, self.airAngles
-        return self.groundDistances, self.groundRpms, self.groundAngles
-
-    def setRpmUsingLookup(self, distance: float):
-        """
-        Set the RPM needed to shoot the ball at a specified distance.
-
-        Uses the active target mode (air/ground) lookup table.
-
-        Args:
-            distance: distance in meters from a target point
-
-        Returns:
-            None
-        """
-        self.targetDistance = distance
-        distances, rpms, _ = self._getActiveTableArrays()
-        self.targetRPM = float(np.interp(distance, distances, rpms))
-
-    def getHoodAngleForDistance(self, distance: float) -> float:
-        """
-        Get the hood angle needed to shoot at a specified distance.
-
-        Uses the active target mode (air/ground) lookup table.
-
-        Args:
-            distance: distance in meters from a target point
-
-        Returns:
-            Hood angle in degrees
-        """
-        distances, _, angles = self._getActiveTableArrays()
-        return float(np.interp(distance, distances, angles))
-
-    def setRpmAtFixedPosition(self):
-        """
-        Set the RPM based on the designated fixed position on the field
-        """
-        self.targetRPM = self.lookupFixedPositionRPMs.get(self.fixedRPMPosition, 0)
-
-    def cycleFixedShootingPosition(self):
-        if self.fixedRPMPosition == FixedShootingPositions.DEFAULT:
-            self.fixedRPMPosition = FixedShootingPositions.HUB
-        elif self.fixedRPMPosition == FixedShootingPositions.HUB:
-            self.fixedRPMPosition = FixedShootingPositions.TOWER
-        elif self.fixedRPMPosition == FixedShootingPositions.TOWER:
-            self.fixedRPMPosition = FixedShootingPositions.ALLIANCE_CORNER
-        elif self.fixedRPMPosition == FixedShootingPositions.ALLIANCE_CORNER:
-            self.fixedRPMPosition = FixedShootingPositions.CLOSE_FEED
-        elif self.fixedRPMPosition == FixedShootingPositions.CLOSE_FEED:
-            self.fixedRPMPosition = FixedShootingPositions.MID_FEED
-        elif self.fixedRPMPosition == FixedShootingPositions.MID_FEED:
-            self.fixedRPMPosition = FixedShootingPositions.FAR_FEED
-        elif self.fixedRPMPosition == FixedShootingPositions.FAR_FEED:
-            self.fixedRPMPosition = FixedShootingPositions.DEFAULT
+    def toggleFlywheelActive(self):
+        self.flywheelActive = not self.flywheelActive
 
     def modifyOffset(self, offsetDelta: float):
-        """
-        Modify the RPM offset
-
-        Args:
-            offsetDelta: change in offset that is applied
-
-        Returns:
-            None
-        """
-        self.offsetDelta = offsetDelta
-        self.offsetAmount = self.offsetAmount + self.offsetDelta
+        self.offsetAmount += offsetDelta
 
     def resetOffset(self):
-        """
-        Reset the RPM offset
-
-        Args:
-            None
-
-        Returns:
-            None
-        """
         self.offsetAmount = 0
-
-    def getOffset(self):
-        """
-        Get the RPM offset
-
-        Args:
-            None
-
-        Returns:
-            None
-        """
-        return self.offsetAmount
-
-    def getFlywheelMode(self):
-        return self.flywheelMode
-
-    def cycleFlywheelMode(self):
-        if self.flywheelMode == FlywheelModes.AUTO_RPM:
-            self.flywheelMode = FlywheelModes.FIXED_RPM
-        elif self.flywheelMode == FlywheelModes.FIXED_RPM:
-            self.flywheelMode = FlywheelModes.AUTO_RPM
 
     def setTargetMode(self, mode: TargetMode):
         self.targetMode = mode
@@ -266,49 +157,31 @@ class Shooter(Subsystem):
     def getTargetMode(self) -> TargetMode:
         return self.targetMode
 
-    def toggleFlywheelActive(self):
-        self.flywheelActive = not self.flywheelActive
+    def _getActiveTableArrays(self):
+        if self.targetMode == TargetMode.AIR:
+            return self.airDistances, self.airRpms, self.airAngles
+        return self.groundDistances, self.groundRpms, self.groundAngles
 
-    def getEffectiveRPM(self) -> float:
-        """Return RPM + offset, useful for other subsystems (e.g. Feed)."""
-        return self.targetRPM + self.offsetAmount
-
-    def calculateRangeFromOdometry(
-        self,
-        odometry: Callable[[],Pose2d],
-        targetLocation: Callable[[],Translation2d]
-    ):
-        return abs(odometry().translation().distance(targetLocation()))
+    # -- Periodic --
 
     def periodic(self):
-        newRPM = self.targetRPM + self.offsetAmount
+        effectiveRPM = self.getEffectiveRPM()
 
         if self.flywheelActive:
             self.leadPID.setReference(
-                newRPM,
+                effectiveRPM,
                 rev.SparkLowLevel.ControlType.kVelocity,
                 rev.ClosedLoopSlot.kSlot0,
             )
         else:
-            newRPM = 0
+            effectiveRPM = 0
             self.leadMotor.setVoltage(0)
 
-        # Debug: print once when RPM changes
-        if not hasattr(self, '_last_debug_rpm'):
-            self._last_debug_rpm = 0
-        if newRPM != self._last_debug_rpm:
-            print(f"[SHOOTER] periodic: newRPM={newRPM} targetRPM={self.targetRPM} "
-                  f"offset={self.offsetAmount} active={self.flywheelActive} "
-                  f"mode={self.flywheelMode} fixedPos={self.fixedRPMPosition}")
-            self._last_debug_rpm = newRPM
-
-        wpilib.SmartDashboard.putNumber("Shooter_RPM", newRPM)
-        wpilib.SmartDashboard.putNumber("Shooter_Offset", self.offsetAmount)
-        wpilib.SmartDashboard.putNumber("Shooter_Offset_Delta", self.offsetDelta)
-        wpilib.SmartDashboard.putBoolean("Shooter_Flywheel_Active", self.flywheelActive)
-        wpilib.SmartDashboard.putString("Shooter_Flywheel_Mode", self.flywheelMode)
-        wpilib.SmartDashboard.putString("Shooter_Fixed_RPM_Position", self.fixedRPMPosition)
-        wpilib.SmartDashboard.putNumber("Shooter_Target_Distance", self.targetDistance)
-        wpilib.SmartDashboard.putString("Shooter_Target_Mode", self.targetMode)
-        wpilib.SmartDashboard.putNumber("Shooter_Hood_Angle", self.getHoodAngleForDistance(self.targetDistance))
-        wpilib.SmartDashboard.putNumber("Shooter_Velocity", self.leadEncoder.getVelocity())
+        sd = wpilib.SmartDashboard
+        sd.putNumber("Shooter_RPM", effectiveRPM)
+        sd.putNumber("Shooter_Offset", self.offsetAmount)
+        sd.putBoolean("Shooter_Flywheel_Active", self.flywheelActive)
+        sd.putNumber("Shooter_Range_Distance", self._range_distance)
+        sd.putNumber("Shooter_Hood_Angle", self.getHoodAngle())
+        sd.putNumber("Shooter_Velocity", self.leadEncoder.getVelocity())
+        sd.putBoolean("Shooter_Range_Mode", self._range_rpm is not None)

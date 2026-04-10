@@ -169,25 +169,6 @@ class RobotSwerve:
             )
         )
 
-        def _default_shooter_periodic():
-            """Default command: only update RPM from lookup/fixed position
-            when the flywheel is not manually active via toggle_spinup."""
-            if not self.shooter.flywheelActive:
-                if self.shooter.flywheelMode == "autoRPM":
-                    self.shooter.setRpmUsingLookup(
-                        self.shooter.calculateRangeFromOdometry(
-                            self.drivetrain.current_pose,
-                            lambda: determineShooterTargets2026(
-                                self.drivetrain.current_pose, self.alliance)
-                        )
-                    )
-                else:
-                    self.shooter.setRpmAtFixedPosition()
-
-        self.shooter.setDefaultCommand(
-            commands2.cmd.run(_default_shooter_periodic, self.shooter)
-        )
-
         # Hood default: set angle from shooter's distance-based lookup
         self.hood.setDefaultCommand(self.hood.autoAngleCommand())
             
@@ -265,10 +246,6 @@ class RobotSwerve:
         self.factory.getButton("shooter.reset_RPM_offset").bind(
             commands2.cmd.runOnce(self.shooter.resetOffset, self.shooter)
         )
-        self.factory.getButton("shooter.cycle_shooter_fixed").bind(
-            commands2.cmd.runOnce(self.shooter.cycleFixedShootingPosition, self.shooter)
-        )
-
         # Hood input — right trigger analog mapped to hood angle
         self.hood_angle_input = self.factory.getAnalog("hood.angle")
 
