@@ -5,6 +5,7 @@ from enum import StrEnum
 # Internal imports
 from config import ShooterConfig
 from constants.swerve_constants import ShooterConstants
+from utils.spark_utils import GetSparkSignalsPositionControlConfig
 
 # Third-party imports
 from commands2 import Subsystem
@@ -98,9 +99,21 @@ class Shooter(Subsystem):
         configs.smartCurrentLimit(ShooterConstants.currentLimitAmps)
         if leader is not None:
             configs.follow(leader=leader, invert=invert)
+            # Follower: slow down all frames — we don't read from it
+            (
+                configs.signals
+                .primaryEncoderVelocityPeriodMs(500)
+                .primaryEncoderPositionPeriodMs(500)
+                .appliedOutputPeriodMs(500)
+                .busVoltagePeriodMs(500)
+                .outputCurrentPeriodMs(500)
+                .motorTemperaturePeriodMs(500)
+            )
         else:
             configs.inverted(invert)
             configs.closedLoop.pidf(*pidf, rev.ClosedLoopSlot.kSlot0)
+            # Leader: fast velocity for PID, plus telemetry
+            GetSparkSignalsPositionControlConfig(configs.signals, 20)
         motor.configure(
             configs,
             rev.ResetMode.kResetSafeParameters,
