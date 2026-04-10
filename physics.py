@@ -159,12 +159,19 @@ class PhysicsEngine:
         if self._navx_yaw is not None:
             self._navx_yaw.set(self._pose.rotation().degrees())
 
-        # Simulate shooter flywheel motors — feed current velocity into the
-        # motor model so it computes the next velocity from applied output.
+        # Simulate shooter flywheel — compute velocity from applied output
+        # and DCMotor model, then manually set encoder values (same pattern
+        # as swerve drive/steer above).
+        lead_output = self._shooter_lead_sim.getAppliedOutput()
+        vbus = 12.0
+        # NEO Vortex free speed is ~6784 RPM; applied output is duty cycle [-1, 1]
+        # Simple model: velocity = output * free_speed (instant response, no inertia)
+        # For a better model we'd integrate torque/inertia, but this gives PID feedback.
+        lead_vel = lead_output * vbus / DCMotor.neoVortex().nominalVoltage * DCMotor.neoVortex().freeSpeed * 60 / (2 * 3.14159)
         lead_enc = self._shooter_lead_sim.getRelativeEncoderSim()
-        self._shooter_lead_sim.iterate(lead_enc.getVelocity(), 12.0, tm_diff)
-        lead_vel = lead_enc.getVelocity()
-        # Mirror leader velocity to follower
+        lead_enc.setVelocity(lead_vel)
+        lead_enc.setPosition(lead_enc.getPosition() + lead_vel / 60.0 * tm_diff)
+        # Mirror to follower
         follower_enc = self._shooter_follower_sim.getRelativeEncoderSim()
         follower_enc.setVelocity(lead_vel)
         follower_enc.setPosition(lead_enc.getPosition())
