@@ -265,23 +265,23 @@ class RobotSwerve:
             commands2.cmd.runOnce(self.hopper.stop, self.hopper)
         )
 
-        # Integration: toggle intake deploy/retract (Operator A)
-        self.factory.getButton("integration.toggle_intake_deploy").onTrue(
+        # Intake: toggle deploy/retract (Operator A)
+        self.factory.getButton("intake.toggle_deploy").onTrue(
             toggle_intake_deploy(self.intake_position)
         )
 
-        # Ball transport: intake rollers while held (Operator B)
-        self.factory.getButton("integration.hold_intake_roller").whileTrue(
+        # Ball transport: roller while held (Operator B)
+        self.factory.getButton("ball_transport.hold_roller").whileTrue(
             run_roller_while_held(self.intake_roller)
         )
 
-        # Integration: flywheel spinup toggle (Operator X)
-        self.factory.getButton("integration.spinup_shooter").onTrue(
+        # Shooter: flywheel spinup toggle (Operator X)
+        self.factory.getButton("shooter.spinup_toggle").onTrue(
             toggle_spinup(self.shooter, self.hood)
         )
 
-        # Integration: hopper + feed while held (Driver LB)
-        self.factory.getButton("integration.run_hopper_feed").whileTrue(
+        # Ball transport: hopper + feed while held (Driver LT)
+        self.factory.getButton("ball_transport.run_hopper_feed").whileTrue(
             run_hopper_and_feed(self.hopper, self.feed)
         )
 

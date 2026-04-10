@@ -67,12 +67,20 @@ actions:
       input_type: boolean_trigger
       trigger_mode: on_true
       threshold: 0.5
+    spinup_toggle:
+      description: Toggle flywheel to 6000 RPM and hood to 0 degrees
+      input_type: button
+      trigger_mode: on_true
   hopper:
     toggle_hopper:
       description: Turn the hopper on or off
       input_type: button
       trigger_mode: toggle_on_true
   intake:
+    toggle_deploy:
+      description: Toggle intake between deployed and stowed
+      input_type: button
+      trigger_mode: on_true
     stow_intake:
       description: Stow intake back into robot
       input_type: boolean_trigger
@@ -82,34 +90,14 @@ actions:
       description: Deploy intake
       input_type: button
       trigger_mode: on_true
-    deactivate_roller:
-      description: Turns off the intake
-      input_type: button
-      trigger_mode: on_true
-    activate_roller:
-      description: Turns on the intake
-      input_type: button
-      trigger_mode: on_true
-    ramp_intake:
-      description: Hold the intake halfway between being deployed and stowed
-      input_type: button
-      trigger_mode: on_true
   hood:
     angle:
       description: Analog hood angle control (0..1 maps to min..max angle)
       input_type: analog
       trigger_mode: scaled
-  integration:
-    toggle_intake_deploy:
-      description: Toggle intake between deployed and stowed
-      input_type: button
-      trigger_mode: on_true
-    hold_intake_roller:
+  ball_transport:
+    hold_roller:
       description: Run intake rollers while button is held
-      input_type: button
-      trigger_mode: on_true
-    spinup_shooter:
-      description: Toggle flywheel to 6000 RPM and hood to 0 degrees
       input_type: button
       trigger_mode: on_true
     run_hopper_feed:
@@ -128,7 +116,7 @@ controllers:
       right_stick_x: [drivetrain.rotate]
       right_bumper: [drivetrain.robot_relative]
       left_bumper: [hopper.toggle_hopper]
-      left_trigger: [integration.run_hopper_feed]
+      left_trigger: [ball_transport.run_hopper_feed]
       back_button: [drivetrain.cancel_all]
       right_trigger: [drivetrain.auto_align]
       y_button: [drivetrain.speed_toggle]
@@ -144,8 +132,8 @@ controllers:
       pov_up: [shooter.increment_RPM]
       pov_down: [shooter.decrement_RPM]
       y_button: [shooter.reset_RPM_offset]
-      a_button: [integration.toggle_intake_deploy]
-      b_button: [integration.hold_intake_roller]
-      x_button: [integration.spinup_shooter]
+      a_button: [intake.toggle_deploy]
+      b_button: [ball_transport.hold_roller]
+      x_button: [shooter.spinup_toggle]
       left_trigger: [shooter.cycle_shooter_fixed]
       right_trigger: [hood.angle]
