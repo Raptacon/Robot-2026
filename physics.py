@@ -159,7 +159,9 @@ class PhysicsEngine:
         if self._navx_yaw is not None:
             self._navx_yaw.set(self._pose.rotation().degrees())
 
-        # Mirror shooter leader velocity to follower in sim
+        # Simulate shooter flywheel motors — iterate the motor model so the
+        # encoder reports realistic velocity back to the PID controller.
+        self._shooter_lead_sim.iterate(self._shooter_lead_sim.getSetpoint(), 12.0, tm_diff)
         lead_vel = self._shooter_lead_sim.getRelativeEncoderSim().getVelocity()
         self._shooter_follower_sim.getRelativeEncoderSim().setVelocity(lead_vel)
 
