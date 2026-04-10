@@ -27,6 +27,7 @@ from subsystem.mechanisms.shooter.hood import createHood
 from subsystem.ballpit import BallPitHopper as Hopper
 from utils.input import InputFactory
 from utils.odometry_logic_2026 import determineShooterTargets2026
+from subsystem.robot_state import RobotState
 
 # Third-party imports
 import commands2
@@ -53,6 +54,7 @@ class RobotSwerve:
         self.hood.setShooter(self.shooter)
         self.hopper = Hopper()
         self.intake = IntakeSubsystem()
+        self.robot_state = RobotState()
 
         self.disabled = True
         # Alliance instantiation
@@ -133,10 +135,9 @@ class RobotSwerve:
         self.shooter.resetOffset()
 
         self.hopper.zeroHopperVelocity()
+        
     def disabledPeriodic(self):
-        if self.disabled == False:
-            print("I'm Disabled!")
-            self.disabled = True
+        pass
 
 
     def autonomousInit(self):
@@ -148,7 +149,7 @@ class RobotSwerve:
             self.drivetrain.reset_pose_estimator(self.drivetrain.get_default_starting_pose())
 
     def autonomousPeriodic(self):
-        self.disabled = False
+        pass
 
     def teleopInit(self):
         self.updateAlliance()
@@ -194,7 +195,7 @@ class RobotSwerve:
         ))
 
     def teleopPeriodic(self):
-        self.disabled = False
+        pass
 
     def testInit(self):
         #TODO Move to NT listener on change listener
@@ -216,7 +217,7 @@ class RobotSwerve:
             self.hood.manualTestCommand(self.hood_angle_input))
 
     def testPeriodic(self):
-        self.disabled = False
+        pass
 
     def _configure_controls(self) -> None:
         """Retrieve managed inputs from the factory and wire command bindings.
