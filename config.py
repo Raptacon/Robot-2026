@@ -64,6 +64,7 @@ class OperatorRobotConfig:
     # max angular velocity (dps), max angular acceleration (dps^2).
     teleop_pathplan_constraints: Tuple[float] = (2.5, 2.0, 360.0, 360.0)
 
+    # Placeholder: not yet wired into IntakePosition (uses hardcoded gains)
     intake_pivot_pid: Tuple[float] = [0, 0, 0, 1 / 565]
 
 

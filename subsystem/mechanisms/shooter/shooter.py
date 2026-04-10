@@ -52,7 +52,7 @@ class Shooter(Subsystem):
         super().__init__()
         self.offsetAmount = 0
         self.offsetDelta = 0
-        self.RPM = 0
+        self.targetRPM = 0
         self.targetDistance = 0.0
         self.flywheelMode = FlywheelModes.FIXED_RPM
         self.targetMode = TargetMode.AIR
@@ -149,7 +149,7 @@ class Shooter(Subsystem):
         Returns:
             None
         """
-        self.RPM = rpm
+        self.targetRPM = rpm
 
     def getVelocity(self) -> float:
         """Get the current flywheel velocity in RPM."""
@@ -175,7 +175,7 @@ class Shooter(Subsystem):
         """
         self.targetDistance = distance
         distances, rpms, _ = self._getActiveTableArrays()
-        self.RPM = float(np.interp(distance, distances, rpms))
+        self.targetRPM = float(np.interp(distance, distances, rpms))
 
     def getHoodAngleForDistance(self, distance: float) -> float:
         """
@@ -196,7 +196,7 @@ class Shooter(Subsystem):
         """
         Set the RPM based on the designated fixed position on the field
         """
-        self.RPM = self.lookupFixedPositionRPMs.get(self.fixedRPMPosition, 0)
+        self.targetRPM = self.lookupFixedPositionRPMs.get(self.fixedRPMPosition, 0)
 
     def cycleFixedShootingPosition(self):
         if self.fixedRPMPosition == FixedShootingPositions.DEFAULT:
@@ -271,7 +271,7 @@ class Shooter(Subsystem):
 
     def getEffectiveRPM(self) -> float:
         """Return RPM + offset, useful for other subsystems (e.g. Feed)."""
-        return self.RPM + self.offsetAmount
+        return self.targetRPM + self.offsetAmount
 
     def calculateRangeFromOdometry(
         self,
@@ -281,7 +281,7 @@ class Shooter(Subsystem):
         return abs(odometry().translation().distance(targetLocation()))
 
     def periodic(self):
-        newRPM = self.RPM + self.offsetAmount
+        newRPM = self.targetRPM + self.offsetAmount
 
         if self.flywheelActive:
             self.leadPID.setReference(
