@@ -174,8 +174,8 @@ class PancakeShooterConstants:
     feedLowerMotorId = 36
     flywheelLeadInverted = False
     flywheelFollowerInverted = True
-    feedUpperInverted = False
-    feedLowerInverted = False
+    feedUpperInverted = True
+    feedLowerInverted = True
     shooterOffsetDelta = 100
     shooterFeedPercentOfFlywheel = 0.9
     shooterFixedRPM = 6000
