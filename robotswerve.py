@@ -22,6 +22,7 @@ import commands
 import subsystem
 from utils.input import InputFactory
 from utils.odometry_logic_2026 import determineShooterTargets2026
+from subsystem.robot_state import RobotState
 
 # Third-party imports
 import commands2
@@ -55,6 +56,8 @@ class RobotSwerve:
         self.hopper = None  # subsystem.Hopper()
         self.intake_position = None  # subsystem.IntakePosition()
         self.intake_roller = None  # subsystem.IntakeRoller()
+        self.robot_state = RobotState()
+
         # Alliance instantiation
         self.updateAlliance()
 
@@ -141,6 +144,7 @@ class RobotSwerve:
 
     def disabledPeriodic(self):
         pass
+
 
     def autonomousInit(self):
         self.updateAlliance()
