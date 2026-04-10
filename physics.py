@@ -18,6 +18,7 @@ import rev
 import wpilib
 import wpilib.simulation
 from pyfrc.physics.core import PhysicsInterface
+from wpimath.system.plant import LinearSystemId
 from wpimath.geometry import Pose2d, Rotation2d, Twist2d
 from wpimath.kinematics import SwerveModuleState
 from wpimath.system.plant import DCMotor
@@ -72,10 +73,15 @@ class PhysicsEngine:
             drive_enc.setPosition(0.0)
             drive_enc.setVelocity(0.0)
 
-        # Shooter flywheel: mirror leader velocity to follower in sim
+        # Shooter flywheel simulation using WPILib FlywheelSim
         shooter = robot.container.shooter
         self._shooter_lead_sim = rev.SparkSim(shooter.leadMotor, DCMotor.neoVortex())
         self._shooter_follower_sim = rev.SparkSim(shooter.followerMotor, DCMotor.neoVortex())
+        # Two NEO Vortex motors, ~0.005 kg·m² moment of inertia (dual 4" wheels), 1:1 gearing
+        self._flywheel_sim = wpilib.simulation.FlywheelSim(
+            LinearSystemId.flywheelSystem(DCMotor.neoVortex(2), 0.005, 1.0),
+            DCMotor.neoVortex(2),
+        )
 
         # Seed pose from the drivetrain's configured default starting position.
         self._pose = robot.container.drivetrain.get_default_starting_pose()
@@ -159,20 +165,17 @@ class PhysicsEngine:
         if self._navx_yaw is not None:
             self._navx_yaw.set(self._pose.rotation().degrees())
 
-        # Simulate shooter flywheel — compute velocity from applied output
-        # and DCMotor model, then manually set encoder values (same pattern
-        # as swerve drive/steer above).
+        # Simulate shooter flywheel with proper inertia model
         lead_output = self._shooter_lead_sim.getAppliedOutput()
-        vbus = 12.0
-        # NEO Vortex free speed is ~6784 RPM; applied output is duty cycle [-1, 1]
-        # Simple model: velocity = output * free_speed (instant response, no inertia)
-        # For a better model we'd integrate torque/inertia, but this gives PID feedback.
-        lead_vel = lead_output * vbus / DCMotor.neoVortex().nominalVoltage * DCMotor.neoVortex().freeSpeed * 60 / (2 * 3.14159)
+        self._flywheel_sim.setInputVoltage(lead_output * 12.0)
+        self._flywheel_sim.update(tm_diff)
+        # FlywheelSim outputs rad/s, convert to RPM for the encoder
+        flywheel_rpm = self._flywheel_sim.getAngularVelocity() * 60.0 / (2 * 3.14159)
+        # Update both motor encoders
         lead_enc = self._shooter_lead_sim.getRelativeEncoderSim()
-        lead_enc.setVelocity(lead_vel)
-        lead_enc.setPosition(lead_enc.getPosition() + lead_vel / 60.0 * tm_diff)
-        # Mirror to follower
+        lead_enc.setVelocity(flywheel_rpm)
+        lead_enc.setPosition(lead_enc.getPosition() + flywheel_rpm / 60.0 * tm_diff)
         follower_enc = self._shooter_follower_sim.getRelativeEncoderSim()
-        follower_enc.setVelocity(lead_vel)
+        follower_enc.setVelocity(flywheel_rpm)
         follower_enc.setPosition(lead_enc.getPosition())
 
