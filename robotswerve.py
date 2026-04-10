@@ -54,7 +54,6 @@ class RobotSwerve:
         self.hood = subsystem.mechanisms.shooter.createHood(consts.HoodConstants, HoodConfig)
         self.hood.setShooter(self.shooter)
         self.hopper = subsystem.Hopper()
-        self.intake_position = subsystem.IntakePosition()
         self.intake_roller = subsystem.IntakeRoller()
         # TODO: replace with real turret code
         self.turret = subsystem.mechanisms.turret.Turret(
@@ -280,10 +279,10 @@ class RobotSwerve:
             commands2.cmd.runOnce(self.hopper.stop, self.hopper)
         )
 
-        # Intake: toggle deploy/retract (Operator A)
-        self.factory.getButton("intake.toggle_deploy").onTrue(
-            commands.intake_commands.toggle_intake_deploy(self.intake_position)
-        )
+        # TODO: IntakePosition removed to debug input delay
+        # self.factory.getButton("intake.toggle_deploy").onTrue(
+        #     commands.intake_commands.toggle_intake_deploy(self.intake_position)
+        # )
 
         # Ball transport: roller while held (Operator B)
         self.factory.getButton("ball_transport.hold_roller").whileTrue(
