@@ -13,11 +13,12 @@ Robot field pose is integrated from swerve kinematics and fed back to:
 
 import typing
 
+import ntcore
 import rev
 import wpilib
 import wpilib.simulation
 from pyfrc.physics.core import PhysicsInterface
-from wpimath.geometry import Rotation2d, Twist2d
+from wpimath.geometry import Pose2d, Rotation2d, Twist2d
 from wpimath.kinematics import SwerveModuleState
 from wpimath.system.plant import DCMotor
 
@@ -52,13 +53,6 @@ class PhysicsEngine:
         self.kinematics = robot.container.drivetrain.drive_kinematics
 
         # Seed all encoders to 0° (wheels forward) immediately.
-        #
-        # baseline_relative_encoders() runs during module __init__ and sets each
-        # steer relative encoder to the module's calibration angle (e.g. 241° for
-        # FL).  The robot periodic runs before the first update_sim(), so if these
-        # stale values are left in place, optimize() sees a large angle error on the
-        # first set_state() call and begins oscillating.  Seeding here ensures the
-        # first robot periodic sees a clean 0° reading on every module.
         for module, drive_sim, steer_sim in zip(self.modules, self.drive_sims, self.steer_sims):
             calibration = module.constants.encoder_calibration
 
@@ -66,9 +60,6 @@ class PhysicsEngine:
             steer_enc.setPosition(0.0)
             steer_enc.setVelocity(0.0)
 
-            # Set CANcoder raw = -calibration so absolute position reads 0.0 (forward).
-            # current_raw_absolute_steer_position() uses is-not-None, so 0.0 is
-            # accepted and returns 0°, consistent with the relative encoder above.
             module.absolute_encoder.sim_state.set_supply_voltage(12.0)
             module.absolute_encoder.sim_state.set_raw_position(-calibration)
 
@@ -78,6 +69,15 @@ class PhysicsEngine:
 
         # Seed pose from the drivetrain's configured default starting position.
         self._pose = robot.container.drivetrain.get_default_starting_pose()
+
+        # Ground-truth pose struct publisher (for AdvantageScope ghost overlay)
+        self._gt_pose_pub = ntcore.NetworkTableInstance.getDefault().getStructTopic(
+            "SimGroundTruth/pose", Pose2d
+        ).publish()
+
+        # Vision simulation — generate AprilTag detections from ground-truth pose.
+        self._localization = robot.container.localization
+        self._localization.setup_sim()
 
         # NavX yaw variable — may be unavailable depending on sim state.
         self._navx_yaw = None
@@ -110,39 +110,26 @@ class PhysicsEngine:
         for module, drive_sim, steer_sim in zip(
             self.modules, self.drive_sims, self.steer_sims
         ):
-            velocity = module._last_commanded_state.speed          # m/s (signed)
-            angle_deg = module._last_commanded_state.angle.degrees()  # degrees
+            velocity = module._last_commanded_state.speed
+            angle_deg = module._last_commanded_state.angle.degrees()
 
-            # Normalize steer to [0°, 180°) so that the two equivalent wheel
-            # orientations — {+v, 180°} and {-v, 0°} — always write the same
-            # encoder value.  Without this, optimize() sees 0° one cycle and
-            # 180° the next, flip-flopping the commanded angle and oscillating
-            # the steer motor every cycle at the 0°/180° boundary.
             steer_angle = angle_deg % 360.0
             if steer_angle >= 180.0:
                 steer_angle -= 180.0
 
-            # Drive — set encoder velocity and integrate position.
-            # Uses the original velocity so drive odometry stays correct.
             drive_enc = drive_sim.getRelativeEncoderSim()
             drive_enc.setVelocity(velocity)
             drive_enc.setPosition(drive_enc.getPosition() + velocity * tm_diff)
 
-            # Steer — set relative encoder to the normalized angle.
             steer_enc = steer_sim.getRelativeEncoderSim()
             steer_enc.setPosition(steer_angle)
 
-            # Update CANcoder with the normalized angle.
-            #   absolute_position = raw_position + calibration
-            #   raw_position = steer_angle/360 - calibration
             calibration = module.constants.encoder_calibration
             module.absolute_encoder.sim_state.set_supply_voltage(12.0)
             module.absolute_encoder.sim_state.set_raw_position(
                 steer_angle / 360.0 - calibration
             )
 
-            # Kinematics uses the original angle so chassis-speed integration
-            # (pose and NavX feedback) remains physically correct.
             module_states.append(
                 SwerveModuleState(velocity, Rotation2d.fromDegrees(angle_deg))
             )
@@ -157,10 +144,15 @@ class PhysicsEngine:
             )
         )
 
-        # Update Field2d widget with the integrated pose.
+        # Update Field2d widget and struct publisher with the integrated pose.
         self.physics_controller.field.setRobotPose(self._pose)
+        self._gt_pose_pub.set(self._pose)
 
         # Feed integrated heading back to the NavX gyro sim device so that
         # field-relative drive and pose estimation use the correct heading.
         if self._navx_yaw is not None:
             self._navx_yaw.set(self._pose.rotation().degrees())
+
+        # Feed ground-truth pose into VisionSystemSim so simulated cameras
+        # generate AprilTag detections via NetworkTables.
+        self._localization.update_sim(self._pose)
