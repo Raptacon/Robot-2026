@@ -1,5 +1,5 @@
 import wpilib
-from wpimath.geometry import Pose2d, Translation2d
+from wpimath.geometry import Pose2d
 from constants.field_target_constants_2026 import FieldTargets2026
 from typing import Callable
 
