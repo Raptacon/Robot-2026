@@ -165,11 +165,16 @@ class PhysicsEngine:
         if self._navx_yaw is not None:
             self._navx_yaw.set(self._pose.rotation().degrees())
 
-        # Simulate shooter flywheel with proper inertia model
+        # Simulate shooter flywheel:
+        # 1) iterate() feeds current velocity to SparkMax internal PID → computes applied output
+        # 2) Feed that voltage into FlywheelSim → models inertia/spin-up
+        # 3) Set encoder values from FlywheelSim output
+        flywheel_rpm = self._flywheel_sim.getAngularVelocity() * 60.0 / (2 * 3.14159)
+        self._shooter_lead_sim.iterate(flywheel_rpm, 12.0, tm_diff)
         lead_output = self._shooter_lead_sim.getAppliedOutput()
         self._flywheel_sim.setInputVoltage(lead_output * 12.0)
         self._flywheel_sim.update(tm_diff)
-        # FlywheelSim outputs rad/s, convert to RPM for the encoder
+        # Read updated velocity
         flywheel_rpm = self._flywheel_sim.getAngularVelocity() * 60.0 / (2 * 3.14159)
         # Update both motor encoders
         lead_enc = self._shooter_lead_sim.getRelativeEncoderSim()
