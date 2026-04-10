@@ -24,18 +24,8 @@ class OperatorRobotConfig:
     pathplanner_translation_pid: Tuple[float] = (4.0, 0.0, 0.0)
     pathplanner_rotation_pid: Tuple[float] = (5.0, 0.0, 0.0)
 
-    # Camera mount positions relative to robot center (x forward, y left, z up) in meters
-    # and rotations (roll, pitch, yaw) in degrees.
-    # TODO: Verify rotation angles match actual camera mounting orientation.
-    back_cam_name: str = "Back_Camera"
-    # Rear left corner: behind center (-X), left of center (+Y), above center (+Z)
-    back_cam_translation: Tuple[float] = (-0.297, 0.297, 0.263)
-    back_cam_rotation_deg: Tuple[float] = (0.0, 0.0, 0.0)
-
-    side_cam_name: str = "Side_Camera"
-    # Right side behind center: behind center (-X), right of center (-Y), above center (+Z)
-    side_cam_translation: Tuple[float] = (-0.061, -0.320, 0.309)
-    side_cam_rotation_deg: Tuple[float] = (0.0, 0.0, 0.0)
+    # Camera mounts and robot geometry are defined in constants/robot_geometry.py.
+    # See constants.robot_geometry.CAMERAS for positions, angles, and FOV.
 
     # Vision filtering thresholds (see subsystem/localization/VISION.md)
     vision_ambiguity_threshold: float = 0.2
@@ -49,6 +39,9 @@ class OperatorRobotConfig:
     vision_single_tag_std_devs: Tuple[float] = (4.0, 4.0, float('inf'))
     vision_multi_tag_std_devs: Tuple[float] = (0.5, 0.5, 1.0)
     vision_std_dev_distance_factor: float = 30.0
+    # How many robot loop cycles between vision updates.
+    # 1 = every cycle (~20ms). Increase if vision still uses too much CPU.
+    vision_update_rate_divisor: int = 1
     # First three elements are PID, last two elements are trapezoidal profile
     # Translation trapezoidal profile units are mps and mps^2, rotation are rps and rps^2
     pid_to_pose_translation_pid_profile: Tuple[float] = (2.0, 0.0, 0.0, 3, 1.5)

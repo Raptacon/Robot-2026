@@ -1,0 +1,1007 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Robot Camera Visualizer</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #1a1a2e; color: #e0e0e0; overflow: hidden; }
+
+  #header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 16px; background: #16213e; border-bottom: 1px solid #0f3460;
+    height: 44px;
+  }
+  #header h1 { font-size: 16px; font-weight: 600; color: #e94560; }
+  #header .controls { display: flex; gap: 12px; align-items: center; }
+  #header label { font-size: 13px; }
+  #header select, #header button {
+    background: #0f3460; color: #e0e0e0; border: 1px solid #533483;
+    padding: 4px 8px; border-radius: 4px; font-size: 13px; cursor: pointer;
+  }
+  #header button:hover { background: #533483; }
+
+  #main { display: flex; height: calc(100vh - 44px); }
+
+  .viewport-container {
+    flex: 1; position: relative; border-right: 1px solid #0f3460;
+  }
+  .viewport-container:last-of-type { border-right: none; }
+  .viewport-label {
+    position: absolute; top: 8px; left: 12px; z-index: 10;
+    font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 1px;
+  }
+  .viewport-coords {
+    position: absolute; bottom: 8px; left: 12px; z-index: 10;
+    font-size: 12px; color: #aaa; font-family: 'Consolas', monospace;
+    background: rgba(22, 33, 62, 0.85); padding: 2px 8px; border-radius: 4px;
+  }
+
+  #sidebar {
+    width: 340px; min-width: 340px; background: #16213e;
+    border-left: 1px solid #0f3460; overflow-y: auto; padding: 12px;
+  }
+  #sidebar h2 { font-size: 14px; color: #e94560; margin-bottom: 8px; border-bottom: 1px solid #0f3460; padding-bottom: 4px; }
+  #sidebar h3 { font-size: 13px; color: #7ec8e3; margin: 10px 0 4px; }
+
+  .cam-card {
+    background: #1a1a2e; border: 1px solid #0f3460; border-radius: 6px;
+    padding: 10px; margin-bottom: 10px;
+  }
+  .cam-card .cam-name { font-weight: 600; font-size: 14px; margin-bottom: 6px; }
+  .cam-card table { width: 100%; font-size: 12px; border-collapse: collapse; }
+  .cam-card td { padding: 2px 4px; }
+  .cam-card td:first-child { color: #888; width: 130px; }
+  .cam-card td:last-child { font-family: 'Consolas', monospace; text-align: right; }
+
+  .cam-view-canvas {
+    width: 100%; aspect-ratio: 4/3; border-radius: 4px;
+    border: 1px solid #333; margin-top: 6px; display: block;
+  }
+  .cam-view-label {
+    font-size: 11px; color: #666; margin-top: 2px; text-align: center;
+  }
+  .visible-tags { font-size: 11px; color: #8c8; margin-top: 4px; }
+
+  .transform-block {
+    background: #0f3460; border-radius: 4px; padding: 6px 8px;
+    margin-top: 6px; font-family: 'Consolas', monospace; font-size: 11px;
+    white-space: pre; line-height: 1.5;
+  }
+
+  .coord-legend {
+    font-size: 12px; margin-top: 12px;
+  }
+  .coord-legend .axis { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
+  .coord-legend .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+  canvas { display: block; }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <h1>Robot Camera Visualizer</h1>
+  <div class="controls">
+    <label>Units:
+      <select id="unitSelect">
+        <option value="inches">Inches</option>
+        <option value="meters">Meters</option>
+        <option value="cm">Centimeters</option>
+      </select>
+    </label>
+    <label>Tag dist:
+      <select id="tagDistSelect">
+        <option value="4">4 ft</option>
+        <option value="6" selected>6 ft</option>
+        <option value="8">8 ft</option>
+        <option value="10">10 ft</option>
+        <option value="12">12 ft</option>
+      </select>
+    </label>
+    <button id="resetBtn">Reset Views</button>
+  </div>
+</div>
+
+<div id="main">
+  <div class="viewport-container" id="topViewContainer">
+    <div class="viewport-label">Top View (XY Plane)</div>
+    <div class="viewport-coords" id="topCoords">X: -- Y: --</div>
+    <canvas id="topCanvas"></canvas>
+  </div>
+  <div class="viewport-container" id="perspViewContainer">
+    <div class="viewport-label">3/4 Perspective</div>
+    <div class="viewport-coords" id="perspCoords">X: -- Y: -- Z: --</div>
+    <canvas id="perspCanvas"></canvas>
+  </div>
+  <div id="sidebar">
+    <h2>Robot Frame</h2>
+    <div id="robotInfo"></div>
+
+    <h2>Camera Mounts</h2>
+    <div id="cameraCards"></div>
+
+    <h2>WPI Coordinate System</h2>
+    <div class="coord-legend">
+      <div class="axis"><span class="dot" style="background:#ff4444"></span> +X = Forward (Red)</div>
+      <div class="axis"><span class="dot" style="background:#44ff44"></span> +Y = Left (Green)</div>
+      <div class="axis"><span class="dot" style="background:#4488ff"></span> +Z = Up (Blue)</div>
+    </div>
+
+    <h2>Transforms</h2>
+    <div id="transformInfo"></div>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+// ── Config injected by serve.py ──────────────────────────────────────
+const CONFIG = window.__ROBOT_CONFIG__;
+
+const INCH = 0.0254;
+const FOOT = 0.3048;
+
+// ── Unit conversion ──────────────────────────────────────────────────
+const UNIT_SCALES = { meters: 1, inches: 1/INCH, cm: 100 };
+const UNIT_LABELS = { meters: 'm', inches: 'in', cm: 'cm' };
+let currentUnit = 'inches';
+let tagDistance = 6;  // feet
+
+function toDisplay(meters) {
+  return (meters * UNIT_SCALES[currentUnit]).toFixed(2);
+}
+function unitLabel() { return UNIT_LABELS[currentUnit]; }
+
+// ── AprilTag definitions ─────────────────────────────────────────────
+// 8 tags around the robot: cardinal + intercardinal directions
+// Angles in WPI coords: 0=+X(front), 90=+Y(left), etc.
+const TAG_DIRECTIONS = [
+  { id: 1,  label: 'Front',       angle: 0 },
+  { id: 2,  label: 'Front-Left',  angle: 45 },
+  { id: 3,  label: 'Left',        angle: 90 },
+  { id: 4,  label: 'Back-Left',   angle: 135 },
+  { id: 5,  label: 'Back',        angle: 180 },
+  { id: 6,  label: 'Back-Right',  angle: 225 },
+  { id: 7,  label: 'Right',       angle: 270 },
+  { id: 8,  label: 'Front-Right', angle: 315 },
+];
+const TAG_HEIGHT = 2 * FOOT;     // 2 ft off ground
+const TAG_SIZE = 6.5 * INCH;     // 6.5" AprilTag (FRC standard)
+
+// ── Scene setup ──────────────────────────────────────────────────────
+const topCanvas = document.getElementById('topCanvas');
+const perspCanvas = document.getElementById('perspCanvas');
+
+function createRenderer(canvas) {
+  const r = new THREE.WebGLRenderer({ canvas, antialias: true });
+  r.setPixelRatio(window.devicePixelRatio);
+  r.setClearColor(0x1a1a2e);
+  return r;
+}
+
+const topRenderer = createRenderer(topCanvas);
+const perspRenderer = createRenderer(perspCanvas);
+
+// Shared scene for all views (main views + camera sim views)
+const scene = new THREE.Scene();
+
+const topCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 100);
+const perspCamera = new THREE.PerspectiveCamera(50, 1, 0.01, 100);
+
+topCamera.position.set(0, 0, 2);
+topCamera.up.set(0, 1, 0);
+topCamera.lookAt(0, 0, 0);
+
+perspCamera.position.set(0.8, -0.6, 0.5);
+perspCamera.up.set(0, 0, 1);
+perspCamera.lookAt(0, 0, 0.1);
+
+const topControls = new OrbitControls(topCamera, topCanvas);
+topControls.enableRotate = false;
+topControls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+
+const perspControls = new OrbitControls(perspCamera, perspCanvas);
+perspControls.target.set(0, 0, 0.1);
+perspControls.update();
+
+// Lighting
+scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+dirLight.position.set(1, 1, 2);
+scene.add(dirLight);
+
+// ── Camera sim view state ────────────────────────────────────────────
+const camSimViews = [];  // { cam config, Three.js camera, renderer, canvas, frustum }
+
+// ── AprilTag objects (tracked for repositioning) ─────────────────────
+let tagGroup = new THREE.Group();
+scene.add(tagGroup);
+
+function buildAprilTags() {
+  // Clear old tags
+  while (tagGroup.children.length) tagGroup.remove(tagGroup.children[0]);
+
+  const dist = tagDistance * FOOT;
+
+  TAG_DIRECTIONS.forEach(tag => {
+    const angleRad = THREE.MathUtils.degToRad(tag.angle);
+    const tx = Math.cos(angleRad) * dist;
+    const ty = Math.sin(angleRad) * dist;
+
+    const group = new THREE.Group();
+    group.position.set(tx, ty, TAG_HEIGHT);
+    group.userData = { tagId: tag.id, label: tag.label };
+
+    // Tag face: vertical square facing the robot center
+    // We rotate the entire group to face inward, so children use local coords
+    // Compute yaw angle from tag position back toward origin
+    const faceYaw = Math.atan2(-ty, -tx);
+    group.rotation.z = faceYaw;          // rotate about Z (up) to face robot
+    // No X rotation needed — PlaneGeometry is in XY, we want it vertical
+
+    const faceGeo = new THREE.PlaneGeometry(TAG_SIZE, TAG_SIZE);
+    const faceMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff, side: THREE.DoubleSide,
+    });
+    const face = new THREE.Mesh(faceGeo, faceMat);
+    // PlaneGeometry default is in XY facing +Z. We want it vertical facing -X local
+    // (toward robot after group yaw rotation). Rotate -90° about Z so plane
+    // is in YZ, then it faces +X local. But we want facing -X (inward), so +90°.
+    face.rotation.y = -Math.PI / 2;
+    group.add(face);
+
+    // Dark inner pattern (simplified AprilTag look)
+    const innerGeo = new THREE.PlaneGeometry(TAG_SIZE * 0.7, TAG_SIZE * 0.7);
+    const innerMat = new THREE.MeshBasicMaterial({
+      color: 0x111111, side: THREE.DoubleSide,
+    });
+    const inner = new THREE.Mesh(innerGeo, innerMat);
+    inner.rotation.y = -Math.PI / 2;
+    inner.position.x = -0.001;  // slight offset toward robot to prevent z-fighting
+    group.add(inner);
+
+    // Border outline
+    const borderGeo = new THREE.EdgesGeometry(new THREE.PlaneGeometry(TAG_SIZE, TAG_SIZE));
+    const borderMat = new THREE.LineBasicMaterial({ color: 0x888888 });
+    const border = new THREE.LineSegments(borderGeo, borderMat);
+    border.rotation.y = -Math.PI / 2;
+    group.add(border);
+
+    // ID label using a sprite
+    const labelCanvas = document.createElement('canvas');
+    labelCanvas.width = 128;
+    labelCanvas.height = 64;
+    const ctx = labelCanvas.getContext('2d');
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, 128, 64);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 36px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(`ID ${tag.id}`, 64, 30);
+    ctx.font = '16px sans-serif';
+    ctx.fillStyle = '#aaa';
+    ctx.fillText(tag.label, 64, 54);
+    const labelTex = new THREE.CanvasTexture(labelCanvas);
+    const labelMat = new THREE.SpriteMaterial({ map: labelTex });
+    const sprite = new THREE.Sprite(labelMat);
+    const sh = 0.1;
+    sprite.scale.set(sh * sprite.baseAspect, sh, 1);
+    sprite.position.set(0, 0, TAG_SIZE * 0.8);
+    group.add(sprite);
+
+    // Pole from ground to tag
+    const poleGeo = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(tx, ty, 0),
+      new THREE.Vector3(tx, ty, TAG_HEIGHT),
+    ]);
+    const poleMat = new THREE.LineBasicMaterial({ color: 0x444444 });
+    tagGroup.add(new THREE.Line(poleGeo, poleMat));
+
+    tagGroup.add(group);
+  });
+}
+
+// ── Helper: text sprite ──────────────────────────────────────────────
+function makeTextSprite(text, color, fontSize = 48) {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  // Measure text first to size the canvas
+  ctx.font = `bold ${fontSize}px monospace`;
+  const measured = ctx.measureText(text);
+  const padding = fontSize * 0.4;
+  canvas.width = Math.max(128, Math.ceil(measured.width + padding * 2));
+  canvas.height = Math.ceil(fontSize * 1.4);
+  // Re-set font after resize (canvas reset clears state)
+  const hexColor = '#' + new THREE.Color(color).getHexString();
+  ctx.font = `bold ${fontSize}px monospace`;
+  ctx.fillStyle = hexColor;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+  const tex = new THREE.CanvasTexture(canvas);
+  const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false });
+  const sprite = new THREE.Sprite(mat);
+  // Scale sprite to maintain aspect ratio
+  const aspect = canvas.width / canvas.height;
+  sprite.baseAspect = aspect;  // store for callers that set scale
+  return sprite;
+}
+
+// ── Helper: curved rotation arc with arrowhead and label ─────────────
+function buildRotationArc(axis, color, label) {
+  const group = new THREE.Group();
+  const radius = 0.15;
+  const arcAngle = Math.PI * 0.6;  // ~108° arc
+  const segments = 24;
+
+  // Determine two perpendicular vectors to draw the arc in the plane normal to axis
+  const perp1 = new THREE.Vector3();
+  const perp2 = new THREE.Vector3();
+  if (Math.abs(axis.x) > 0.9) {
+    perp1.set(0, 1, 0);
+  } else {
+    perp1.set(1, 0, 0);
+  }
+  perp2.crossVectors(axis, perp1).normalize();
+  perp1.crossVectors(perp2, axis).normalize();
+
+  // Arc points
+  const points = [];
+  for (let i = 0; i <= segments; i++) {
+    const t = (i / segments) * arcAngle - arcAngle * 0.1;  // start slightly before 0
+    const p = new THREE.Vector3()
+      .addScaledVector(perp1, Math.cos(t) * radius)
+      .addScaledVector(perp2, Math.sin(t) * radius);
+    points.push(p);
+  }
+
+  const arcGeo = new THREE.BufferGeometry().setFromPoints(points);
+  const arcMat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.6 });
+  group.add(new THREE.Line(arcGeo, arcMat));
+
+  // Arrowhead at end of arc (small cone)
+  const lastPt = points[points.length - 1];
+  const prevPt = points[points.length - 2];
+  const tangent = new THREE.Vector3().subVectors(lastPt, prevPt).normalize();
+  const arrowGeo = new THREE.ConeGeometry(0.012, 0.03, 6);
+  const arrowMat = new THREE.MeshBasicMaterial({ color });
+  const arrowMesh = new THREE.Mesh(arrowGeo, arrowMat);
+  arrowMesh.position.copy(lastPt);
+  // Orient cone along tangent direction
+  const up = new THREE.Vector3(0, 1, 0);
+  const q = new THREE.Quaternion().setFromUnitVectors(up, tangent);
+  arrowMesh.quaternion.copy(q);
+  group.add(arrowMesh);
+
+  // Label sprite near the arc midpoint
+  const midIdx = Math.floor(segments / 2);
+  const midPt = points[midIdx].clone();
+  const labelSprite = makeTextSprite(label, color, 32);
+  labelSprite.position.copy(midPt.multiplyScalar(1.35));
+  labelSprite.scale.set(0.05 * labelSprite.baseAspect, 0.05, 1);
+  group.add(labelSprite);
+
+  return group;
+}
+
+// ── Helper: mini axes for camera mounts ──────────────────────────────
+function addMiniAxes(parentGroup, scale = 0.08) {
+  const dirs = [
+    { dir: new THREE.Vector3(1, 0, 0), color: 0xff4444 },
+    { dir: new THREE.Vector3(0, 1, 0), color: 0x44ff44 },
+    { dir: new THREE.Vector3(0, 0, 1), color: 0x4488ff },
+  ];
+  dirs.forEach(({ dir, color }) => {
+    parentGroup.add(new THREE.ArrowHelper(dir, new THREE.Vector3(0, 0, 0), scale, color, scale * 0.3, scale * 0.15));
+  });
+}
+
+// ── Build robot geometry ─────────────────────────────────────────────
+function buildScene() {
+  const frame = CONFIG.robot_frame;
+  const w = frame.width_inches * INCH;
+  const l = frame.length_inches * INCH;
+  const h = 0.10;
+
+  // Ground grid
+  const gridSize = 2;
+  const gridDiv = 40;
+  const grid = new THREE.GridHelper(gridSize, gridDiv, 0x333355, 0x222244);
+  grid.rotation.x = Math.PI / 2;
+  scene.add(grid);
+
+  // Larger faint grid for tag context
+  const grid2 = new THREE.GridHelper(8, 40, 0x222233, 0x1a1a28);
+  grid2.rotation.x = Math.PI / 2;
+  scene.add(grid2);
+
+  // Robot body
+  const bodyGeo = new THREE.BoxGeometry(l, w, h);
+  const bodyMat = new THREE.MeshPhongMaterial({
+    color: 0x335577, transparent: true, opacity: 0.5,
+    side: THREE.DoubleSide,
+  });
+  const body = new THREE.Mesh(bodyGeo, bodyMat);
+  body.position.z = h / 2;
+  scene.add(body);
+
+  // Robot wireframe
+  const wireGeo = new THREE.EdgesGeometry(bodyGeo);
+  const wireMat = new THREE.LineBasicMaterial({ color: 0x88aacc });
+  const wire = new THREE.LineSegments(wireGeo, wireMat);
+  wire.position.z = h / 2;
+  scene.add(wire);
+
+  // Front marker
+  const fx = l / 2;
+  const frontGeo = new THREE.BufferGeometry();
+  const frontVerts = new Float32Array([
+    fx, -0.03, h + 0.01,
+    fx, 0.03, h + 0.01,
+    fx + 0.04, 0, h + 0.01,
+  ]);
+  frontGeo.setAttribute('position', new THREE.BufferAttribute(frontVerts, 3));
+  const frontMat = new THREE.MeshBasicMaterial({ color: 0xff4444, side: THREE.DoubleSide });
+  scene.add(new THREE.Mesh(frontGeo, frontMat));
+
+  // Coordinate axes with labels
+  const axisLen = 0.25;
+  const axisInfo = [
+    { dir: new THREE.Vector3(1, 0, 0), color: 0xff4444, label: '+X', rotLabel: 'Roll' },
+    { dir: new THREE.Vector3(0, 1, 0), color: 0x44ff44, label: '+Y', rotLabel: 'Pitch' },
+    { dir: new THREE.Vector3(0, 0, 1), color: 0x4488ff, label: '+Z', rotLabel: 'Yaw' },
+  ];
+  axisInfo.forEach(({ dir, color, label, rotLabel }) => {
+    scene.add(new THREE.ArrowHelper(dir, new THREE.Vector3(0, 0, 0), axisLen, color, 0.03, 0.02));
+
+    // Axis label sprite (e.g. "+X")
+    const axisSprite = makeTextSprite(label, color, 48);
+    const labelPos = dir.clone().multiplyScalar(axisLen + 0.04);
+    axisSprite.position.copy(labelPos);
+    axisSprite.scale.set(0.04 * axisSprite.baseAspect, 0.04, 1);
+    scene.add(axisSprite);
+
+    // Rotation arc arrow around this axis with label
+    const arcGroup = buildRotationArc(dir, color, rotLabel);
+    scene.add(arcGroup);
+  });
+
+  // Mechanisms
+  if (CONFIG.mechanisms) {
+    CONFIG.mechanisms.forEach(mech => {
+      addMechanismViz(mech, h);
+    });
+  }
+
+  // Cameras
+  CONFIG.cameras.forEach(cam => {
+    addCameraViz(cam, h);
+  });
+
+  // AprilTags
+  buildAprilTags();
+}
+
+// ── Camera look direction quaternion ─────────────────────────────────
+function getCameraLookQuat(cam) {
+  const yawRad = THREE.MathUtils.degToRad(cam.yaw_deg);
+  const pitchRad = THREE.MathUtils.degToRad(cam.pitch_deg);
+
+  const yawQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), yawRad);
+  const pitchQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -pitchRad);
+  return yawQuat.multiply(pitchQuat);
+}
+
+function addCameraViz(cam, robotHeight) {
+  const x = cam.x_inches * INCH;
+  const y = cam.y_inches * INCH;
+  const z = cam.z_inches * INCH;
+  const color = camColor(cam.name);
+  const lookQuat = getCameraLookQuat(cam);
+
+  // Mount pole (not rotated)
+  const poleGeo = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(x, y, robotHeight),
+    new THREE.Vector3(x, y, z),
+  ]);
+  scene.add(new THREE.Line(poleGeo, new THREE.LineBasicMaterial({ color: 0x666666 })));
+
+  // Camera body group: rotates with yaw/pitch
+  const camBodyGroup = new THREE.Group();
+  camBodyGroup.position.set(x, y, z);
+  camBodyGroup.quaternion.copy(lookQuat);
+
+  // Camera body box (longer in X = look direction)
+  const camGeo = new THREE.BoxGeometry(0.04, 0.05, 0.03);
+  const camMat = new THREE.MeshPhongMaterial({ color });
+  camBodyGroup.add(new THREE.Mesh(camGeo, camMat));
+
+  // Lens indicator: small cylinder on the front face (+X in local = look direction)
+  const lensGeo = new THREE.CylinderGeometry(0.012, 0.015, 0.015, 8);
+  const lensMat = new THREE.MeshPhongMaterial({ color: 0x222222 });
+  const lens = new THREE.Mesh(lensGeo, lensMat);
+  lens.rotation.z = Math.PI / 2;  // cylinder default is +Y, rotate to +X
+  lens.position.x = 0.02 + 0.007;  // front face of body + half lens depth
+  camBodyGroup.add(lens);
+
+  // Lens ring (bright ring to make it visible)
+  const ringGeo = new THREE.RingGeometry(0.012, 0.016, 16);
+  const ringMat = new THREE.MeshBasicMaterial({ color: 0x88bbff, side: THREE.DoubleSide });
+  const ring = new THREE.Mesh(ringGeo, ringMat);
+  ring.rotation.y = Math.PI / 2;  // face +X
+  ring.position.x = 0.02 + 0.015 + 0.001;
+  camBodyGroup.add(ring);
+
+  // Mini coordinate axes on camera (shows local frame after rotation)
+  addMiniAxes(camBodyGroup, 0.06);
+
+  // Camera name label
+  const label = makeTextSprite(cam.name, color, 28);
+  label.scale.set(0.04 * label.baseAspect, 0.04, 1);
+  label.position.set(0, 0, 0.04);
+  camBodyGroup.add(label);
+
+  scene.add(camBodyGroup);
+
+  // FOV cone
+  const fovRad = THREE.MathUtils.degToRad(cam.fov_deg);
+  const coneLen = 0.6;
+  const coneRadius = Math.tan(fovRad / 2) * coneLen;
+
+  const coneGeo = new THREE.ConeGeometry(coneRadius, coneLen, 16, 1, true);
+  const coneMat = new THREE.MeshBasicMaterial({
+    color, transparent: true, opacity: 0.15,
+    side: THREE.DoubleSide, depthWrite: false,
+  });
+  const cone = new THREE.Mesh(coneGeo, coneMat);
+
+  const coneWireGeo = new THREE.EdgesGeometry(coneGeo);
+  const coneWireMat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.4 });
+  cone.add(new THREE.LineSegments(coneWireGeo, coneWireMat));
+
+  // Tip at origin, cone expands in -Y local space
+  cone.position.y = -coneLen / 2;
+
+  const coneGroup = new THREE.Group();
+  coneGroup.position.set(x, y, z);
+
+  const yawRad = THREE.MathUtils.degToRad(cam.yaw_deg);
+  const pitchRad = THREE.MathUtils.degToRad(cam.pitch_deg);
+
+  // Rotate cone so it expands along +X (WPI forward):
+  // Cone expands in -Y local, so rotate +90° about Z (-Y → +X)
+  const coneQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2);
+  const pitchQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -pitchRad);
+  const yawQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), yawRad);
+
+  coneGroup.quaternion.copy(yawQuat.multiply(pitchQuat).multiply(coneQuat));
+  coneGroup.add(cone);
+  scene.add(coneGroup);
+
+  // Direction line
+  const dirLen = 0.5;
+  const dirGeo = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(0, 0, 0),
+    new THREE.Vector3(dirLen, 0, 0),
+  ]);
+  const dirGroup = new THREE.Group();
+  dirGroup.position.set(x, y, z);
+  dirGroup.quaternion.copy(lookQuat);
+  dirGroup.add(new THREE.Line(dirGeo, new THREE.LineBasicMaterial({ color })));
+  scene.add(dirGroup);
+}
+
+function camColor(name) {
+  if (name.toLowerCase().includes('side')) return 0x44ddaa;
+  if (name.toLowerCase().includes('rear') || name.toLowerCase().includes('back')) return 0xdd8844;
+  return 0xaa44dd;
+}
+
+// ── Mechanism visualization ──────────────────────────────────────────
+function addMechanismViz(mech, robotHeight) {
+  const x = mech.x_inches * INCH;
+  const y = mech.y_inches * INCH;
+  const z = mech.z_inches * INCH;
+  const color = mech.color ? parseInt(mech.color.replace('#', '0x')) : 0x888888;
+  const yawRad = THREE.MathUtils.degToRad(mech.yaw_deg);
+
+  if (mech.type === 'swerve_module') {
+    const group = new THREE.Group();
+    group.position.set(x, y, robotHeight);
+
+    // Module block
+    const l = mech.length_inches * INCH;
+    const w = mech.width_inches * INCH;
+    const h = 0.04;
+    const blockGeo = new THREE.BoxGeometry(l, w, h);
+    const blockMat = new THREE.MeshPhongMaterial({ color });
+    group.add(new THREE.Mesh(blockGeo, blockMat));
+
+    // Wireframe
+    const wireGeo = new THREE.EdgesGeometry(blockGeo);
+    group.add(new THREE.LineSegments(wireGeo, new THREE.LineBasicMaterial({ color: 0xdddd88 })));
+
+    // Wheel direction arrow (shows default heading)
+    const arrowDir = new THREE.Vector3(Math.cos(yawRad), Math.sin(yawRad), 0);
+    const arrow = new THREE.ArrowHelper(arrowDir, new THREE.Vector3(0, 0, h / 2 + 0.005), l * 0.6, 0xffffff, 0.015, 0.01);
+    group.add(arrow);
+
+    // Label
+    const label = makeTextSprite(mech.name, 0xdddd88, 28);
+    label.scale.set(0.04 * label.baseAspect, 0.04, 1);
+    label.position.set(0, 0, h / 2 + 0.03);
+    group.add(label);
+
+    scene.add(group);
+
+  } else if (mech.type === 'turret') {
+    const group = new THREE.Group();
+    const tz = z > 0 ? z : robotHeight + 0.02;
+    group.position.set(x, y, tz);
+
+    const radius = mech.radius_inches * INCH;
+
+    // Turret ring
+    const ringGeo = new THREE.RingGeometry(radius * 0.85, radius, 32);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color, side: THREE.DoubleSide, transparent: true, opacity: 0.5,
+    });
+    group.add(new THREE.Mesh(ringGeo, ringMat));
+
+    // Circle outline
+    const circleGeo = new THREE.BufferGeometry();
+    const circPts = [];
+    for (let i = 0; i <= 64; i++) {
+      const a = (i / 64) * Math.PI * 2;
+      circPts.push(new THREE.Vector3(Math.cos(a) * radius, Math.sin(a) * radius, 0));
+    }
+    circleGeo.setFromPoints(circPts);
+    group.add(new THREE.Line(circleGeo, new THREE.LineBasicMaterial({ color })));
+
+    // Heading arrow (shows default turret direction)
+    const arrowDir = new THREE.Vector3(Math.cos(yawRad), Math.sin(yawRad), 0);
+    const arrow = new THREE.ArrowHelper(arrowDir, new THREE.Vector3(0, 0, 0.005), radius * 1.5, color, 0.025, 0.015);
+    group.add(arrow);
+
+    // Center dot
+    const dotGeo = new THREE.SphereGeometry(0.008, 8, 8);
+    const dotMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    group.add(new THREE.Mesh(dotGeo, dotMat));
+
+    // Label
+    const label = makeTextSprite(mech.name, color, 36);
+    label.scale.set(0.05 * label.baseAspect, 0.05, 1);
+    label.position.set(0, 0, 0.05);
+    group.add(label);
+
+    scene.add(group);
+
+  } else {
+    // Generic: labeled block
+    const group = new THREE.Group();
+    group.position.set(x, y, z > 0 ? z : robotHeight + 0.02);
+
+    const l = mech.length_inches * INCH;
+    const w = mech.width_inches * INCH;
+    const h = 0.03;
+    const blockGeo = new THREE.BoxGeometry(l, w, h);
+    const blockMat = new THREE.MeshPhongMaterial({ color, transparent: true, opacity: 0.7 });
+    group.add(new THREE.Mesh(blockGeo, blockMat));
+
+    const wireGeo = new THREE.EdgesGeometry(blockGeo);
+    group.add(new THREE.LineSegments(wireGeo, new THREE.LineBasicMaterial({ color: 0xcccccc })));
+
+    const label = makeTextSprite(mech.name, color, 32);
+    label.scale.set(0.04 * label.baseAspect, 0.04, 1);
+    label.position.set(0, 0, h / 2 + 0.025);
+    group.add(label);
+
+    scene.add(group);
+  }
+}
+
+// ── Camera sim views (what each camera sees) ─────────────────────────
+function setupCamSimViews() {
+  CONFIG.cameras.forEach((cam, idx) => {
+    const canvas = document.getElementById(`camSimCanvas_${idx}`);
+    if (!canvas) return;
+
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setClearColor(0x111122);
+
+    // Create a perspective camera matching the robot camera's FOV
+    const simCam = new THREE.PerspectiveCamera(cam.fov_deg, 4 / 3, 0.05, 20);
+
+    // Position at camera mount location
+    const x = cam.x_inches * INCH;
+    const y = cam.y_inches * INCH;
+    const z = cam.z_inches * INCH;
+    simCam.position.set(x, y, z);
+
+    // Compute look direction from yaw + pitch
+    const lookQuat = getCameraLookQuat(cam);
+    const lookDir = new THREE.Vector3(1, 0, 0).applyQuaternion(lookQuat);
+    const target = new THREE.Vector3(x, y, z).add(lookDir);
+    // Camera up: apply rotation to robot's up vector
+    const upDir = new THREE.Vector3(0, 0, 1).applyQuaternion(lookQuat);
+
+    simCam.up.copy(upDir);
+    simCam.lookAt(target);
+
+    camSimViews.push({ cam, simCam, renderer, canvas });
+  });
+}
+
+function resizeCamSimViews() {
+  camSimViews.forEach(({ renderer, canvas, simCam }) => {
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    if (w === 0 || h === 0) return;
+    renderer.setSize(w, h, false);
+    simCam.aspect = w / h;
+    simCam.updateProjectionMatrix();
+  });
+}
+
+function computeVisibleTags(simCam) {
+  // Use a frustum to check which tags the camera can see
+  const frustum = new THREE.Frustum();
+  const projScreenMatrix = new THREE.Matrix4();
+  simCam.updateMatrixWorld();
+  projScreenMatrix.multiplyMatrices(simCam.projectionMatrix, simCam.matrixWorldInverse);
+  frustum.setFromProjectionMatrix(projScreenMatrix);
+
+  const visible = [];
+  tagGroup.children.forEach(child => {
+    if (child.userData && child.userData.tagId !== undefined) {
+      if (frustum.containsPoint(child.position)) {
+        // Also check distance
+        const dist = simCam.position.distanceTo(child.position);
+        visible.push({ id: child.userData.tagId, label: child.userData.label, dist });
+      }
+    }
+  });
+  return visible;
+}
+
+// ── Sidebar info ─────────────────────────────────────────────────────
+function updateSidebar() {
+  const frame = CONFIG.robot_frame;
+
+  document.getElementById('robotInfo').innerHTML = `
+    <div class="cam-card">
+      <table>
+        <tr><td>Width (Y):</td><td>${toDisplay(frame.width_inches * INCH)} ${unitLabel()}</td></tr>
+        <tr><td>Length (X):</td><td>${toDisplay(frame.length_inches * INCH)} ${unitLabel()}</td></tr>
+      </table>
+    </div>
+  `;
+
+  let cardsHtml = '';
+  CONFIG.cameras.forEach((cam, idx) => {
+    const colorHex = '#' + camColor(cam.name).toString(16).padStart(6, '0');
+    cardsHtml += `
+      <div class="cam-card">
+        <div class="cam-name" style="color:${colorHex}">${cam.name}</div>
+        <table>
+          <tr><td>X (fwd/back):</td><td>${toDisplay(cam.x_inches * INCH)} ${unitLabel()}</td></tr>
+          <tr><td>Y (left/right):</td><td>${toDisplay(cam.y_inches * INCH)} ${unitLabel()}</td></tr>
+          <tr><td>Z (height):</td><td>${toDisplay(cam.z_inches * INCH)} ${unitLabel()}</td></tr>
+          <tr><td>Pitch (up):</td><td>${cam.pitch_deg.toFixed(1)}&deg;</td></tr>
+          <tr><td>Yaw:</td><td>${cam.yaw_deg.toFixed(1)}&deg;</td></tr>
+          <tr><td>FOV:</td><td>${cam.fov_deg.toFixed(1)}&deg;</td></tr>
+        </table>
+        <h3>Simulated View</h3>
+        <canvas id="camSimCanvas_${idx}" class="cam-view-canvas"></canvas>
+        <div class="visible-tags" id="visibleTags_${idx}"></div>
+        <h3>WPI Transform3d</h3>
+        <div class="transform-block">${formatTransform(cam)}</div>
+      </div>
+    `;
+  });
+  document.getElementById('cameraCards').innerHTML = cardsHtml;
+
+  // Transform summary
+  let tfHtml = '';
+  CONFIG.cameras.forEach(cam => {
+    tfHtml += `
+      <div class="cam-card">
+        <div class="cam-name">${cam.name}</div>
+        <h3>robot_to_camera</h3>
+        <div class="transform-block">${formatTransform(cam)}</div>
+        <h3>camera_to_robot (inverse)</h3>
+        <div class="transform-block">${formatInverseTransform(cam)}</div>
+      </div>
+    `;
+  });
+  document.getElementById('transformInfo').innerHTML = tfHtml;
+}
+
+function formatTransform(cam) {
+  const xm = (cam.x_inches * INCH).toFixed(4);
+  const ym = (cam.y_inches * INCH).toFixed(4);
+  const zm = (cam.z_inches * INCH).toFixed(4);
+  const wpiPitch = -cam.pitch_deg;
+  return `Translation3d(${xm}, ${ym}, ${zm})
+Rotation3d.fromDegrees(
+  roll=${cam.roll_deg.toFixed(1)},
+  pitch=${wpiPitch.toFixed(1)},
+  yaw=${cam.yaw_deg.toFixed(1)}
+)`;
+}
+
+function formatInverseTransform(cam) {
+  const yawRad = cam.yaw_deg * Math.PI / 180;
+  const pitchRad = cam.pitch_deg * Math.PI / 180;
+  const x = cam.x_inches * INCH;
+  const y = cam.y_inches * INCH;
+  const z = cam.z_inches * INCH;
+
+  const cosY = Math.cos(-yawRad);
+  const sinY = Math.sin(-yawRad);
+  const cosP = Math.cos(pitchRad);
+  const sinP = Math.sin(pitchRad);
+
+  const ix = -(x * cosY * cosP + y * sinY * cosP + z * sinP);
+  const iy = -(-x * sinY + y * cosY);
+  const iz = -(-x * cosY * sinP - y * sinY * sinP + z * cosP);
+
+  return `Translation3d(${ix.toFixed(4)}, ${iy.toFixed(4)}, ${iz.toFixed(4)})
+Rotation3d.fromDegrees(
+  roll=${(-cam.roll_deg).toFixed(1)},
+  pitch=${cam.pitch_deg.toFixed(1)},
+  yaw=${(-cam.yaw_deg).toFixed(1)}
+)
+
+(Use .inverse() in code)`;
+}
+
+// ── Resize handling ──────────────────────────────────────────────────
+function resize() {
+  const containers = [
+    { el: document.getElementById('topViewContainer'), renderer: topRenderer, camera: topCamera, isOrtho: true },
+    { el: document.getElementById('perspViewContainer'), renderer: perspRenderer, camera: perspCamera, isOrtho: false },
+  ];
+
+  containers.forEach(({ el, renderer, camera, isOrtho }) => {
+    const w = el.clientWidth;
+    const h = el.clientHeight;
+    renderer.setSize(w, h);
+    if (isOrtho) {
+      const aspect = w / h;
+      const viewSize = 0.6;
+      camera.left = -viewSize * aspect;
+      camera.right = viewSize * aspect;
+      camera.top = viewSize;
+      camera.bottom = -viewSize;
+      camera.updateProjectionMatrix();
+    } else {
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+    }
+  });
+
+  resizeCamSimViews();
+}
+
+// ── Animation loop ───────────────────────────────────────────────────
+function animate() {
+  requestAnimationFrame(animate);
+  topControls.update();
+  perspControls.update();
+
+  topRenderer.render(scene, topCamera);
+  perspRenderer.render(scene, perspCamera);
+
+  // Render camera sim views
+  camSimViews.forEach(({ simCam, renderer }, idx) => {
+    renderer.render(scene, simCam);
+
+    // Update visible tag list
+    const visible = computeVisibleTags(simCam);
+    const el = document.getElementById(`visibleTags_${idx}`);
+    if (el) {
+      if (visible.length === 0) {
+        el.textContent = 'Visible tags: none';
+        el.style.color = '#886';
+      } else {
+        const tagStrs = visible.map(t =>
+          `ID${t.id} (${t.label}, ${toDisplay(t.dist)} ${unitLabel()})`
+        );
+        el.textContent = `Visible tags: ${tagStrs.join(', ')}`;
+        el.style.color = '#8c8';
+      }
+    }
+  });
+}
+
+// ── Init ─────────────────────────────────────────────────────────────
+buildScene();
+updateSidebar();
+
+// Setup cam sim views after sidebar DOM is created
+setupCamSimViews();
+
+resize();
+window.addEventListener('resize', resize);
+
+document.getElementById('unitSelect').addEventListener('change', (e) => {
+  currentUnit = e.target.value;
+  updateSidebar();
+  // Re-setup sim canvases since sidebar HTML was rebuilt
+  camSimViews.length = 0;
+  setupCamSimViews();
+  resizeCamSimViews();
+});
+
+document.getElementById('tagDistSelect').addEventListener('change', (e) => {
+  tagDistance = parseFloat(e.target.value);
+  buildAprilTags();
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+  topCamera.position.set(0, 0, 2);
+  topCamera.zoom = 1;
+  topCamera.updateProjectionMatrix();
+  topControls.reset();
+
+  perspCamera.position.set(0.8, -0.6, 0.5);
+  perspControls.target.set(0, 0, 0.1);
+  perspControls.update();
+});
+
+// ── Mouse coordinate readout ─────────────────────────────────────────
+const raycaster = new THREE.Raycaster();
+const groundPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);  // Z=0 ground plane
+const mouseNDC = new THREE.Vector2();
+const intersectPt = new THREE.Vector3();
+
+topCanvas.addEventListener('mousemove', (e) => {
+  const rect = topCanvas.getBoundingClientRect();
+  mouseNDC.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  mouseNDC.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+  raycaster.setFromCamera(mouseNDC, topCamera);
+  if (raycaster.ray.intersectPlane(groundPlane, intersectPt)) {
+    const el = document.getElementById('topCoords');
+    el.textContent = `X: ${toDisplay(intersectPt.x)} ${unitLabel()}  Y: ${toDisplay(intersectPt.y)} ${unitLabel()}`;
+  }
+});
+
+topCanvas.addEventListener('mouseleave', () => {
+  document.getElementById('topCoords').textContent = 'X: -- Y: --';
+});
+
+perspCanvas.addEventListener('mousemove', (e) => {
+  const rect = perspCanvas.getBoundingClientRect();
+  mouseNDC.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  mouseNDC.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+  raycaster.setFromCamera(mouseNDC, perspCamera);
+  if (raycaster.ray.intersectPlane(groundPlane, intersectPt)) {
+    const el = document.getElementById('perspCoords');
+    el.textContent = `X: ${toDisplay(intersectPt.x)} ${unitLabel()}  Y: ${toDisplay(intersectPt.y)} ${unitLabel()}  Z: 0`;
+  }
+});
+
+perspCanvas.addEventListener('mouseleave', () => {
+  document.getElementById('perspCoords').textContent = 'X: -- Y: -- Z: --';
+});
+
+animate();
+</script>
+</body>
+</html>

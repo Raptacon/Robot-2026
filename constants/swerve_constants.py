@@ -11,6 +11,7 @@ import rev
 
 # Internal imports
 from .robot_constants import RobotConstants
+from .robot_geometry import SWERVE_FL, SWERVE_FR, SWERVE_BL, SWERVE_BR
 
 
 class SwerveModuleName(StrEnum):
@@ -31,15 +32,15 @@ class SwerveModuleName(StrEnum):
 
 
 class SwerveDriveConsts(RobotConstants):
-    # where the wheel is compared to the center of the robot in meters
-    moduleFrontLeftX: float = 0.264
-    moduleFrontLeftY: float = 0.287
-    moduleFrontRightX: float = 0.264
-    moduleFrontRightY: float = -0.287
-    moduleBackLeftX: float = -0.264
-    moduleBackLeftY: float = 0.287
-    moduleBackRightX: float = -0.264
-    moduleBackRightY: float = -0.287
+    # Module positions derived from constants/robot_geometry.py (single source)
+    moduleFrontLeftX: float = SWERVE_FL.X()
+    moduleFrontLeftY: float = SWERVE_FL.Y()
+    moduleFrontRightX: float = SWERVE_FR.X()
+    moduleFrontRightY: float = SWERVE_FR.Y()
+    moduleBackLeftX: float = SWERVE_BL.X()
+    moduleBackLeftY: float = SWERVE_BL.Y()
+    moduleBackRightX: float = SWERVE_BR.X()
+    moduleBackRightY: float = SWERVE_BR.Y()
 
     # inverts if the module or gyro does not rotate counterclockwise positive
     invertGyro: bool = False
