@@ -193,6 +193,6 @@ class FeedConstants:
     name = "feed"
     upperMotorId = 35
     lowerMotorId = 36
-    upperInverted = False
-    lowerInverted = False
+    upperInverted = True
+    lowerInverted = True
     currentLimitAmps = 30
