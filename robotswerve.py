@@ -20,11 +20,9 @@ import constants.swerve_constants as consts
 from data.telemetry import Telemetry
 from commands.auto.pid_to_angle import PIDAlignToTarget
 from commands.default_swerve_drive import DefaultDrive
-from commands.integration_commands import (
-    toggle_intake_deploy,
-    toggle_spinup,
-    run_hopper_and_feed,
-)
+from commands.ball_transport import run_roller_while_held, run_hopper_and_feed
+from commands.intake_commands import toggle_intake_deploy
+from commands.shooter_commands import toggle_spinup
 import subsystem
 import subsystem.drivetrain.swerve_drivetrain
 import subsystem.mechanisms.shooter
@@ -272,16 +270,9 @@ class RobotSwerve:
             toggle_intake_deploy(self.intake_position)
         )
 
-        # Integration: intake rollers while held (Operator B)
-        intake_roller_btn = self.factory.getButton("integration.hold_intake_roller")
-        intake_roller_btn.onTrue(
-            commands2.cmd.runOnce(
-                lambda: self.intake_roller.setPower(consts.IntakeRollerConstants.defaultPower),
-                self.intake_roller
-            )
-        )
-        intake_roller_btn.onFalse(
-            commands2.cmd.runOnce(self.intake_roller.stop, self.intake_roller)
+        # Ball transport: intake rollers while held (Operator B)
+        self.factory.getButton("integration.hold_intake_roller").whileTrue(
+            run_roller_while_held(self.intake_roller)
         )
 
         # Integration: flywheel spinup toggle (Operator X)
