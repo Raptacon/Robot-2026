@@ -99,6 +99,21 @@ class IntakeSubsystem(commands2.SubsystemBase):
     def isRollerOff(self) -> bool:
         """True when roller velocity is below the stopped threshold."""
         return abs(self.rollerMotorEncoder.getVelocity()) <= self.rollerStoppedThreshold
+    
+    def isIntakeDeployed(self) -> bool:
+        """True when Intake is deployed"""
+        return self.pivotMotorEncoder.getPosition() >= self.pivotDeployed
+    
+    def isIntakeStowed(self) -> bool:
+        """True when Intake is stowed"""
+        return self.pivotMotorEncoder.getPosition() <= self.pivotStowed
+    
+    def toggleIntakeDeployment(self) -> bool:
+        """Toggles between Intake Deployment and stow; If intake is deployed, stow it, and vice versa."""
+        if self.isIntakeStowed():
+            self.deployIntake()
+        if self.isIntakeDeployed():
+            self.stowIntake()
 
     def stowIntake(self):
         if self.pivotSetpoint >= 0 and self.pivotMotorEncoder.getPosition() >= self.pivotStowed:
