@@ -70,9 +70,8 @@ actions:
   hopper:
     toggle_hopper:
       description: Turn the hopper on or off
-      input_type: boolean_trigger
+      input_type: button
       trigger_mode: toggle_on_true
-      threshold: 0.5
     unjam_hopper:
       description: Spin the hopper back and forth
       input_type: button
@@ -119,8 +118,9 @@ actions:
       trigger_mode: on_true
     run_hopper_feed:
       description: Run hopper at 50% and feed at 30% while held
-      input_type: button
+      input_type: boolean_trigger
       trigger_mode: on_true
+      threshold: 0.5
 
 
 controllers:
@@ -131,8 +131,8 @@ controllers:
       left_stick_x: [drivetrain.translate_y]
       right_stick_x: [drivetrain.rotate]
       right_bumper: [drivetrain.robot_relative]
-      left_bumper: [integration.run_hopper_feed]
-      left_trigger: [hopper.toggle_hopper]
+      left_bumper: [hopper.toggle_hopper]
+      left_trigger: [integration.run_hopper_feed]
       back_button: [drivetrain.cancel_all]
       right_trigger: [drivetrain.auto_align]
       y_button: [drivetrain.speed_toggle]
