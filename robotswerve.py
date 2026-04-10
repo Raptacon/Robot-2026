@@ -51,7 +51,7 @@ class RobotSwerve:
         self.hood = subsystem.mechanisms.shooter.createHood(consts.HoodConstants, HoodConfig)
         self.hood.setShooter(self.shooter)
         self.hopper = subsystem.Hopper()
-        self.intake = subsystem.IntakeSubsystem()
+        self.intake_position = subsystem.IntakePosition()
         self.intake_roller = subsystem.IntakeRoller()
 
         # Alliance instantiation
@@ -82,8 +82,8 @@ class RobotSwerve:
 
         # Telemetry setup
         wpilib.SmartDashboard.putNumber("Drivetrain speed", self._drive_scale_fast)
-        self.enableTelemetry = wpilib.SmartDashboard.getBoolean("enableTelemetry", True)
-        if self.enableTelemetry:
+        self._enable_telemetry = wpilib.SmartDashboard.getBoolean("enableTelemetry", True)
+        if self._enable_telemetry:
             self.telemetry = Telemetry(
                 driveTrain=self.drivetrain,
                 driverController=self.factory.getController(0),
@@ -112,7 +112,7 @@ class RobotSwerve:
 
 
     def robotPeriodic(self):
-        if self.enableTelemetry and self.telemetry:
+        if self._enable_telemetry and self.telemetry:
             self.telemetry.runDefaultDataCollections()
 
         self.field.setRobotPose(self.drivetrain.current_pose())
@@ -269,7 +269,7 @@ class RobotSwerve:
 
         # Integration: toggle intake deploy/retract (Operator A)
         self.factory.getButton("integration.toggle_intake_deploy").onTrue(
-            toggle_intake_deploy(self.intake)
+            toggle_intake_deploy(self.intake_position)
         )
 
         # Integration: intake rollers while held (Operator B)
@@ -323,10 +323,10 @@ class RobotSwerve:
         """
         json_object = None
         home = str(Path.home()) + os.path.sep
-        releaseFile = home + 'py' + os.path.sep + "deploy.json"
+        release_file = home + 'py' + os.path.sep + "deploy.json"
         try:
             # Read from ~/deploy.json
-            with open(releaseFile, "r") as openfile:
+            with open(release_file, "r") as openfile:
                 json_object = json.load(openfile)
                 print(json_object)
                 print(type(json_object))

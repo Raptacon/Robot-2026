@@ -1,5 +1,5 @@
-from .intakeactions import IntakeSubsystem
 from .mechanisms.hopper import Hopper
-from .mechanisms.intake_roller import IntakeRoller
+from .mechanisms.intake.intake_position import IntakePosition
+from .mechanisms.intake.intake_roller import IntakeRoller
 
-__all__ = ["Hopper", "IntakeRoller", "IntakeSubsystem"]
+__all__ = ["Hopper", "IntakePosition", "IntakeRoller"]

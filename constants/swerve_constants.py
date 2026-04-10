@@ -144,8 +144,16 @@ class IntakePivotConstants:
     name = "intake_pivot"
     canId = 20
     inverted = False
+    motorClass = rev.SparkFlex
     currentLimitAmps = 30
-    defaultSpeed = 0.15
+    # Degrees per motor rotation — measure or calculate from gear ratio
+    positionConversionFactor = 1.0  # TODO: calibrate on hardware
+    # Mechanical safety boundaries (degrees)
+    minSoftLimit = 0.0
+    maxSoftLimit = 155.0
+    # Target positions for commands (degrees)
+    stowedPosition = 0.0
+    deployedPosition = 155.0
 
 
 class IntakeRollerConstants:

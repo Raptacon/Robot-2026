@@ -1,4 +1,5 @@
 from .hopper import Hopper
-from .intake_roller import IntakeRoller
+from .intake.intake_position import IntakePosition
+from .intake.intake_roller import IntakeRoller
 
-__all__ = ["Hopper", "IntakeRoller"]
+__all__ = ["Hopper", "IntakePosition", "IntakeRoller"]
