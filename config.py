@@ -51,6 +51,14 @@ class OperatorRobotConfig:
 
     intake_pivot_pid: Tuple[float] = [0, 0, 0, 1 / 565]
 
+class HoodConfig:
+    # PID gains for hood position control (WPILib PIDController)
+    hoodPID = (0.3, 0.02, 0)
+    # ArmFeedforward gains: (kS, kG, kV, kA)
+    hoodFeedforward = (0.4, 0.04, 0, 0)
+    # Offset in degrees from hood 0-position to true horizontal.
+    horizontalOffsetDegrees = 0.0
+
 class ShooterConfig:
     # Configs for shooter
     shooterFeedMotorPIDF = (0, 0, 0, 1 / 473)

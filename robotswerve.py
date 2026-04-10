@@ -17,11 +17,14 @@ from typing import Callable
 import wpimath
 
 # Internal imports
+from config import HoodConfig
+from constants.swerve_constants import HoodConstants
 from data.telemetry import Telemetry
 from commands.default_swerve_drive import DefaultDrive
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
 from subsystem.shooter import Shooter
 from subsystem.ballpit import BallPitHopper as Hopper
+from subsystem.mechanisms.shooter.hood import createHood
 from utils.input import InputFactory
 
 # Third-party imports
@@ -46,6 +49,7 @@ class RobotSwerve:
         self.shooter = Shooter()
         self.hopper = Hopper()
         self.intake = IntakeSubsystem()
+        self.hood = createHood(HoodConstants, HoodConfig)
 
         # Alliance instantiation
         self.updateAlliance()
