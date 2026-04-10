@@ -141,6 +141,7 @@ class RobotSwerve:
 
         self.hopper.stop()
         self.intake_roller.stop()
+        self.intake_position.disable()
 
     def disabledPeriodic(self):
         pass
@@ -230,20 +231,20 @@ class RobotSwerve:
         self.rotate = self.factory.getAnalog("drivetrain.rotate")
         self.robot_relative_btn = self.factory.getRawButton("drivetrain.robot_relative")
 
-        # Cancel-all: event-driven via Trigger instead of polling
-        self.factory.getButton("drivetrain.cancel_all").onTrue(
+        # Cancel-all: emergency stop all commands
+        self.factory.getButton("drivetrain.cancel_all").bind(
             commands2.cmd.runOnce(
                 lambda: commands2.CommandScheduler.getInstance().cancelAll()
             )
         )
 
-        # Speed toggle: Y button switches between slow and fast scale
-        self.factory.getButton("drivetrain.speed_toggle").onTrue(
+        # Speed toggle: switch between slow and fast drive scale
+        self.factory.getButton("drivetrain.speed_toggle").bind(
             commands2.cmd.runOnce(self._toggle_drive_scale)
         )
 
-        # Auto-rotate: rotate the drivetrain until it faces
-        self.factory.getButton("drivetrain.auto_align").whileTrue(
+        # Auto-rotate: align drivetrain to target while held
+        self.factory.getButton("drivetrain.auto_align").bind(
             commands.auto.pid_to_angle.PIDAlignToTarget(
                 self.drivetrain,
                 lambda: determineShooterTargets2026(self.drivetrain.current_pose, self.alliance),
@@ -255,48 +256,44 @@ class RobotSwerve:
         )
 
         # Shooter inputs
-        self.factory.getButton("shooter.increment_RPM").onTrue(
-            commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(consts.PancakeShooterConstants.shooterOffsetDelta), self.shooter)
+        self.factory.getButton("shooter.increment_RPM").bind(
+            commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(consts.ShooterConstants.offsetDelta), self.shooter)
         )
-        self.factory.getButton("shooter.decrement_RPM").onTrue(
-            commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(-consts.PancakeShooterConstants.shooterOffsetDelta), self.shooter)
+        self.factory.getButton("shooter.decrement_RPM").bind(
+            commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(-consts.ShooterConstants.offsetDelta), self.shooter)
         )
-        self.factory.getButton("shooter.reset_RPM_offset").onTrue(
+        self.factory.getButton("shooter.reset_RPM_offset").bind(
             commands2.cmd.runOnce(self.shooter.resetOffset, self.shooter)
         )
-        self.factory.getButton("shooter.cycle_shooter_fixed").onTrue(
+        self.factory.getButton("shooter.cycle_shooter_fixed").bind(
             commands2.cmd.runOnce(self.shooter.cycleFixedShootingPosition, self.shooter)
         )
 
         # Hood input — right trigger analog mapped to hood angle
         self.hood_angle_input = self.factory.getAnalog("hood.angle")
 
-        # Hopper toggle: on/off via left bumper
-        hopper_btn = self.factory.getButton("hopper.toggle_hopper")
-        hopper_btn.onTrue(
-            commands2.cmd.runOnce(lambda: self.hopper.setPower(consts.HopperConstants.defaultPower), self.hopper)
-        )
-        hopper_btn.onFalse(
-            commands2.cmd.runOnce(self.hopper.stop, self.hopper)
+        # Hopper toggle: on/off via left bumper (toggle_on_true in YAML)
+        self.factory.getButton("hopper.toggle_hopper").bind(
+            commands.ball_transport.run_hopper_while_active(self.hopper)
         )
 
-        # Intake: toggle deploy/retract (Operator A)
-        self.factory.getButton("intake.toggle_deploy").onTrue(
+        # Intake: toggle deploy/retract
+        self.factory.getButton("intake.toggle_deploy").bind(
             commands.intake_commands.toggle_intake_deploy(self.intake_position)
         )
 
-        # Ball transport: roller while held (Operator B)
-        self.factory.getButton("ball_transport.hold_roller").whileTrue(
+        # Ball transport: roller while held
+        self.factory.getButton("ball_transport.hold_roller").bind(
             commands.ball_transport.run_roller_while_held(self.intake_roller)
         )
 
-        # Shooter: flywheel spinup toggle (Operator X)
-        self.factory.getButton("shooter.spinup_toggle").onTrue(
+        # Shooter: flywheel spinup toggle
+        self.factory.getButton("shooter.spinup_toggle").bind(
             commands.shooter_commands.toggle_spinup(self.shooter, self.hood)
         )
 
-        # Ball transport: hopper + feed while held (Driver LT)
-        self.factory.getButton("ball_transport.run_hopper_feed").whileTrue(
+        # Ball transport: hopper + feed while held
+        self.factory.getButton("ball_transport.run_hopper_feed").bind(
             commands.ball_transport.run_hopper_and_feed(self.hopper, self.feed)
         )
 

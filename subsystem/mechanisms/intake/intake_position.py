@@ -279,6 +279,8 @@ class IntakePosition(Subsystem):
                     self._min_output_voltage,
                     min(self._max_output_voltage, pid_output + feedforward))
                 self.motor.setVoltage(output)
+        else:
+            self.motor.stopMotor()
 
         self._updateTelemetry()
 

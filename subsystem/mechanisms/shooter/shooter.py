@@ -5,7 +5,7 @@ from typing import Callable
 
 # Internal imports
 from config import ShooterConfig
-from constants.swerve_constants import PancakeShooterConstants
+from constants.swerve_constants import ShooterConstants
 
 # Third-party imports
 from commands2 import Subsystem
@@ -99,23 +99,23 @@ class Shooter(Subsystem):
 
         # Flywheel motors
         self.leadMotor = rev.SparkFlex(
-            PancakeShooterConstants.flywheelLeadMotorId,
+            ShooterConstants.flywheelLeadMotorId,
             rev.SparkLowLevel.MotorType.kBrushless,
         )
         self.followerMotor = rev.SparkFlex(
-            PancakeShooterConstants.flywheelFollowerMotorId,
+            ShooterConstants.flywheelFollowerMotorId,
             rev.SparkLowLevel.MotorType.kBrushless,
         )
 
         self._configureMotor(
             self.leadMotor,
             ShooterConfig.shooterFlywheelMotorPIDF,
-            PancakeShooterConstants.flywheelLeadInverted,
+            ShooterConstants.flywheelLeadInverted,
         )
         self._configureMotor(
             self.followerMotor,
             ShooterConfig.shooterFlywheelMotorPIDF,
-            PancakeShooterConstants.flywheelFollowerInverted,
+            ShooterConstants.flywheelFollowerInverted,
             leader=self.leadMotor,
         )
 
@@ -125,6 +125,9 @@ class Shooter(Subsystem):
     @staticmethod
     def _configureMotor(motor, pidf, invert, leader=None):
         configs = rev.SparkBaseConfig()
+        configs.setIdleMode(rev.SparkBaseConfig.IdleMode.kCoast)
+        configs.voltageCompensation(12.0)
+        configs.smartCurrentLimit(ShooterConstants.currentLimitAmps)
         if leader is not None:
             configs.follow(leader=leader, invert=invert)
         else:

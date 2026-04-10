@@ -9,7 +9,7 @@ import ntcore
 import rev
 import wpilib
 
-from constants.swerve_constants import PancakeShooterConstants
+from constants.swerve_constants import FeedConstants
 
 
 class Feed(Subsystem):
@@ -24,12 +24,12 @@ class Feed(Subsystem):
 
         # Upper feed path motor
         self.upperMotor = rev.SparkMax(
-            PancakeShooterConstants.feedUpperMotorId,
+            FeedConstants.upperMotorId,
             rev.SparkLowLevel.MotorType.kBrushless,
         )
         # Lower feed path motor
         self.lowerMotor = rev.SparkMax(
-            PancakeShooterConstants.feedLowerMotorId,
+            FeedConstants.lowerMotorId,
             rev.SparkLowLevel.MotorType.kBrushless,
         )
 
@@ -38,16 +38,16 @@ class Feed(Subsystem):
 
         self._configureMotor(
             self.upperMotor,
-            PancakeShooterConstants.feedUpperInverted,
+            FeedConstants.upperInverted,
         )
         self._configureMotor(
             self.lowerMotor,
-            PancakeShooterConstants.feedLowerInverted,
+            FeedConstants.lowerInverted,
         )
 
         # NT telemetry under /subsystems/feed/
         table = ntcore.NetworkTableInstance.getDefault().getTable(
-            f"subsystems/{PancakeShooterConstants.name}"
+            f"subsystems/{FeedConstants.name}"
         )
         self._nt_upper_power = table.getDoubleTopic("upper_power").publish()
         self._nt_lower_power = table.getDoubleTopic("lower_power").publish()
@@ -67,15 +67,16 @@ class Feed(Subsystem):
             wpilib.Color8Bit(128, 128, 128)
         )
         wpilib.SmartDashboard.putData(
-            f"{PancakeShooterConstants.name}/mechanism", self._mech
+            f"{FeedConstants.name}/mechanism", self._mech
         )
 
-        self.setName(PancakeShooterConstants.name)
+        self.setName(FeedConstants.name)
 
     @staticmethod
     def _configureMotor(motor, invert):
         configs = rev.SparkBaseConfig()
         configs.inverted(invert)
+        configs.smartCurrentLimit(FeedConstants.currentLimitAmps)
         motor.configure(
             configs,
             rev.ResetMode.kResetSafeParameters,

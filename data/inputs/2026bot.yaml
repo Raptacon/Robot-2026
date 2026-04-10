@@ -50,18 +50,6 @@ actions:
       description: Set the manual flywheel RPM adjustment back to zero
       input_type: button
       trigger_mode: on_true
-    cycle_flywheel_mode:
-      description: Switch the mode in which the RPM for the flywhel is determined
-      input_type: button
-      trigger_mode: on_true
-    toggle_flywheel:
-      description: Turn the flywheel on or off
-      input_type: button
-      trigger_mode: on_true
-    toggle_feed:
-      description: Turn the feed motor on or off
-      input_type: button
-      trigger_mode: on_true
     cycle_shooter_fixed:
       description: Cycle through fixed position options for RPM
       input_type: boolean_trigger
@@ -99,11 +87,11 @@ actions:
     hold_roller:
       description: Run intake rollers while button is held
       input_type: button
-      trigger_mode: on_true
+      trigger_mode: while_true
     run_hopper_feed:
       description: Run hopper at 50% and feed at 30% while held
       input_type: boolean_trigger
-      trigger_mode: on_true
+      trigger_mode: while_true
       threshold: 0.5
 
 
@@ -122,9 +110,6 @@ controllers:
       y_button: [drivetrain.speed_toggle]
       pov_up: [intake.stow_intake]
       pov_down: [intake.deploy_intake]
-      x_button: [intake.deactivate_roller]
-      b_button: [intake.activate_roller]
-      a_button: [intake.ramp_intake]
 
   1:
     name: Operator

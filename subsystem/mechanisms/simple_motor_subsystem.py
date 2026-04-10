@@ -39,6 +39,8 @@ class SimpleMotorSubsystem(Subsystem):
         )
         config = rev.SparkBaseConfig()
         config.inverted(constants.inverted)
+        current_limit = getattr(constants, 'currentLimitAmps', 30)
+        config.smartCurrentLimit(current_limit)
         self.motor.configure(
             config,
             rev.ResetMode.kResetSafeParameters,

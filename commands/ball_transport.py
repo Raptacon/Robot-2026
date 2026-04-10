@@ -18,6 +18,15 @@ def run_roller_while_held(intake_roller):
     )
 
 
+def run_hopper_while_active(hopper):
+    """Return a startEnd command that runs the hopper while the trigger is active."""
+    return commands2.cmd.startEnd(
+        lambda: hopper.setPower(consts.HopperConstants.defaultPower),
+        hopper.stop,
+        hopper,
+    )
+
+
 def run_hopper_and_feed(hopper, feed):
     """Return a command that runs hopper at 50% and feed at 30% while held."""
     def _start():

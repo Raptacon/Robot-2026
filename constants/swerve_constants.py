@@ -171,24 +171,28 @@ class HopperConstants:
     defaultPower = 0.5
 
 
-class PancakeShooterConstants:
-    name = "feed"
+class ShooterConstants:
+    name = "shooter"
     flywheelLeadMotorId = 32
     flywheelFollowerMotorId = 33
-    hoodMotorId = 34
-    feedUpperMotorId = 35
-    feedLowerMotorId = 36
     flywheelLeadInverted = False
     flywheelFollowerInverted = True
-    feedUpperInverted = False
-    feedLowerInverted = False
-    shooterOffsetDelta = 100
-    shooterFeedPercentOfFlywheel = 0.9
-    shooterFixedRPM = 6000
-    # TODO: Get rest and max positons for shooter
-    shooterHoodRestPosition = 0
-    shooterHoodMaxPosition = 1
-    shooterHoodPosition1 = 0.25
-    shooterHoodPosition2 = 0.5
-    shooterHoodPosition3 = 0.75
-    shooterPositionConversionFactor = 1 / 1.5
+    currentLimitAmps = 40
+    offsetDelta = 100
+    fixedRPM = 6000
+    # TODO: Get rest and max positions for shooter
+    hoodRestPosition = 0
+    hoodMaxPosition = 1
+    hoodPosition1 = 0.25
+    hoodPosition2 = 0.5
+    hoodPosition3 = 0.75
+    positionConversionFactor = 1 / 1.5
+
+
+class FeedConstants:
+    name = "feed"
+    upperMotorId = 35
+    lowerMotorId = 36
+    upperInverted = False
+    lowerInverted = False
+    currentLimitAmps = 30
