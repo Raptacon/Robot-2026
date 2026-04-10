@@ -1,4 +1,5 @@
 # Native imports
+import logging
 import numpy as np
 from enum import StrEnum
 
@@ -90,6 +91,13 @@ class Shooter(Subsystem):
 
         self.leadEncoder = self.leadMotor.getEncoder()
         self.leadPID = self.leadMotor.getClosedLoopController()
+
+        # Fault monitoring (temp debug)
+        self._log = logging.getLogger("Shooter")
+        self._last_lead_faults = 0
+        self._last_follower_faults = 0
+        self._last_lead_sticky = 0
+        self._last_follower_sticky = 0
 
     @staticmethod
     def _configureMotor(motor, pidf, invert, leader=None):
@@ -198,3 +206,37 @@ class Shooter(Subsystem):
         sd.putNumber("Shooter_Hood_Angle", self.getHoodAngle())
         sd.putNumber("Shooter_Velocity", self.leadEncoder.getVelocity())
         sd.putBoolean("Shooter_Range_Mode", self._range_rpm is not None)
+
+        # Temp debug: log new faults
+        self._checkFaults("lead", self.leadMotor,
+                          self._last_lead_faults, self._last_lead_sticky)
+        self._checkFaults("follower", self.followerMotor,
+                          self._last_follower_faults, self._last_follower_sticky)
+
+    def _checkFaults(self, name, motor, last_faults, last_sticky):
+        faults = motor.getFaults()
+        sticky = motor.getStickyFaults()
+        raw = faults.rawBits
+        sticky_raw = sticky.rawBits
+        if raw != last_faults:
+            self._log.warning(
+                "%s NEW FAULTS: can=%s sensor=%s temperature=%s "
+                "gateDriver=%s escEeprom=%s motorType=%s other=%s (raw=0x%X)",
+                name, faults.can, faults.sensor, faults.temperature,
+                faults.gateDriver, faults.escEeprom, faults.motorType,
+                faults.other, raw)
+            if name == "lead":
+                self._last_lead_faults = raw
+            else:
+                self._last_follower_faults = raw
+        if sticky_raw != last_sticky:
+            self._log.warning(
+                "%s NEW STICKY FAULTS: can=%s sensor=%s temperature=%s "
+                "gateDriver=%s escEeprom=%s motorType=%s other=%s (raw=0x%X)",
+                name, sticky.can, sticky.sensor, sticky.temperature,
+                sticky.gateDriver, sticky.escEeprom, sticky.motorType,
+                sticky.other, sticky_raw)
+            if name == "lead":
+                self._last_lead_sticky = sticky_raw
+            else:
+                self._last_follower_sticky = sticky_raw
