@@ -178,7 +178,7 @@ class PancakeShooterConstants:
     feedLowerInverted = True
     shooterOffsetDelta = 100
     shooterFeedPercentOfFlywheel = 0.9
-    shooterFixedRPM = 6000
+    shooterFixedRPM = 7000
     # TODO: Get rest and max positons for shooter
     shooterHoodRestPosition = 0
     shooterHoodMaxPosition = 1
