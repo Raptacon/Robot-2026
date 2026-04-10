@@ -162,7 +162,7 @@ class RobotSwerve:
         # DefaultDriveCircular: remaps circular stick input so diagonals
         #   reach full speed (use when stick hardware caps diagonal ~70%)
         self.drivetrain.setDefaultCommand(
-            commands.default_swerve_drive.DefaultDrive(  # TODO: switch back to DefaultDriveCircular
+            commands.default_swerve_drive.DefaultDrive(
                 self.drivetrain,
                 self.translate_x,
                 self.translate_y,
@@ -184,7 +184,7 @@ class RobotSwerve:
         commands2.CommandScheduler.getInstance().cancelAll()
         # See teleopInit for DefaultDrive vs DefaultDriveCircular notes
         self.drivetrain.setDefaultCommand(
-            commands.default_swerve_drive.DefaultDrive(  # TODO: switch back to DefaultDriveCircular
+            commands.default_swerve_drive.DefaultDrive(
                 self.drivetrain,
                 self.translate_x,
                 self.translate_y,
@@ -193,6 +193,14 @@ class RobotSwerve:
             )
         )
         commands2.cmd.run(lambda: self.drivetrain.drive(2, 0, 0, False), self.drivetrain).withTimeout(5).schedule()
+
+        # Log raw vs shaped vs circle-to-square stick values to CSV
+        # Move sticks through full range, then disable to flush file
+        commands.log_stick_transforms.LogStickTransforms(
+            self.translate_x,
+            self.translate_y,
+            self.rotate,
+        ).schedule()
 
         if self.hood:
             self.hood.setDefaultCommand(
