@@ -18,14 +18,8 @@ from typing import Callable
 from config import HoodConfig
 import constants.swerve_constants as consts
 from data.telemetry import Telemetry
-import commands.auto.pid_to_angle
-import commands.ball_transport
-import commands.default_swerve_drive
-import commands.intake_commands
-import commands.shooter_commands
+import commands
 import subsystem
-import subsystem.drivetrain.swerve_drivetrain
-import subsystem.mechanisms.shooter
 from utils.input import InputFactory
 from utils.odometry_logic_2026 import determineShooterTargets2026
 
