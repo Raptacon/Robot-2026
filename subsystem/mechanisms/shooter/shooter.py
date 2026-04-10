@@ -293,6 +293,15 @@ class Shooter(Subsystem):
             newRPM = 0
             self.leadMotor.setVoltage(0)
 
+        # Debug: print once when RPM changes
+        if not hasattr(self, '_last_debug_rpm'):
+            self._last_debug_rpm = 0
+        if newRPM != self._last_debug_rpm:
+            print(f"[SHOOTER] periodic: newRPM={newRPM} targetRPM={self.targetRPM} "
+                  f"offset={self.offsetAmount} active={self.flywheelActive} "
+                  f"mode={self.flywheelMode} fixedPos={self.fixedRPMPosition}")
+            self._last_debug_rpm = newRPM
+
         wpilib.SmartDashboard.putNumber("Shooter_RPM", newRPM)
         wpilib.SmartDashboard.putNumber("Shooter_Offset", self.offsetAmount)
         wpilib.SmartDashboard.putNumber("Shooter_Offset_Delta", self.offsetDelta)

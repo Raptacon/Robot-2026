@@ -14,10 +14,15 @@ def toggle_spinup(shooter, hood):
     """
     def _toggle():
         shooter.toggleFlywheelActive()
+        print(f"[SPINUP] flywheelActive={shooter.flywheelActive} "
+              f"fixedRPM={ShooterConstants.fixedRPM}")
         if shooter.flywheelActive:
             shooter.setRPM(ShooterConstants.fixedRPM)
+            print(f"[SPINUP] setRPM({ShooterConstants.fixedRPM}) called, "
+                  f"targetRPM={shooter.targetRPM}")
             hood.setAngleDegrees(_SPINUP_HOOD_ANGLE)
         else:
             shooter.setRPM(0)
+            print("[SPINUP] setRPM(0) called")
 
     return commands2.cmd.runOnce(_toggle, shooter, hood)
