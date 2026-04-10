@@ -18,8 +18,8 @@ class MyRobot(commands2.TimedCommandRobot):
     has an implementation of (self) -> None:
     which runs the scheduler for you
     """
-    # 50 ms default period
-    kDefaultPeriod: typing.ClassVar[float] = 50.0
+    # 20 ms default period (50 Hz)
+    kDefaultPeriod: typing.ClassVar[float] = 20.0
     autonomousCommand: typing.Optional[commands2.Command] = None
 
     def __init__(self) -> None:
