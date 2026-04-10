@@ -49,13 +49,12 @@ class RobotSwerve:
         # Subsystem instantiation
         self.drivetrain = subsystem.drivetrain.swerve_drivetrain.SwerveDrivetrain()
         # TODO: Re-enable mechanisms after input delay debugging
-        # self.shooter = subsystem.mechanisms.shooter.Shooter()
-        # self.feed = subsystem.mechanisms.shooter.Feed()
-        # self.hood = subsystem.mechanisms.shooter.createHood(consts.HoodConstants, HoodConfig)
-        # self.hood.setShooter(self.shooter)
-        # self.hopper = subsystem.Hopper()
-        # self.intake_position = subsystem.IntakePosition()
-        # self.intake_roller = subsystem.IntakeRoller()
+        self.shooter = None  # subsystem.mechanisms.shooter.Shooter()
+        self.feed = None  # subsystem.mechanisms.shooter.Feed()
+        self.hood = None  # subsystem.mechanisms.shooter.createHood(consts.HoodConstants, HoodConfig)
+        self.hopper = None  # subsystem.Hopper()
+        self.intake_position = None  # subsystem.IntakePosition()
+        self.intake_roller = None  # subsystem.IntakeRoller()
         # Alliance instantiation
         self.updateAlliance()
 
@@ -128,12 +127,17 @@ class RobotSwerve:
         self.drivetrain.set_motor_stop_modes(to_drive=True, to_break=True, all_motor_override=True, burn_flash=False)
         self.drivetrain.stop_driving()
 
-        # self.shooter.setRPM(0)
-        # self.shooter.resetOffset()
-        # self.feed.stop()
-        # self.hopper.stop()
-        # self.intake_roller.stop()
-        # self.intake_position.disable()
+        if self.shooter:
+            self.shooter.setRPM(0)
+            self.shooter.resetOffset()
+        if self.feed:
+            self.feed.stop()
+        if self.hopper:
+            self.hopper.stop()
+        if self.intake_roller:
+            self.intake_roller.stop()
+        if self.intake_position:
+            self.intake_position.disable()
 
     def disabledPeriodic(self):
         pass
@@ -167,8 +171,8 @@ class RobotSwerve:
             )
         )
 
-        # # Hood default: set angle from shooter's distance-based lookup
-        # self.hood.setDefaultCommand(self.hood.autoAngleCommand())
+        if self.hood:
+            self.hood.setDefaultCommand(self.hood.autoAngleCommand())
             
 
     def teleopPeriodic(self):
@@ -190,9 +194,9 @@ class RobotSwerve:
         )
         commands2.cmd.run(lambda: self.drivetrain.drive(2, 0, 0, False), self.drivetrain).withTimeout(5).schedule()
 
-        # # Hood manual test: trigger analog overrides safety for manual control
-        # self.hood.setDefaultCommand(
-        #     self.hood.manualTestCommand(self.hood_angle_input))
+        if self.hood:
+            self.hood.setDefaultCommand(
+                self.hood.manualTestCommand(self.hood_angle_input))
 
     def testPeriodic(self):
         pass
@@ -235,44 +239,45 @@ class RobotSwerve:
             )
         )
 
-        # TODO: Re-enable mechanism controls after input delay debugging
-        # # Shooter inputs
-        # self.factory.getButton("shooter.increment_RPM").bind(
-        #     commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(consts.ShooterConstants.offsetDelta), self.shooter)
-        # )
-        # self.factory.getButton("shooter.decrement_RPM").bind(
-        #     commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(-consts.ShooterConstants.offsetDelta), self.shooter)
-        # )
-        # self.factory.getButton("shooter.reset_RPM_offset").bind(
-        #     commands2.cmd.runOnce(self.shooter.resetOffset, self.shooter)
-        # )
-        # # Hood input — right trigger analog mapped to hood angle
-        # self.hood_angle_input = self.factory.getAnalog("hood.angle")
-        #
-        # # Hopper toggle: on/off via left bumper (toggle_on_true in YAML)
-        # self.factory.getButton("hopper.toggle_hopper").bind(
-        #     commands.ball_transport.run_hopper_while_active(self.hopper)
-        # )
-        #
-        # # Intake: toggle deploy/retract
-        # self.factory.getButton("intake.toggle_deploy").bind(
-        #     commands.intake_commands.toggle_intake_deploy(self.intake_position)
-        # )
-        #
-        # # Ball transport: roller while held
-        # self.factory.getButton("ball_transport.hold_roller").bind(
-        #     commands.ball_transport.run_roller_while_held(self.intake_roller)
-        # )
-        #
-        # # Shooter: flywheel spinup toggle
-        # self.factory.getButton("shooter.spinup_toggle").bind(
-        #     commands.shooter_commands.toggle_spinup(self.shooter, self.hood)
-        # )
-        #
-        # # Ball transport: hopper + feed while held
-        # self.factory.getButton("ball_transport.run_hopper_feed").bind(
-        #     commands.ball_transport.run_hopper_and_feed(self.hopper, self.feed)
-        # )
+        # Mechanism controls — only registered when subsystems are enabled
+        if self.shooter:
+            self.factory.getButton("shooter.increment_RPM").bind(
+                commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(consts.ShooterConstants.offsetDelta), self.shooter)
+            )
+            self.factory.getButton("shooter.decrement_RPM").bind(
+                commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(-consts.ShooterConstants.offsetDelta), self.shooter)
+            )
+            self.factory.getButton("shooter.reset_RPM_offset").bind(
+                commands2.cmd.runOnce(self.shooter.resetOffset, self.shooter)
+            )
+
+        if self.hood:
+            self.hood_angle_input = self.factory.getAnalog("hood.angle")
+
+        if self.hopper:
+            self.factory.getButton("hopper.toggle_hopper").bind(
+                commands.ball_transport.run_hopper_while_active(self.hopper)
+            )
+
+        if self.intake_position:
+            self.factory.getButton("intake.toggle_deploy").bind(
+                commands.intake_commands.toggle_intake_deploy(self.intake_position)
+            )
+
+        if self.intake_roller:
+            self.factory.getButton("ball_transport.hold_roller").bind(
+                commands.ball_transport.run_roller_while_held(self.intake_roller)
+            )
+
+        if self.shooter and self.hood:
+            self.factory.getButton("shooter.spinup_toggle").bind(
+                commands.shooter_commands.toggle_spinup(self.shooter, self.hood)
+            )
+
+        if self.hopper and self.feed:
+            self.factory.getButton("ball_transport.run_hopper_feed").bind(
+                commands.ball_transport.run_hopper_and_feed(self.hopper, self.feed)
+            )
 
         #Turret stop
         # Map all drive axes' scale to a shared SmartDashboard entry.
