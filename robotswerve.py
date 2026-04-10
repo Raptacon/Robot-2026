@@ -28,7 +28,6 @@ import commands2
 import wpilib
 from commands2.button import Trigger
 from pathplannerlib.auto import AutoBuilder
-import rev
 from wpimath.geometry import Rotation2d
 
 class RobotSwerve:
@@ -56,10 +55,6 @@ class RobotSwerve:
         self.hopper = subsystem.Hopper()
         self.intake_position = subsystem.IntakePosition()
         self.intake_roller = subsystem.IntakeRoller()
-        # TODO: replace with real turret code
-        self.turret = subsystem.mechanisms.turret.Turret(
-            rev.SparkMax(12, rev.SparkMax.MotorType.kBrushless), 0, 0, 1)
-
         # Alliance instantiation
         self.updateAlliance()
 
@@ -275,11 +270,6 @@ class RobotSwerve:
         )
 
         #Turret stop
-        # TODO: Turret disable should be handled by the turret subsystem itself
-        # self.stop_turret = self.factory.getButton("turret.stop_turret").onTrue(
-        #     commands2.cmd.runOnce(self.turret.disable, self.turret)
-        # )
-
         # Map all drive axes' scale to a shared SmartDashboard entry.
         # Dashboard changes and Y-button toggles both write to this path;
         # the factory auto-syncs the value into all three analogs each cycle.
