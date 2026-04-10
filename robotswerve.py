@@ -18,11 +18,11 @@ from typing import Callable
 from config import HoodConfig
 import constants.swerve_constants as consts
 from data.telemetry import Telemetry
-from commands.auto.pid_to_angle import PIDAlignToTarget
-from commands.default_swerve_drive import DefaultDrive
-from commands.ball_transport import run_roller_while_held, run_hopper_and_feed
-from commands.intake_commands import toggle_intake_deploy
-from commands.shooter_commands import toggle_spinup
+import commands.auto.pid_to_angle
+import commands.ball_transport
+import commands.default_swerve_drive
+import commands.intake_commands
+import commands.shooter_commands
 import subsystem
 import subsystem.drivetrain.swerve_drivetrain
 import subsystem.mechanisms.shooter
@@ -147,7 +147,7 @@ class RobotSwerve:
             self.auto_command.cancel()
 
         self.drivetrain.setDefaultCommand(
-            DefaultDrive(
+            commands.default_swerve_drive.DefaultDrive(
                 self.drivetrain,
                 self.translate_x,
                 self.translate_y,
@@ -184,7 +184,7 @@ class RobotSwerve:
         self.updateAlliance()
         commands2.CommandScheduler.getInstance().cancelAll()
         self.drivetrain.setDefaultCommand(
-            DefaultDrive(
+            commands.default_swerve_drive.DefaultDrive(
                 self.drivetrain,
                 self.translate_x,
                 self.translate_y,
@@ -229,7 +229,7 @@ class RobotSwerve:
 
         # Auto-rotate: rotate the drivetrain until it faces
         self.factory.getButton("drivetrain.auto_align").whileTrue(
-            PIDAlignToTarget(
+            commands.auto.pid_to_angle.PIDAlignToTarget(
                 self.drivetrain,
                 lambda: determineShooterTargets2026(self.drivetrain.current_pose, self.alliance),
                 self.translate_x,
@@ -267,22 +267,22 @@ class RobotSwerve:
 
         # Intake: toggle deploy/retract (Operator A)
         self.factory.getButton("intake.toggle_deploy").onTrue(
-            toggle_intake_deploy(self.intake_position)
+            commands.intake_commands.toggle_intake_deploy(self.intake_position)
         )
 
         # Ball transport: roller while held (Operator B)
         self.factory.getButton("ball_transport.hold_roller").whileTrue(
-            run_roller_while_held(self.intake_roller)
+            commands.ball_transport.run_roller_while_held(self.intake_roller)
         )
 
         # Shooter: flywheel spinup toggle (Operator X)
         self.factory.getButton("shooter.spinup_toggle").onTrue(
-            toggle_spinup(self.shooter, self.hood)
+            commands.shooter_commands.toggle_spinup(self.shooter, self.hood)
         )
 
         # Ball transport: hopper + feed while held (Driver LT)
         self.factory.getButton("ball_transport.run_hopper_feed").whileTrue(
-            run_hopper_and_feed(self.hopper, self.feed)
+            commands.ball_transport.run_hopper_and_feed(self.hopper, self.feed)
         )
 
         # Map all drive axes' scale to a shared SmartDashboard entry.
