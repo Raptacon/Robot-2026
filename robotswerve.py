@@ -60,10 +60,6 @@ class RobotSwerve:
         self.turret = subsystem.mechanisms.turret.Turret(
             rev.SparkMax(12, rev.SparkMax.MotorType.kBrushless), 0, 0, 1)
 
-        # Vision pose estimation
-        self.localization = subsystem.localization.localization.Localization(
-            self.drivetrain, field=self.field)
-
         # Alliance instantiation
         self.updateAlliance()
 
@@ -122,8 +118,9 @@ class RobotSwerve:
 
 
     def robotPeriodic(self):
-        # Update vision pose estimates every cycle (all modes)
-        self.localization.update()
+        # TODO: localization.update() removed — eating 10ms+/cycle from
+        # PhotonVision deserialization. Re-enable on a background thread
+        # or rate-limited to every Nth cycle.
 
         if self._enable_telemetry and self.telemetry:
             self.telemetry.runDefaultDataCollections()

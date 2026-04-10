@@ -80,10 +80,6 @@ class PhysicsEngine:
             "SimGroundTruth/pose", Pose2d
         ).publish()
 
-        # Vision simulation — generate AprilTag detections from ground-truth pose.
-        self._localization = robot.container.localization
-        self._localization.setup_sim()
-
         # NavX yaw variable — may be unavailable depending on sim state.
         self._navx_yaw = None
         try:
@@ -158,6 +154,3 @@ class PhysicsEngine:
         if self._navx_yaw is not None:
             self._navx_yaw.set(self._pose.rotation().degrees())
 
-        # Feed ground-truth pose into VisionSystemSim so simulated cameras
-        # generate AprilTag detections via NetworkTables.
-        self._localization.update_sim(self._pose)
