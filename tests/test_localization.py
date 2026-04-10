@@ -48,6 +48,17 @@ def _make_localization(gyro_yaw_deg=0.0):
     loc.multi_tag_std_devs = cfg.vision_multi_tag_std_devs
     loc.std_dev_distance_factor = cfg.vision_std_dev_distance_factor
 
+    # Populate tag caches (mirrors Localization.__init__)
+    loc._tag_pose_cache = {}
+    loc._tag_translation_cache = {}
+    for tag_id in range(1, 23):
+        pose = loc.field_layout.getTagPose(tag_id)
+        if pose is not None:
+            loc._tag_pose_cache[tag_id] = pose
+            loc._tag_translation_cache[tag_id] = (
+                pose.toPose2d().translation()
+            )
+
     return loc
 
 
@@ -208,8 +219,8 @@ class TestStdDevComputation:
         estimated = Pose3d(
             tag_pose.translation(), Rotation3d()
         )
-        targets = [_make_target(fiducial_id=1), _make_target(fiducial_id=2)]
-        std_devs = loc._compute_std_devs(estimated, targets)
+        target_ids = [1, 2]
+        std_devs = loc._compute_std_devs(estimated, target_ids)
         # At distance ~0 with 2 tags, should be close to multi-tag base
         for i in range(3):
             # Allow some tolerance for distance not being exactly 0
@@ -222,8 +233,8 @@ class TestStdDevComputation:
         estimated = Pose3d(
             tag_pose.translation(), Rotation3d()
         )
-        targets = [_make_target(fiducial_id=1)]
-        std_devs = loc._compute_std_devs(estimated, targets)
+        target_ids = [1]
+        std_devs = loc._compute_std_devs(estimated, target_ids)
         # Single tag theta should be inf
         assert std_devs[2] == float('inf')
 
@@ -233,7 +244,7 @@ class TestStdDevComputation:
         estimated = _pose3d(x=0.0, y=0.0)
         # Use a tag that's far away (tag 1 is on the far side of the field)
         # Just need avg_dist > single_tag_max_dist
-        targets = [_make_target(fiducial_id=1)]
+        target_ids = [1]
         tag_pose = loc.field_layout.getTagPose(1)
         assert tag_pose is not None
         dist = tag_pose.toPose2d().translation().distance(
@@ -242,7 +253,7 @@ class TestStdDevComputation:
         if dist <= loc.single_tag_max_dist:
             # Move estimated pose further away to ensure rejection
             estimated = _pose3d(x=-10.0, y=-10.0)
-        std_devs = loc._compute_std_devs(estimated, targets)
+        std_devs = loc._compute_std_devs(estimated, target_ids)
         assert all(s == float('inf') for s in std_devs)
 
     def test_std_devs_increase_with_distance(self):
@@ -250,7 +261,7 @@ class TestStdDevComputation:
         tag_pose = loc.field_layout.getTagPose(1)
         assert tag_pose is not None
 
-        targets_multi = [_make_target(fiducial_id=1), _make_target(fiducial_id=2)]
+        targets_multi = [1, 2]
 
         # Close estimate
         close_pose = Pose3d(tag_pose.translation(), Rotation3d())
@@ -276,8 +287,8 @@ class TestStdDevComputation:
     def test_unknown_tag_id_returns_single_tag_base(self):
         loc = _make_localization()
         # Tag ID that doesn't exist in the field layout
-        targets = [_make_target(fiducial_id=999)]
-        std_devs = loc._compute_std_devs(_pose3d(), targets)
+        target_ids = [999]
+        std_devs = loc._compute_std_devs(_pose3d(), target_ids)
         assert std_devs == loc.single_tag_std_devs
 
     def test_distance_scaling_formula(self):
@@ -288,9 +299,9 @@ class TestStdDevComputation:
 
         # Place estimate exactly at tag position
         estimated = Pose3d(tag_pose.translation(), Rotation3d())
-        targets = [_make_target(fiducial_id=1), _make_target(fiducial_id=2)]
+        target_ids = [1, 2]
 
-        std_devs = loc._compute_std_devs(estimated, targets)
+        std_devs = loc._compute_std_devs(estimated, target_ids)
 
         # tag 2 should be at a different position, so avg_dist > 0
         tag2_pose = loc.field_layout.getTagPose(2)

@@ -48,6 +48,9 @@ class RobotSwerve:
 
         # Subsystem instantiation
         self.drivetrain = subsystem.drivetrain.swerve_drivetrain.SwerveDrivetrain()
+        from subsystem.localization.localization import Localization
+        self.localization = Localization(self.drivetrain, field=self.field)
+        self._vision_cycle_counter = 0
         # TODO: Re-enable mechanisms after input delay debugging
         self.shooter = None  # subsystem.mechanisms.shooter.Shooter()
         self.feed = None  # subsystem.mechanisms.shooter.Feed()
@@ -113,9 +116,10 @@ class RobotSwerve:
 
 
     def robotPeriodic(self):
-        # TODO: localization.update() removed — eating 10ms+/cycle from
-        # PhotonVision deserialization. Re-enable on a background thread
-        # or rate-limited to every Nth cycle.
+        self._vision_cycle_counter += 1
+        if self._vision_cycle_counter >= OperatorRobotConfig.vision_update_rate_divisor:
+            self._vision_cycle_counter = 0
+            self.localization.update()
 
         if self._enable_telemetry and self.telemetry:
             self.telemetry.runDefaultDataCollections()

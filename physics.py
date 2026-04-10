@@ -85,6 +85,11 @@ class PhysicsEngine:
                 DCMotor.neoVortex(2),
             )
 
+        # Vision simulation — safe to skip if localization is disabled
+        self._localization = getattr(robot.container, 'localization', None)
+        if self._localization is not None:
+            self._localization.setup_sim()
+
         # Seed pose from the drivetrain's configured default starting position.
         self._pose = robot.container.drivetrain.get_default_starting_pose()
 
@@ -157,6 +162,10 @@ class PhysicsEngine:
                 speeds.omega * tm_diff,
             )
         )
+
+        # Feed ground-truth pose to vision sim so cameras see AprilTags
+        if self._localization is not None:
+            self._localization.update_sim(self._pose)
 
         # Update Field2d widget and struct publisher with the integrated pose.
         self.physics_controller.field.setRobotPose(self._pose)
