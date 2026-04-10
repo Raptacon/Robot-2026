@@ -1,5 +1,6 @@
 from . import intake  # noqa: F401
 from . import shooter  # noqa: F401
+from . import turret  # noqa: F401
 
 from .hopper import Hopper
 from .intake.intake_position import IntakePosition

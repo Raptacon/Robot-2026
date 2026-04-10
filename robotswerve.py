@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Callable
 
 # Internal imports
-from config import HoodConfig
+from config import HoodConfig, OperatorRobotConfig
 import constants.swerve_constants as consts
 from data.telemetry import Telemetry
 import commands
@@ -28,6 +28,7 @@ import commands2
 import wpilib
 from commands2.button import Trigger
 from pathplannerlib.auto import AutoBuilder
+import rev
 from wpimath.geometry import Rotation2d
 
 class RobotSwerve:
@@ -35,6 +36,16 @@ class RobotSwerve:
         # networktables setup
         self.field = wpilib.Field2d()
         wpilib.SmartDashboard.putData("Field", self.field)
+
+        # In simulation, pre-seed CANcoder supply voltage so the absolute
+        # encoders report valid data when swerve modules call
+        # baseline_relative_encoders() during construction.
+        if wpilib.RobotBase.isSimulation():
+            import phoenix6
+            for base_id in OperatorRobotConfig.swerve_module_channels:
+                encoder_id = base_id + 2
+                encoder = phoenix6.hardware.CANcoder(encoder_id)
+                encoder.sim_state.set_supply_voltage(12.0)
 
         # Subsystem instantiation
         self.drivetrain = subsystem.drivetrain.swerve_drivetrain.SwerveDrivetrain()
@@ -45,6 +56,13 @@ class RobotSwerve:
         self.hopper = subsystem.Hopper()
         self.intake_position = subsystem.IntakePosition()
         self.intake_roller = subsystem.IntakeRoller()
+        # TODO: replace with real turret code
+        self.turret = subsystem.mechanisms.turret.Turret(
+            rev.SparkMax(12, rev.SparkMax.MotorType.kBrushless), 0, 0, 1)
+
+        # Vision pose estimation
+        self.localization = subsystem.localization.localization.Localization(
+            self.drivetrain, field=self.field)
 
         # Alliance instantiation
         self.updateAlliance()
@@ -104,6 +122,9 @@ class RobotSwerve:
 
 
     def robotPeriodic(self):
+        # Update vision pose estimates every cycle (all modes)
+        self.localization.update()
+
         if self._enable_telemetry and self.telemetry:
             self.telemetry.runDefaultDataCollections()
 
@@ -278,6 +299,12 @@ class RobotSwerve:
         self.factory.getButton("ball_transport.run_hopper_feed").whileTrue(
             commands.ball_transport.run_hopper_and_feed(self.hopper, self.feed)
         )
+
+        #Turret stop
+        # TODO: Turret disable should be handled by the turret subsystem itself
+        # self.stop_turret = self.factory.getButton("turret.stop_turret").onTrue(
+        #     commands2.cmd.runOnce(self.turret.disable, self.turret)
+        # )
 
         # Map all drive axes' scale to a shared SmartDashboard entry.
         # Dashboard changes and Y-button toggles both write to this path;

@@ -1,4 +1,5 @@
 from . import drivetrain  # noqa: F401
+from . import localization  # noqa: F401
 from . import mechanisms  # noqa: F401
 
 from .mechanisms.hopper import Hopper
