@@ -72,6 +72,11 @@ class PhysicsEngine:
             drive_enc.setPosition(0.0)
             drive_enc.setVelocity(0.0)
 
+        # Shooter flywheel: mirror leader velocity to follower in sim
+        shooter = robot.container.shooter
+        self._shooter_lead_sim = rev.SparkSim(shooter.leadMotor, DCMotor.neoVortex())
+        self._shooter_follower_sim = rev.SparkSim(shooter.followerMotor, DCMotor.neoVortex())
+
         # Seed pose from the drivetrain's configured default starting position.
         self._pose = robot.container.drivetrain.get_default_starting_pose()
 
@@ -153,4 +158,8 @@ class PhysicsEngine:
         # field-relative drive and pose estimation use the correct heading.
         if self._navx_yaw is not None:
             self._navx_yaw.set(self._pose.rotation().degrees())
+
+        # Mirror shooter leader velocity to follower in sim
+        lead_vel = self._shooter_lead_sim.getRelativeEncoderSim().getVelocity()
+        self._shooter_follower_sim.getRelativeEncoderSim().setVelocity(lead_vel)
 

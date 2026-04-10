@@ -179,7 +179,7 @@ class ShooterConstants:
     flywheelFollowerInverted = True
     currentLimitAmps = 40
     offsetDelta = 100
-    fixedRPM = 6000
+    fixedRPM = 6500
     # TODO: Get rest and max positions for shooter
     hoodRestPosition = 0
     hoodMaxPosition = 1
