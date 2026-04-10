@@ -113,8 +113,8 @@ class RobotSwerve:
         # to_break should be False at competitions where the robot is turned off between matches
         Trigger(is_disabled()).debounce(3).onTrue(
             commands2.cmd.runOnce(
-                self.drivetrain.set_motor_stop_modes(
-                    to_drive=True, to_break=True, all_motor_override=True, burn_flash=True
+                lambda: self.drivetrain.set_motor_stop_modes(
+                    to_drive=True, to_break=True, all_motor_override=True, burn_flash=False
                 ),
                 self.drivetrain
             )
@@ -122,8 +122,8 @@ class RobotSwerve:
 
 
     def robotPeriodic(self):
-        # Update vision pose estimates every cycle (all modes)
-        self.localization.update()
+        # TODO: localization.update() removed — was causing input delay.
+        # Re-enable after profiling / moving to a separate thread.
 
         if self._enable_telemetry and self.telemetry:
             self.telemetry.runDefaultDataCollections()
