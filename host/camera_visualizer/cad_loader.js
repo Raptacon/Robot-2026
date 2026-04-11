@@ -35,14 +35,34 @@ export class CadModelManager {
   // ── Loading ──────────────────────────────────────────────────────
 
   async loadUrl(url) {
-    this._setStatus(`Loading ${url.split('/').pop()}...`);
-    try {
-      const gltf = await this._loader.loadAsync(url);
-      this._onGltfLoaded(gltf);
-    } catch (e) {
-      this._setStatus(`Error: ${e.message}`);
-      throw e;
-    }
+    const name = url.split('/').pop();
+    this._setStatus(`Loading ${name}...`);
+    return new Promise((resolve, reject) => {
+      this._loader.load(
+        url,
+        (gltf) => {
+          this._setStatus(`Processing ${name}...`);
+          // Defer to let the status update render
+          setTimeout(() => {
+            this._onGltfLoaded(gltf);
+            resolve();
+          }, 50);
+        },
+        (progress) => {
+          if (progress.total > 0) {
+            const pct = Math.round((progress.loaded / progress.total) * 100);
+            this._setStatus(`Loading ${name}... ${pct}%`);
+          } else {
+            const mb = (progress.loaded / 1024 / 1024).toFixed(1);
+            this._setStatus(`Loading ${name}... ${mb} MB`);
+          }
+        },
+        (err) => {
+          this._setStatus(`Error: ${err.message || err}`);
+          reject(err);
+        },
+      );
+    });
   }
 
   async loadFile(file) {
@@ -98,13 +118,15 @@ export class CadModelManager {
       this._appliedScale = 1.0;
     }
 
-    // GLTF is Y-up, our scene is Z-up (WPI convention)
-    root.rotation.x = -Math.PI / 2;
-
-    this.model = root;
+    // X rotation to convert coordinate systems, adjustable with Flip button.
+    // 0=none, 1=+90°, 2=180°, 3=-90° around X
+    this._xSteps = 1;  // 90° X — correct for Onshape GLTF exports
+    this._yawSteps = 2; // 180° yaw — Onshape exports are rear-facing by default
+    this.model = root;  // set before _applyOrientation so it doesn't bail
+    this._applyOrientation();
     this.scene.add(root);
 
-    // Re-measure after transforms
+    // Log final bounding box for debugging
     root.updateMatrixWorld(true);
     const finalBox = new THREE.Box3().setFromObject(root);
     const finalSize = finalBox.getSize(new THREE.Vector3());
@@ -226,6 +248,34 @@ export class CadModelManager {
       this.selectionBox.dispose();
       this.selectionBox = null;
     }
+  }
+
+  rotateYaw90() {
+    if (!this.model) return;
+    this._yawSteps = (this._yawSteps + 1) % 4;
+    this._applyOrientation();
+    this._removeSelectionBox();
+  }
+
+  rotateX90() {
+    if (!this.model) return;
+    this._xSteps = (this._xSteps + 1) % 4;
+    this._applyOrientation();
+    this._removeSelectionBox();
+  }
+
+  _applyOrientation() {
+    if (!this.model) return;
+    const xAngle = (this._xSteps * Math.PI) / 2;
+    const zAngle = (this._yawSteps * Math.PI) / 2;
+    const qX = new THREE.Quaternion();
+    qX.setFromAxisAngle(new THREE.Vector3(1, 0, 0), xAngle);
+    const qZ = new THREE.Quaternion();
+    qZ.setFromAxisAngle(new THREE.Vector3(0, 0, 1), zAngle);
+    const combined = new THREE.Quaternion();
+    combined.multiplyQuaternions(qZ, qX);
+    this.model.quaternion.copy(combined);
+    console.log(`[CAD] X=${this._xSteps * 90}° Yaw=${this._yawSteps * 90}°`);
   }
 
   setShowBBox(show) {

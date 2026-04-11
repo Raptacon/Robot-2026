@@ -9,11 +9,11 @@
 
   #header {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 8px 16px; background: #16213e; border-bottom: 1px solid #0f3460;
-    height: 44px;
+    padding: 8px 12px; background: #16213e; border-bottom: 1px solid #0f3460;
+    min-height: 44px; gap: 12px;
   }
-  #header h1 { font-size: 16px; font-weight: 600; color: #e94560; }
-  #header .controls { display: flex; gap: 12px; align-items: center; }
+  #header h1 { font-size: 16px; font-weight: 600; color: #e94560; white-space: nowrap; }
+  #header .controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   #header label { font-size: 13px; }
   #header select, #header button {
     background: #0f3460; color: #e0e0e0; border: 1px solid #533483;
@@ -112,7 +112,7 @@
 <body>
 
 <div id="header">
-  <h1>Robot Camera Visualizer</h1>
+  <h1>Robot Camera Visualizer <span style="font-size:11px; color:#555; font-weight:normal">v11</span></h1>
   <div class="controls">
     <label>Units:
       <select id="unitSelect">
@@ -136,6 +136,8 @@
       <label style="font-size:13px">Opacity:
         <input type="range" id="cadOpacitySlider" min="0" max="100" value="50" disabled>
       </label>
+      <button id="cadTiltBtn" disabled>Tilt 90</button>
+      <button id="cadRotBtn" disabled>Rot 90</button>
       <label style="font-size:13px"><input type="checkbox" id="cadBBoxToggle" checked> BBox</label>
       <span id="cadStatusText">No model</span>
     </div>
@@ -161,6 +163,7 @@
   <div class="viewport-container" id="topViewContainer">
     <div class="viewport-label">Top View (XY Plane)</div>
     <div class="viewport-coords" id="topCoords">X: -- Y: --</div>
+    <div style="position:absolute; bottom:8px; right:12px; font-size:10px; color:#555; z-index:10;">v7</div>
     <canvas id="topCanvas"></canvas>
   </div>
   <div class="viewport-container" id="perspViewContainer">
@@ -307,7 +310,7 @@ function buildAprilTags() {
     // Tag face: vertical square facing the robot center
     // We rotate the entire group to face inward, so children use local coords
     // Compute yaw angle from tag position back toward origin
-    const faceYaw = Math.atan2(-ty, -tx);
+    const faceYaw = Math.atan2(-ty, -tx) + Math.PI;
     group.rotation.z = faceYaw;          // rotate about Z (up) to face robot
     // No X rotation needed — PlaneGeometry is in XY, we want it vertical
 
@@ -1124,6 +1127,8 @@ document.getElementById('cadLoadBtn').addEventListener('click', async () => {
           modal.style.display = 'none';
           await cadManager.loadUrl(m.url);
           cadSlider.disabled = false;
+          document.getElementById('cadRotBtn').disabled = false;
+          document.getElementById('cadTiltBtn').disabled = false;
         });
         listEl.appendChild(btn);
       });
@@ -1140,6 +1145,7 @@ document.getElementById('cadFileInput').addEventListener('change', async (e) => 
   document.getElementById('cadModal').style.display = 'none';
   await cadManager.loadFile(file);
   cadSlider.disabled = false;
+  document.getElementById('cadFlipYBtn').disabled = false;
 });
 
 // Modal cancel
@@ -1156,6 +1162,15 @@ cadSlider.addEventListener('input', (e) => {
 document.getElementById('cadBBoxToggle').addEventListener('change', (e) => {
   cadManager.setShowBBox(e.target.checked);
 });
+
+document.getElementById('cadTiltBtn').addEventListener('click', () => {
+  cadManager.rotateX90();
+});
+
+document.getElementById('cadRotBtn').addEventListener('click', () => {
+  cadManager.rotateYaw90();
+});
+
 
 // Click-to-select on both canvases
 function handleCadClick(canvas, camera) {
