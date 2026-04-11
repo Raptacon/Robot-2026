@@ -76,6 +76,37 @@
   .coord-legend .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 
   canvas { display: block; }
+
+  /* CAD controls */
+  #cadControls {
+    display: flex; align-items: center; gap: 8px;
+    border-left: 1px solid #0f3460; padding-left: 12px;
+  }
+  #cadOpacitySlider { width: 80px; accent-color: #e94560; }
+  #cadStatusText { font-size: 11px; color: #888; max-width: 160px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* CAD load modal */
+  #cadModal {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7); z-index: 100;
+    align-items: center; justify-content: center;
+  }
+  #cadModal .modal-body {
+    background: #16213e; border: 1px solid #533483; border-radius: 8px;
+    padding: 20px; min-width: 360px; max-width: 480px;
+  }
+  #cadModal h3 { color: #e94560; margin-bottom: 12px; font-size: 15px; }
+  #cadModal .model-btn {
+    display: block; width: 100%; text-align: left; margin: 4px 0;
+    background: #0f3460; color: #e0e0e0; border: 1px solid #533483;
+    padding: 8px 12px; border-radius: 4px; cursor: pointer; font-size: 13px;
+  }
+  #cadModal .model-btn:hover { background: #533483; }
+  #cadModal .model-btn .size { color: #888; font-size: 11px; float: right; }
+
+  /* CAD selection info in sidebar */
+  #cadSelection .transform-block { user-select: all; cursor: text; }
 </style>
 </head>
 <body>
@@ -100,6 +131,29 @@
       </select>
     </label>
     <button id="resetBtn">Reset Views</button>
+    <div id="cadControls">
+      <button id="cadLoadBtn">Load CAD</button>
+      <label style="font-size:13px">Opacity:
+        <input type="range" id="cadOpacitySlider" min="0" max="100" value="50" disabled>
+      </label>
+      <label style="font-size:13px"><input type="checkbox" id="cadBBoxToggle" checked> BBox</label>
+      <span id="cadStatusText">No model</span>
+    </div>
+  </div>
+</div>
+
+<!-- CAD load modal -->
+<div id="cadModal">
+  <div class="modal-body">
+    <h3>Load CAD Model</h3>
+    <div style="font-size:13px; color:#888; margin-bottom:6px">Available in cad/ directory:</div>
+    <div id="cadModelList" style="margin-bottom:12px; font-size:13px; color:#666">Scanning...</div>
+    <hr style="border-color:#0f3460; margin:12px 0">
+    <div style="font-size:13px; color:#888; margin-bottom:6px">Or pick a local .glb / .gltf file:</div>
+    <input type="file" id="cadFileInput" accept=".glb,.gltf" style="font-size:13px; color:#e0e0e0">
+    <div style="display:flex; gap:8px; margin-top:16px; justify-content:flex-end">
+      <button id="cadModalCancel">Cancel</button>
+    </div>
   </div>
 </div>
 
@@ -128,6 +182,11 @@
       <div class="axis"><span class="dot" style="background:#4488ff"></span> +Z = Up (Blue)</div>
     </div>
 
+    <h2>Selected Component</h2>
+    <div id="cadSelection">
+      <div class="cam-card" style="color:#666; font-size:12px">Click a CAD component to inspect</div>
+    </div>
+
     <h2>Transforms</h2>
     <div id="transformInfo"></div>
   </div>
@@ -146,6 +205,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+import { CadModelManager } from '/cad_loader.js';
 
 // ── Config injected by serve.py ──────────────────────────────────────
 const CONFIG = window.__ROBOT_CONFIG__;
@@ -1000,6 +1060,119 @@ perspCanvas.addEventListener('mousemove', (e) => {
 perspCanvas.addEventListener('mouseleave', () => {
   document.getElementById('perspCoords').textContent = 'X: -- Y: -- Z: --';
 });
+
+// ── CAD model integration ────────────────────────────────────────────
+const cadManager = new CadModelManager(scene);
+const cadSlider = document.getElementById('cadOpacitySlider');
+const cadStatus = document.getElementById('cadStatusText');
+
+cadManager.onStatusChange = (text) => { cadStatus.textContent = text; };
+
+cadManager.onSelect = (info) => {
+  const el = document.getElementById('cadSelection');
+  if (!info) {
+    el.innerHTML = '<div class="cam-card" style="color:#666; font-size:12px">Click a CAD component to inspect</div>';
+    return;
+  }
+  const c = info.center;
+  const s = info.size;
+  const xIn = (c.x / 0.0254).toFixed(2);
+  const yIn = (c.y / 0.0254).toFixed(2);
+  const zIn = (c.z / 0.0254).toFixed(2);
+  el.innerHTML = `
+    <div class="cam-card">
+      <div class="cam-name" style="color:#ffaa00">${info.name}</div>
+      <table>
+        <tr><td>Center X:</td><td>${toDisplay(c.x)} ${unitLabel()}</td></tr>
+        <tr><td>Center Y:</td><td>${toDisplay(c.y)} ${unitLabel()}</td></tr>
+        <tr><td>Center Z:</td><td>${toDisplay(c.z)} ${unitLabel()}</td></tr>
+        <tr><td>Width:</td><td>${toDisplay(s.y)} ${unitLabel()}</td></tr>
+        <tr><td>Length:</td><td>${toDisplay(s.x)} ${unitLabel()}</td></tr>
+        <tr><td>Height:</td><td>${toDisplay(s.z)} ${unitLabel()}</td></tr>
+      </table>
+      <h3>Copy-paste for robot_geometry.py</h3>
+      <div class="transform-block">transform_from_inches(
+    x_in=${xIn},
+    y_in=${yIn},
+    z_in=${zIn},
+)</div>
+      <h3>WPILib (meters)</h3>
+      <div class="transform-block">Translation3d(${c.x.toFixed(4)}, ${c.y.toFixed(4)}, ${c.z.toFixed(4)})</div>
+    </div>
+  `;
+};
+
+// Load button → modal
+document.getElementById('cadLoadBtn').addEventListener('click', async () => {
+  const modal = document.getElementById('cadModal');
+  modal.style.display = 'flex';
+  const listEl = document.getElementById('cadModelList');
+  listEl.textContent = 'Scanning...';
+  try {
+    const res = await fetch('/api/cad-models');
+    const models = await res.json();
+    if (models.length === 0) {
+      listEl.textContent = 'No .glb/.gltf files found in cad/ directory';
+    } else {
+      listEl.innerHTML = '';
+      models.forEach(m => {
+        const btn = document.createElement('button');
+        btn.className = 'model-btn';
+        const sizeMB = (m.size / 1024 / 1024).toFixed(1);
+        btn.innerHTML = `${m.name} <span class="size">${sizeMB} MB</span>`;
+        btn.addEventListener('click', async () => {
+          modal.style.display = 'none';
+          await cadManager.loadUrl(m.url);
+          cadSlider.disabled = false;
+        });
+        listEl.appendChild(btn);
+      });
+    }
+  } catch (e) {
+    listEl.textContent = 'Error scanning: ' + e.message;
+  }
+});
+
+// File picker
+document.getElementById('cadFileInput').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  document.getElementById('cadModal').style.display = 'none';
+  await cadManager.loadFile(file);
+  cadSlider.disabled = false;
+});
+
+// Modal cancel
+document.getElementById('cadModalCancel').addEventListener('click', () => {
+  document.getElementById('cadModal').style.display = 'none';
+});
+
+// Opacity slider
+cadSlider.addEventListener('input', (e) => {
+  cadManager.setOpacity(parseInt(e.target.value) / 100);
+});
+
+// BBox toggle
+document.getElementById('cadBBoxToggle').addEventListener('change', (e) => {
+  cadManager.setShowBBox(e.target.checked);
+});
+
+// Click-to-select on both canvases
+function handleCadClick(canvas, camera) {
+  canvas.addEventListener('click', (e) => {
+    if (!cadManager.model) return;
+    const rect = canvas.getBoundingClientRect();
+    const ndc = new THREE.Vector2(
+      ((e.clientX - rect.left) / rect.width) * 2 - 1,
+      -((e.clientY - rect.top) / rect.height) * 2 + 1
+    );
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(ndc, camera);
+    cadManager.handleClick(ray);
+  });
+}
+handleCadClick(topCanvas, topCamera);
+handleCadClick(perspCanvas, perspCamera);
 
 animate();
 </script>

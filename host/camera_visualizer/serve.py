@@ -86,6 +86,62 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_header('Content-Length', str(len(data)))
             self.end_headers()
             self.write(data)
+        elif self.path == '/cad_loader.js':
+            fpath = os.path.join(HERE, 'cad_loader.js')
+            if not os.path.isfile(fpath):
+                self.send_error(404)
+                return
+            with open(fpath, 'rb') as f:
+                data = f.read()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/javascript')
+            self.send_header('Cache-Control', 'no-cache, no-store')
+            self.send_header('Content-Length', str(len(data)))
+            self.end_headers()
+            self.write(data)
+        elif self.path == '/api/cad-models':
+            cad_dir = os.path.join(PROJECT_ROOT, 'cad')
+            models = []
+            if os.path.isdir(cad_dir):
+                for fname in sorted(os.listdir(cad_dir)):
+                    if fname.lower().endswith(('.glb', '.gltf')):
+                        size = os.path.getsize(
+                            os.path.join(cad_dir, fname)
+                        )
+                        models.append({
+                            'name': fname,
+                            'url': f'/cad/{fname}',
+                            'size': size,
+                        })
+            data = json.dumps(models).encode('utf-8')
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Cache-Control', 'no-cache')
+            self.send_header('Content-Length', str(len(data)))
+            self.end_headers()
+            self.write(data)
+        elif self.path.startswith('/cad/'):
+            fname = os.path.basename(self.path[5:])
+            if not fname.lower().endswith(('.glb', '.gltf', '.bin')):
+                self.send_error(403)
+                return
+            fpath = os.path.join(PROJECT_ROOT, 'cad', fname)
+            if not os.path.isfile(fpath):
+                self.send_error(404)
+                return
+            with open(fpath, 'rb') as f:
+                data = f.read()
+            mime = {
+                '.glb': 'model/gltf-binary',
+                '.gltf': 'model/gltf+json',
+                '.bin': 'application/octet-stream',
+            }.get(os.path.splitext(fname)[1].lower(), 'application/octet-stream')
+            self.send_response(200)
+            self.send_header('Content-Type', mime)
+            self.send_header('Content-Length', str(len(data)))
+            self.send_header('Cache-Control', 'public, max-age=3600')
+            self.end_headers()
+            self.write(data)
         else:
             self.send_error(404)
 
