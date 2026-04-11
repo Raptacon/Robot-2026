@@ -7,6 +7,7 @@
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 
 const INCHES_PER_METER = 1 / 0.0254;
 
@@ -22,6 +23,12 @@ export class CadModelManager {
     this.onSelect = null;         // callback(info) where info = { name, center, size, point }
     this.onStatusChange = null;   // callback(statusText)
     this._loader = new GLTFLoader();
+    // Draco decoder for compressed GLTF (e.g. Onshape exports)
+    const dracoLoader = new DRACOLoader();
+    dracoLoader.setDecoderPath(
+      'https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/libs/draco/'
+    );
+    this._loader.setDRACOLoader(dracoLoader);
     this._appliedScale = 1.0;
   }
 
