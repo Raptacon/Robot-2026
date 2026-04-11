@@ -112,7 +112,7 @@
 <body>
 
 <div id="header">
-  <h1>Robot Camera Visualizer <span style="font-size:11px; color:#555; font-weight:normal">v11</span></h1>
+  <h1>Robot Camera Visualizer <span style="font-size:11px; color:#555; font-weight:normal">v13</span></h1>
   <div class="controls">
     <label>Units:
       <select id="unitSelect">
@@ -961,34 +961,42 @@ function resize() {
 }
 
 // ── Animation loop ───────────────────────────────────────────────────
+let frameCount = 0;
+
 function animate() {
   requestAnimationFrame(animate);
   topControls.update();
   perspControls.update();
 
-  topRenderer.render(scene, topCamera);
+  // Main viewports — top view at reduced rate when CAD is loaded
+  if (frameCount % (cadManager.model ? 5 : 1) === 0) {
+    topRenderer.render(scene, topCamera);
+  }
   perspRenderer.render(scene, perspCamera);
 
-  // Render camera sim views
-  camSimViews.forEach(({ simCam, renderer }, idx) => {
-    renderer.render(scene, simCam);
+  // Camera sim views: render every 10th frame (they're small sidebar previews)
+  frameCount++;
+  if (frameCount % 10 === 0) {
+    camSimViews.forEach(({ simCam, renderer }, idx) => {
+      renderer.render(scene, simCam);
 
-    // Update visible tag list
-    const visible = computeVisibleTags(simCam);
-    const el = document.getElementById(`visibleTags_${idx}`);
-    if (el) {
-      if (visible.length === 0) {
-        el.textContent = 'Visible tags: none';
-        el.style.color = '#886';
-      } else {
-        const tagStrs = visible.map(t =>
-          `ID${t.id} (${t.label}, ${toDisplay(t.dist)} ${unitLabel()})`
-        );
-        el.textContent = `Visible tags: ${tagStrs.join(', ')}`;
-        el.style.color = '#8c8';
+      // Update visible tag list (cheap, but batch with render)
+      const visible = computeVisibleTags(simCam);
+      const el = document.getElementById(`visibleTags_${idx}`);
+      if (el) {
+        if (visible.length === 0) {
+          el.textContent = 'Visible tags: none';
+          el.style.color = '#886';
+        } else {
+          const tagStrs = visible.map(t =>
+            `ID${t.id} (${t.label}, ${toDisplay(t.dist)} ${unitLabel()})`
+          );
+          el.textContent = `Visible tags: ${tagStrs.join(', ')}`;
+          el.style.color = '#8c8';
+        }
       }
-    }
-  });
+    });
+  }
 }
 
 // ── Init ─────────────────────────────────────────────────────────────

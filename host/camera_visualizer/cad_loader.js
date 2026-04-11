@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 
 const INCHES_PER_METER = 1 / 0.0254;
 
@@ -139,22 +140,127 @@ export class CadModelManager {
 
     this._setStatus(`${meshCount} parts (${unitNote})`);
 
-    // Collect all meshes, make transparent
+    // Optimization: merge all primitives per named parent node into single
+    // meshes. Onshape exports create thousands of draw calls (16K+) from
+    // multi-primitive meshes. Merging reduces draw calls to ~100-200.
     this.meshes = [];
+    this._optimizeModel(root);
+  }
+
+  // ── Model optimization ────────────────────────────────────────────
+
+  _optimizeModel(root) {
+    // Collect all mesh geometries grouped by nearest named ancestor.
+    // Then merge each group into a single mesh to reduce draw calls.
+    const groups = new Map(); // name -> [{ geometry, color }]
+
     root.traverse((obj) => {
-      if (obj.isMesh) {
-        // Clone material to avoid mutating shared instances
-        obj.material = obj.material.clone();
-        const origColor = obj.material.color
-          ? obj.material.color.getHex()
-          : 0x888888;
-        obj.material.transparent = true;
-        obj.material.opacity = this.opacity;
-        obj.material.depthWrite = this.opacity > 0.9;
-        obj.material.side = THREE.DoubleSide;
-        this.meshes.push({ mesh: obj, originalColor: origColor });
+      if (!obj.isMesh) return;
+
+      const color = obj.material.color ? obj.material.color.getHex() : 0x888888;
+
+      // Find nearest named ancestor for grouping
+      let name = '';
+      let node = obj;
+      while (node && node !== root) {
+        if (node.name && !node.name.startsWith('Scene') &&
+            !node.name.startsWith('mesh') && !node.name.startsWith('Object')) {
+          name = node.name;
+          break;
+        }
+        node = node.parent;
       }
+      if (!name) name = '__unnamed__';
+
+      // Get world-space geometry
+      obj.updateWorldMatrix(true, false);
+      const geo = obj.geometry.clone();
+      geo.applyMatrix4(obj.matrixWorld);
+
+      // Strip attributes that prevent merging (e.g. different attribute sets)
+      // Keep only position, normal
+      const keepAttrs = ['position', 'normal'];
+      for (const attr of Object.keys(geo.attributes)) {
+        if (!keepAttrs.includes(attr)) {
+          geo.deleteAttribute(attr);
+        }
+      }
+      // Remove index if present — mergeGeometries handles mixed indexed/non-indexed
+      // Actually keep index, mergeGeometries handles it
+
+      if (!groups.has(name)) groups.set(name, []);
+      groups.get(name).push({ geometry: geo, color });
+
+      // Dispose original
+      obj.material.dispose();
     });
+
+    // Remove all children from root (we'll add merged meshes)
+    while (root.children.length) {
+      root.remove(root.children[0]);
+    }
+
+    // Merge each group into a single mesh
+    let totalDrawCalls = 0;
+    for (const [name, items] of groups) {
+      const geometries = items.map(i => i.geometry);
+      // Use most common color in the group
+      const colorCounts = new Map();
+      items.forEach(i => {
+        colorCounts.set(i.color, (colorCounts.get(i.color) || 0) + 1);
+      });
+      let bestColor = 0x888888;
+      let bestCount = 0;
+      for (const [c, n] of colorCounts) {
+        if (n > bestCount) { bestColor = c; bestCount = n; }
+      }
+
+      try {
+        const merged = BufferGeometryUtils.mergeGeometries(geometries, false);
+        if (!merged) continue;
+
+        const mat = new THREE.MeshPhongMaterial({
+          color: bestColor,
+          transparent: true,
+          opacity: this.opacity,
+          depthWrite: this.opacity > 0.9,
+          side: THREE.DoubleSide,
+        });
+        const mesh = new THREE.Mesh(merged, mat);
+        mesh.name = name;
+        // Merged geometry is in world space, but root has rotation/scale.
+        // We need to undo root's transform since mesh is a child of root.
+        // Apply inverse of root's world matrix.
+        root.updateWorldMatrix(true, false);
+        const invRoot = root.matrixWorld.clone().invert();
+        mesh.applyMatrix4(invRoot);
+
+        root.add(mesh);
+        this.meshes.push({ mesh, originalColor: bestColor });
+        totalDrawCalls++;
+      } catch (e) {
+        // If merge fails (mismatched attributes), add individually
+        items.forEach(({ geometry, color }) => {
+          const mat = new THREE.MeshPhongMaterial({
+            color, transparent: true, opacity: this.opacity,
+            depthWrite: this.opacity > 0.9, side: THREE.DoubleSide,
+          });
+          const mesh = new THREE.Mesh(geometry, mat);
+          mesh.name = name;
+          root.updateWorldMatrix(true, false);
+          const invRoot = root.matrixWorld.clone().invert();
+          mesh.applyMatrix4(invRoot);
+          root.add(mesh);
+          this.meshes.push({ mesh, originalColor: color });
+          totalDrawCalls++;
+        });
+      }
+
+      // Dispose source geometries
+      geometries.forEach(g => g.dispose());
+    }
+
+    console.log(`[CAD] Optimized: ${groups.size} named parts → ${totalDrawCalls} draw calls (from 16K+)`);
   }
 
   // ── Transparency ─────────────────────────────────────────────────
