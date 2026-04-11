@@ -49,15 +49,21 @@ class RobotSwerve:
 
         # Subsystem instantiation
         self.drivetrain = subsystem.drivetrain.swerve_drivetrain.SwerveDrivetrain()
-        # TODO: Re-enable mechanisms after input delay debugging
-        self.shooter = None  # subsystem.mechanisms.shooter.Shooter()
-        self.feed = None  # subsystem.mechanisms.shooter.Feed()
-        self.hood = None  # subsystem.mechanisms.shooter.createHood(consts.HoodConstants, HoodConfig)
-        self.hopper = None  # subsystem.Hopper()
-        self.intake_position = None  # subsystem.IntakePosition()
-        self.intake_roller = None  # subsystem.IntakeRoller()
+        if True:  # Toggle to True to enable mechanisms
+            self.shooter = subsystem.mechanisms.shooter.Shooter()
+            self.feed = subsystem.mechanisms.shooter.Feed()
+            self.hood = subsystem.mechanisms.shooter.createHood(consts.HoodConstants, HoodConfig)
+            self.hopper = subsystem.Hopper()
+            self.intake_position = subsystem.IntakePosition()
+            self.intake_roller = subsystem.IntakeRoller()
+        else:
+            self.shooter = None
+            self.feed = None
+            self.hood = None
+            self.hopper = None
+            self.intake_position = None
+            self.intake_roller = None
         self.robot_state = RobotState()
-
         # Alliance instantiation
         self.updateAlliance()
 
