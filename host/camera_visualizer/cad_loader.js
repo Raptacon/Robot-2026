@@ -16,13 +16,16 @@ export class CadModelManager {
   constructor(scene) {
     this.scene = scene;
     this.model = null;            // THREE.Group — loaded GLTF scene root
-    this.meshes = [];             // [{ mesh, originalColor }]
+    this.meshes = [];             // [{ mesh, originalColor, visible }]
+    this.partTree = [];           // [{ name, children: [...], meshName }]
     this.opacity = 0.5;
     this.selectedMesh = null;
     this.selectionBox = null;     // THREE.BoxHelper
     this.showBBox = true;
     this.onSelect = null;         // callback(info) where info = { name, center, size, point }
     this.onStatusChange = null;   // callback(statusText)
+    this._hideStack = [];         // undo stack: names hidden in order
+    this._redoStack = [];         // redo stack
     this._loader = new GLTFLoader();
     // Draco decoder for compressed GLTF (e.g. Onshape exports)
     const dracoLoader = new DRACOLoader();
@@ -150,67 +153,84 @@ export class CadModelManager {
   // ── Model optimization ────────────────────────────────────────────
 
   _optimizeModel(root) {
-    // Collect all mesh geometries grouped by nearest named ancestor.
-    // Then merge each group into a single mesh to reduce draw calls.
-    const groups = new Map(); // name -> [{ geometry, color }]
+    // Group meshes by their nearest named parent (not top-level).
+    // This preserves per-part colors and selection while merging the 16K
+    // primitives into ~100-200 draw calls.
+    //
+    // Also build a hierarchy tree for the UI overlay.
 
-    root.traverse((obj) => {
-      if (!obj.isMesh) return;
+    this.partTree = [];
+    const groups = new Map(); // groupName -> { geometries, colors }
 
-      const color = obj.material.color ? obj.material.color.getHex() : 0x888888;
+    // Step 1: Build tree and collect mesh geometries
+    const self = this;
+    function processNode(node, parentTreeNode) {
+      const name = node.name || '';
+      const isNamed = name && !name.startsWith('Scene') &&
+                      !name.startsWith('mesh') && !name.startsWith('Object');
 
-      // Find nearest named ancestor for grouping
-      let name = '';
-      let node = obj;
-      while (node && node !== root) {
-        if (node.name && !node.name.startsWith('Scene') &&
-            !node.name.startsWith('mesh') && !node.name.startsWith('Object')) {
-          name = node.name;
-          break;
-        }
-        node = node.parent;
-      }
-      if (!name) name = '__unnamed__';
-
-      // Get world-space geometry
-      obj.updateWorldMatrix(true, false);
-      const geo = obj.geometry.clone();
-      geo.applyMatrix4(obj.matrixWorld);
-
-      // Strip attributes that prevent merging (e.g. different attribute sets)
-      // Keep only position, normal
-      const keepAttrs = ['position', 'normal'];
-      for (const attr of Object.keys(geo.attributes)) {
-        if (!keepAttrs.includes(attr)) {
-          geo.deleteAttribute(attr);
+      let treeNode = null;
+      if (isNamed) {
+        treeNode = { name, children: [], visible: true };
+        if (parentTreeNode) {
+          parentTreeNode.children.push(treeNode);
+        } else {
+          self.partTree.push(treeNode);
         }
       }
-      // Remove index if present — mergeGeometries handles mixed indexed/non-indexed
-      // Actually keep index, mergeGeometries handles it
 
-      if (!groups.has(name)) groups.set(name, []);
-      groups.get(name).push({ geometry: geo, color });
+      if (node.isMesh) {
+        const color = node.material.color ? node.material.color.getHex() : 0x888888;
 
-      // Dispose original
-      obj.material.dispose();
-    });
+        // Find nearest named ancestor for grouping
+        let groupName = '__unnamed__';
+        let p = node;
+        while (p && p !== root) {
+          if (p.name && !p.name.startsWith('Scene') &&
+              !p.name.startsWith('mesh') && !p.name.startsWith('Object')) {
+            groupName = p.name;
+            break;
+          }
+          p = p.parent;
+        }
 
-    // Remove all children from root (we'll add merged meshes)
-    while (root.children.length) {
-      root.remove(root.children[0]);
+        node.updateWorldMatrix(true, false);
+        const geo = node.geometry.clone();
+        geo.applyMatrix4(node.matrixWorld);
+        const keepAttrs = ['position', 'normal'];
+        for (const attr of Object.keys(geo.attributes)) {
+          if (!keepAttrs.includes(attr)) geo.deleteAttribute(attr);
+        }
+
+        if (!groups.has(groupName)) groups.set(groupName, { geometries: [], colors: [] });
+        groups.get(groupName).geometries.push(geo);
+        groups.get(groupName).colors.push(color);
+
+        node.material.dispose();
+      }
+
+      for (const child of (node.children || [])) {
+        processNode(child, treeNode || parentTreeNode);
+      }
     }
 
-    // Merge each group into a single mesh
+    for (const child of root.children.slice()) {
+      processNode(child, null);
+    }
+
+    // Step 2: Clear original children
+    while (root.children.length) root.remove(root.children[0]);
+
+    // Step 3: Merge each named group into a single mesh
     let totalDrawCalls = 0;
-    for (const [name, items] of groups) {
-      const geometries = items.map(i => i.geometry);
-      // Use most common color in the group
+    root.updateWorldMatrix(true, false);
+    const invRoot = root.matrixWorld.clone().invert();
+
+    for (const [name, { geometries, colors }] of groups) {
+      // Most common color in this group
       const colorCounts = new Map();
-      items.forEach(i => {
-        colorCounts.set(i.color, (colorCounts.get(i.color) || 0) + 1);
-      });
-      let bestColor = 0x888888;
-      let bestCount = 0;
+      colors.forEach(c => colorCounts.set(c, (colorCounts.get(c) || 0) + 1));
+      let bestColor = 0x888888, bestCount = 0;
       for (const [c, n] of colorCounts) {
         if (n > bestCount) { bestColor = c; bestCount = n; }
       }
@@ -220,47 +240,119 @@ export class CadModelManager {
         if (!merged) continue;
 
         const mat = new THREE.MeshPhongMaterial({
-          color: bestColor,
-          transparent: true,
-          opacity: this.opacity,
-          depthWrite: this.opacity > 0.9,
-          side: THREE.DoubleSide,
+          color: bestColor, transparent: true, opacity: this.opacity,
+          depthWrite: true, side: THREE.DoubleSide,
         });
         const mesh = new THREE.Mesh(merged, mat);
         mesh.name = name;
-        // Merged geometry is in world space, but root has rotation/scale.
-        // We need to undo root's transform since mesh is a child of root.
-        // Apply inverse of root's world matrix.
-        root.updateWorldMatrix(true, false);
-        const invRoot = root.matrixWorld.clone().invert();
         mesh.applyMatrix4(invRoot);
-
         root.add(mesh);
-        this.meshes.push({ mesh, originalColor: bestColor });
+        this.meshes.push({ mesh, originalColor: bestColor, visible: true });
         totalDrawCalls++;
       } catch (e) {
-        // If merge fails (mismatched attributes), add individually
-        items.forEach(({ geometry, color }) => {
+        // Fallback: add individually
+        geometries.forEach((geometry, i) => {
           const mat = new THREE.MeshPhongMaterial({
-            color, transparent: true, opacity: this.opacity,
-            depthWrite: this.opacity > 0.9, side: THREE.DoubleSide,
+            color: colors[i] || 0x888888, transparent: true, opacity: this.opacity,
+            depthWrite: true, side: THREE.DoubleSide,
           });
           const mesh = new THREE.Mesh(geometry, mat);
           mesh.name = name;
-          root.updateWorldMatrix(true, false);
-          const invRoot = root.matrixWorld.clone().invert();
           mesh.applyMatrix4(invRoot);
           root.add(mesh);
-          this.meshes.push({ mesh, originalColor: color });
+          this.meshes.push({ mesh, originalColor: colors[i] || 0x888888, visible: true });
           totalDrawCalls++;
         });
       }
 
-      // Dispose source geometries
       geometries.forEach(g => g.dispose());
     }
 
-    console.log(`[CAD] Optimized: ${groups.size} named parts → ${totalDrawCalls} draw calls (from 16K+)`);
+    console.log(`[CAD] Optimized: ${groups.size} named parts → ${totalDrawCalls} draw calls`);
+    console.log(`[CAD] Part tree: ${this.partTree.length} top-level, ${this._countTreeNodes(this.partTree)} total nodes`);
+  }
+
+  _countTreeNodes(nodes) {
+    let count = 0;
+    for (const n of nodes) {
+      count += 1 + this._countTreeNodes(n.children);
+    }
+    return count;
+  }
+
+  // ── Visibility ────────────────────────────────────────────────────
+
+  setPartVisible(name, visible) {
+    // Toggle the mesh and all child meshes in the tree
+    this.meshes.forEach(entry => {
+      if (entry.mesh.name === name) {
+        entry.mesh.visible = visible;
+        entry.visible = visible;
+      }
+    });
+    // Also hide/show all children in the tree recursively
+    const setChildrenVisible = (nodes) => {
+      for (const node of nodes) {
+        if (node.name === name || !visible) {
+          node.visible = visible;
+          this.meshes.forEach(entry => {
+            if (entry.mesh.name === node.name) {
+              entry.mesh.visible = visible;
+              entry.visible = visible;
+            }
+          });
+        }
+        setChildrenVisible(node.children);
+      }
+    };
+    // Find the node and set all its descendants
+    const findAndSet = (nodes) => {
+      for (const node of nodes) {
+        if (node.name === name) {
+          node.visible = visible;
+          // Set all descendants
+          const setAll = (children) => {
+            for (const child of children) {
+              child.visible = visible;
+              this.meshes.forEach(entry => {
+                if (entry.mesh.name === child.name) {
+                  entry.mesh.visible = visible;
+                  entry.visible = visible;
+                }
+              });
+              setAll(child.children);
+            }
+          };
+          setAll(node.children);
+          return true;
+        }
+        if (findAndSet(node.children)) return true;
+      }
+      return false;
+    };
+    findAndSet(this.partTree);
+  }
+
+  hidePart(name) {
+    this.setPartVisible(name, false);
+    this._hideStack.push(name);
+    this._redoStack = [];
+  }
+
+  undoHide() {
+    if (this._hideStack.length === 0) return null;
+    const name = this._hideStack.pop();
+    this.setPartVisible(name, true);
+    this._redoStack.push(name);
+    return name;
+  }
+
+  redoHide() {
+    if (this._redoStack.length === 0) return null;
+    const name = this._redoStack.pop();
+    this.setPartVisible(name, false);
+    this._hideStack.push(name);
+    return name;
   }
 
   // ── Transparency ─────────────────────────────────────────────────
@@ -270,7 +362,7 @@ export class CadModelManager {
     this.meshes.forEach(({ mesh }) => {
       mesh.material.opacity = value;
       mesh.material.transparent = value < 1.0;
-      mesh.material.depthWrite = value > 0.9;
+      mesh.material.depthWrite = true;
       mesh.material.needsUpdate = true;
     });
   }
@@ -292,7 +384,9 @@ export class CadModelManager {
     }
     this._removeSelectionBox();
 
-    const targets = this.meshes.map((m) => m.mesh);
+    const targets = this.meshes
+      .filter((m) => m.visible)
+      .map((m) => m.mesh);
     const hits = raycaster.intersectObjects(targets, false);
 
     if (hits.length === 0) {

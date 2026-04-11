@@ -107,12 +107,51 @@
 
   /* CAD selection info in sidebar */
   #cadSelection .transform-block { user-select: all; cursor: text; }
+  .copy-btn {
+    font-size: 10px; padding: 1px 6px; margin-left: 6px; vertical-align: middle;
+    background: #0f3460; color: #8c8; border: 1px solid #533483;
+    border-radius: 3px; cursor: pointer;
+  }
+  .copy-btn:hover { background: #533483; }
+  .copy-btn.copied { color: #4f4; }
+
+  /* CAD part tree overlay */
+  #cadPartTree {
+    position: absolute; top: 32px; left: 8px; z-index: 20;
+    background: rgba(22, 33, 62, 0.92); border: 1px solid #533483;
+    border-radius: 6px; font-size: 12px;
+    max-height: 60%; min-width: 180px; max-width: 280px;
+    display: none;
+  }
+  #cadPartTree .tree-header {
+    font-size: 11px; color: #e94560; font-weight: 600;
+    padding: 6px 8px; cursor: pointer; user-select: none;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  #cadPartTree .tree-header:hover { color: #ff6680; }
+  #cadPartTree .tree-body {
+    overflow-y: auto; max-height: calc(60vh - 30px); padding: 0 8px 8px;
+    border-top: 1px solid #0f3460;
+  }
+  #cadPartTree .tree-body.collapsed { display: none; }
+  #cadPartTree .tree-item {
+    display: flex; align-items: center; gap: 4px; padding: 2px 0;
+    cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #cadPartTree .tree-item:hover { color: #7ec8e3; }
+  #cadPartTree .tree-item.selected { color: #ffaa00; font-weight: 600; }
+  #cadPartTree .tree-item input[type="checkbox"] { flex-shrink: 0; }
+  #cadPartTree .tree-children { padding-left: 14px; }
+  #cadPartTree .tree-toggle {
+    cursor: pointer; font-size: 10px; width: 12px; text-align: center;
+    color: #888; flex-shrink: 0;
+  }
 </style>
 </head>
 <body>
 
 <div id="header">
-  <h1>Robot Camera Visualizer <span style="font-size:11px; color:#555; font-weight:normal">v13</span></h1>
+  <h1>Robot Camera Visualizer <span style="font-size:11px; color:#555; font-weight:normal">v17</span></h1>
   <div class="controls">
     <label>Units:
       <select id="unitSelect">
@@ -169,9 +208,15 @@
   <div class="viewport-container" id="perspViewContainer">
     <div class="viewport-label">3/4 Perspective</div>
     <div class="viewport-coords" id="perspCoords">X: -- Y: -- Z: --</div>
+    <div id="cadPartTree"></div>
     <canvas id="perspCanvas"></canvas>
   </div>
   <div id="sidebar">
+    <h2>Selected Component</h2>
+    <div id="cadSelection">
+      <div class="cam-card" style="color:#666; font-size:12px">Click a CAD component to inspect</div>
+    </div>
+
     <h2>Robot Frame</h2>
     <div id="robotInfo"></div>
 
@@ -183,11 +228,6 @@
       <div class="axis"><span class="dot" style="background:#ff4444"></span> +X = Forward (Red)</div>
       <div class="axis"><span class="dot" style="background:#44ff44"></span> +Y = Left (Green)</div>
       <div class="axis"><span class="dot" style="background:#4488ff"></span> +Z = Up (Blue)</div>
-    </div>
-
-    <h2>Selected Component</h2>
-    <div id="cadSelection">
-      <div class="cam-card" style="color:#666; font-size:12px">Click a CAD component to inspect</div>
     </div>
 
     <h2>Transforms</h2>
@@ -1079,6 +1119,18 @@ const cadStatus = document.getElementById('cadStatusText');
 
 cadManager.onStatusChange = (text) => { cadStatus.textContent = text; };
 
+// Copy buttons (event delegation)
+document.getElementById('cadSelection').addEventListener('click', (e) => {
+  const btn = e.target.closest('.copy-btn');
+  if (!btn) return;
+  const text = btn.dataset.copy.replace(/\\n/g, '\n');
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1500);
+  });
+});
+
 cadManager.onSelect = (info) => {
   const el = document.getElementById('cadSelection');
   if (!info) {
@@ -1101,16 +1153,190 @@ cadManager.onSelect = (info) => {
         <tr><td>Length:</td><td>${toDisplay(s.x)} ${unitLabel()}</td></tr>
         <tr><td>Height:</td><td>${toDisplay(s.z)} ${unitLabel()}</td></tr>
       </table>
-      <h3>Copy-paste for robot_geometry.py</h3>
+      <h3>robot_geometry.py <button class="copy-btn" data-copy="transform_from_inches(\n    x_in=${xIn},\n    y_in=${yIn},\n    z_in=${zIn},\n)">Copy</button></h3>
       <div class="transform-block">transform_from_inches(
     x_in=${xIn},
     y_in=${yIn},
     z_in=${zIn},
 )</div>
-      <h3>WPILib (meters)</h3>
+      <h3>WPILib (meters) <button class="copy-btn" data-copy="Translation3d(${c.x.toFixed(4)}, ${c.y.toFixed(4)}, ${c.z.toFixed(4)})">Copy</button></h3>
       <div class="transform-block">Translation3d(${c.x.toFixed(4)}, ${c.y.toFixed(4)}, ${c.z.toFixed(4)})</div>
     </div>
   `;
+};
+
+// ── Part tree overlay ────────────────────────────────────────────────
+function buildPartTree() {
+  const container = document.getElementById('cadPartTree');
+  if (cadManager.partTree.length === 0) {
+    container.style.display = 'none';
+    return;
+  }
+  container.style.display = 'block';
+  container.innerHTML = '';
+
+  // Collapsible header
+  const header = document.createElement('div');
+  header.className = 'tree-header';
+  header.innerHTML = 'Parts <span id="treeCollapseIcon">\u25BC</span>';
+  container.appendChild(header);
+
+  const body = document.createElement('div');
+  body.className = 'tree-body';
+  container.appendChild(body);
+
+  header.addEventListener('click', (e) => {
+    // Don't collapse when clicking the show/hide buttons
+    if (e.target.tagName === 'BUTTON') return;
+    body.classList.toggle('collapsed');
+    document.getElementById('treeCollapseIcon').textContent =
+      body.classList.contains('collapsed') ? '\u25B6' : '\u25BC';
+  });
+
+  // Show All / Hide All buttons in header
+  const showAllBtn = document.createElement('button');
+  showAllBtn.textContent = 'All';
+  showAllBtn.style.cssText = 'font-size:10px; padding:1px 5px; margin-left:4px; background:#0f3460; color:#8c8; border:1px solid #533483; border-radius:3px; cursor:pointer;';
+  showAllBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    cadManager.meshes.forEach(m => { m.mesh.visible = true; m.visible = true; });
+    setAllTreeVisible(true);
+    cadManager._hideStack = [];
+    cadManager._redoStack = [];
+  });
+
+  const hideAllBtn = document.createElement('button');
+  hideAllBtn.textContent = 'None';
+  hideAllBtn.style.cssText = 'font-size:10px; padding:1px 5px; margin-left:2px; background:#0f3460; color:#c66; border:1px solid #533483; border-radius:3px; cursor:pointer;';
+  hideAllBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    cadManager.meshes.forEach(m => { m.mesh.visible = false; m.visible = false; });
+    setAllTreeVisible(false);
+    cadManager._hideStack = [];
+    cadManager._redoStack = [];
+  });
+
+  header.insertBefore(hideAllBtn, header.querySelector('#treeCollapseIcon'));
+  header.insertBefore(showAllBtn, hideAllBtn);
+
+  function setAllTreeVisible(visible) {
+    body.querySelectorAll('.tree-item input[type="checkbox"]').forEach(cb => {
+      cb.checked = visible;
+    });
+    const setNodes = (nodes) => {
+      for (const n of nodes) { n.visible = visible; setNodes(n.children); }
+    };
+    setNodes(cadManager.partTree);
+  }
+
+  function buildNode(node, parent) {
+    const item = document.createElement('div');
+    item.className = 'tree-item';
+    item.dataset.name = node.name;
+
+    // Checkbox for visibility
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = node.visible;
+    cb.addEventListener('change', (e) => {
+      e.stopPropagation();
+      cadManager.setPartVisible(node.name, cb.checked);
+      node.visible = cb.checked;
+    });
+    item.appendChild(cb);
+
+    // Toggle arrow for children
+    const toggle = document.createElement('span');
+    toggle.className = 'tree-toggle';
+    if (node.children.length > 0) {
+      toggle.textContent = '\u25BC';  // ▼
+    } else {
+      toggle.textContent = ' ';
+    }
+    item.appendChild(toggle);
+
+    // Name label — click to select
+    const label = document.createElement('span');
+    label.textContent = node.name;
+    label.title = node.name;
+    label.style.overflow = 'hidden';
+    label.style.textOverflow = 'ellipsis';
+    item.appendChild(label);
+
+    item.addEventListener('click', (e) => {
+      if (e.target === cb) return;  // don't select on checkbox click
+      // Highlight in 3D
+      const entry = cadManager.meshes.find(m => m.mesh.name === node.name);
+      if (entry) {
+        // Simulate a selection
+        cadManager._removeSelectionBox();
+        if (cadManager.selectedMesh) {
+          const prev = cadManager.meshes.find(m => m.mesh === cadManager.selectedMesh);
+          if (prev) {
+            prev.mesh.material.emissive.setHex(0x000000);
+            prev.mesh.material.emissiveIntensity = 0;
+          }
+        }
+        cadManager.selectedMesh = entry.mesh;
+        entry.mesh.material.emissive.setHex(0xffaa00);
+        entry.mesh.material.emissiveIntensity = 0.4;
+        cadManager._createSelectionBox(entry.mesh);
+
+        // Build selection info
+        const worldBox = new THREE.Box3().setFromObject(entry.mesh);
+        const center = worldBox.getCenter(new THREE.Vector3());
+        const bboxSize = worldBox.getSize(new THREE.Vector3());
+        cadManager.onSelect({
+          name: node.name,
+          center,
+          size: bboxSize,
+          point: center.clone(),
+        });
+      }
+      // Highlight in tree
+      container.querySelectorAll('.tree-item.selected').forEach(
+        el => el.classList.remove('selected')
+      );
+      item.classList.add('selected');
+    });
+
+    parent.appendChild(item);
+
+    // Children container (collapsible)
+    if (node.children.length > 0) {
+      const childContainer = document.createElement('div');
+      childContainer.className = 'tree-children';
+      node.children.forEach(child => buildNode(child, childContainer));
+      parent.appendChild(childContainer);
+
+      toggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const collapsed = childContainer.style.display === 'none';
+        childContainer.style.display = collapsed ? '' : 'none';
+        toggle.textContent = collapsed ? '\u25BC' : '\u25B6';  // ▼ or ▶
+      });
+    }
+  }
+
+  cadManager.partTree.forEach(node => buildNode(node, body));
+}
+
+// Update tree highlight when selecting via 3D click
+const origOnSelect = cadManager.onSelect;
+cadManager.onSelect = (info) => {
+  origOnSelect(info);
+  // Highlight matching tree item
+  const container = document.getElementById('cadPartTree');
+  container.querySelectorAll('.tree-item.selected').forEach(
+    el => el.classList.remove('selected')
+  );
+  if (info) {
+    const match = container.querySelector(`.tree-item[data-name="${CSS.escape(info.name)}"]`);
+    if (match) {
+      match.classList.add('selected');
+      match.scrollIntoView({ block: 'nearest' });
+    }
+  }
 };
 
 // Load button → modal
@@ -1137,6 +1363,7 @@ document.getElementById('cadLoadBtn').addEventListener('click', async () => {
           cadSlider.disabled = false;
           document.getElementById('cadRotBtn').disabled = false;
           document.getElementById('cadTiltBtn').disabled = false;
+          buildPartTree();
         });
         listEl.appendChild(btn);
       });
@@ -1153,7 +1380,9 @@ document.getElementById('cadFileInput').addEventListener('change', async (e) => 
   document.getElementById('cadModal').style.display = 'none';
   await cadManager.loadFile(file);
   cadSlider.disabled = false;
-  document.getElementById('cadFlipYBtn').disabled = false;
+  document.getElementById('cadRotBtn').disabled = false;
+  document.getElementById('cadTiltBtn').disabled = false;
+  buildPartTree();
 });
 
 // Modal cancel
@@ -1180,15 +1409,58 @@ document.getElementById('cadRotBtn').addEventListener('click', () => {
 });
 
 
-// Click-to-select on both canvases
+// Helper: update tree checkbox for a part
+function updateTreeCheckbox(name, checked) {
+  const cb = document.querySelector(
+    `#cadPartTree .tree-item[data-name="${CSS.escape(name)}"] input[type="checkbox"]`
+  );
+  if (cb) cb.checked = checked;
+}
+
+// Ctrl+Z = undo hide, Ctrl+Y = redo hide
+document.addEventListener('keydown', (e) => {
+  if (!cadManager.model) return;
+  if (e.ctrlKey && e.key === 'z') {
+    e.preventDefault();
+    const name = cadManager.undoHide();
+    if (name) updateTreeCheckbox(name, true);
+  } else if (e.ctrlKey && e.key === 'y') {
+    e.preventDefault();
+    const name = cadManager.redoHide();
+    if (name) updateTreeCheckbox(name, false);
+  }
+});
+
+// Click-to-select on both canvases.
+// Track mousedown position to distinguish clicks from drags.
 function handleCadClick(canvas, camera) {
-  canvas.addEventListener('click', (e) => {
+  let downX = 0, downY = 0;
+  canvas.addEventListener('mousedown', (e) => {
+    downX = e.clientX;
+    downY = e.clientY;
+  });
+  canvas.addEventListener('mouseup', (e) => {
     if (!cadManager.model) return;
+    // Ignore drags (moved more than 5px)
+    const dx = e.clientX - downX;
+    const dy = e.clientY - downY;
+    if (dx * dx + dy * dy > 25) return;
+
     const rect = canvas.getBoundingClientRect();
     const ndc = new THREE.Vector2(
       ((e.clientX - rect.left) / rect.width) * 2 - 1,
       -((e.clientY - rect.top) / rect.height) * 2 + 1
     );
+    // Ctrl+click hides the currently selected part (without re-selecting)
+    if (e.ctrlKey && cadManager.selectedMesh) {
+      const name = cadManager.selectedMesh.name;
+      cadManager.hidePart(name);
+      updateTreeCheckbox(name, false);
+      cadManager.selectedMesh = null;
+      cadManager._removeSelectionBox();
+      return;
+    }
+
     const ray = new THREE.Raycaster();
     ray.setFromCamera(ndc, camera);
     cadManager.handleClick(ray);
