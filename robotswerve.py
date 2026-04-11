@@ -47,22 +47,21 @@ class RobotSwerve:
                 encoder = phoenix6.hardware.CANcoder(encoder_id)
                 encoder.sim_state.set_supply_voltage(12.0)
 
-        # Subsystem instantiation
+        # Subsystem instantiation — toggle each to True/False individually
         self.drivetrain = subsystem.drivetrain.swerve_drivetrain.SwerveDrivetrain()
-        if True:  # Toggle to True to enable mechanisms
-            self.shooter = subsystem.mechanisms.shooter.Shooter()
-            self.feed = subsystem.mechanisms.shooter.Feed()
-            self.hood = subsystem.mechanisms.shooter.createHood(consts.HoodConstants, HoodConfig)
-            self.hopper = subsystem.Hopper()
-            self.intake_position = subsystem.IntakePosition()
-            self.intake_roller = subsystem.IntakeRoller()
-        else:
-            self.shooter = None
-            self.feed = None
-            self.hood = None
-            self.hopper = None
-            self.intake_position = None
-            self.intake_roller = None
+        _enable_shooter = False
+        _enable_feed = False
+        _enable_hood = False
+        _enable_hopper = False
+        _enable_intake_position = False
+        _enable_intake_roller = True
+
+        self.shooter = subsystem.mechanisms.shooter.Shooter() if _enable_shooter else None
+        self.feed = subsystem.mechanisms.shooter.Feed() if _enable_feed else None
+        self.hood = subsystem.mechanisms.shooter.createHood(consts.HoodConstants, HoodConfig) if _enable_hood else None
+        self.hopper = subsystem.Hopper() if _enable_hopper else None
+        self.intake_position = subsystem.IntakePosition() if _enable_intake_position else None
+        self.intake_roller = subsystem.IntakeRoller() if _enable_intake_roller else None
         self.robot_state = RobotState()
         # Alliance instantiation
         self.updateAlliance()
