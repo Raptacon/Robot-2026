@@ -157,6 +157,8 @@ class RobotSwerve:
         self.auto_command = self.auto_chooser.getSelected()
         if self.auto_command:
             self.auto_command.schedule()
+            if self.auto_command.getName().lower() == "instantcommand":
+                self.drivetrain.reset_pose_estimator(self.drivetrain.get_default_starting_pose())
         else:
             self.drivetrain.reset_pose_estimator(self.drivetrain.get_default_starting_pose())
 
@@ -167,6 +169,10 @@ class RobotSwerve:
         self.updateAlliance()
         if self.auto_command:
             self.auto_command.cancel()
+            if self.auto_command.getName().lower() == "instantcommand":
+                self.drivetrain.reset_pose_estimator(self.drivetrain.get_default_starting_pose())
+        else:
+            self.drivetrain.reset_pose_estimator(self.drivetrain.get_default_starting_pose())
 
         # DefaultDrive: raw square input (diagonals get full per-axis output)
         # DefaultDriveCircular: remaps circular stick input so diagonals
