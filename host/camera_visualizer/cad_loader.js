@@ -74,32 +74,48 @@ export class CadModelManager {
 
     const root = gltf.scene;
 
-    // Auto-detect units: if model is way too large, assume inches
-    const box = new THREE.Box3().setFromObject(root);
-    const size = box.getSize(new THREE.Vector3());
-    const maxDim = Math.max(size.x, size.y, size.z);
+    // Measure raw bounding box before any transforms
+    const rawBox = new THREE.Box3().setFromObject(root);
+    const rawSize = rawBox.getSize(new THREE.Vector3());
+    const rawCenter = rawBox.getCenter(new THREE.Vector3());
+    const maxDim = Math.max(rawSize.x, rawSize.y, rawSize.z);
+    console.log(`[CAD] Raw bounding box: size=(${rawSize.x.toFixed(3)}, ${rawSize.y.toFixed(3)}, ${rawSize.z.toFixed(3)}) center=(${rawCenter.x.toFixed(3)}, ${rawCenter.y.toFixed(3)}, ${rawCenter.z.toFixed(3)}) maxDim=${maxDim.toFixed(3)}`);
 
-    if (maxDim > 5) {
-      // Likely inches — scale to meters
-      this._appliedScale = 0.0254;
-      root.scale.set(0.0254, 0.0254, 0.0254);
-      this._setStatus(`Loaded (auto-scaled from inches)`);
-    } else if (maxDim > 1.5) {
-      // Likely millimeters
+    // Auto-detect units based on size
+    // A typical FRC robot is ~0.6-1.0m. With bumpers/mechanisms up to ~2m.
+    // If maxDim > 20, likely inches (24" = 0.6m robot reads as 24).
+    // If maxDim > 200, likely millimeters (600mm = 0.6m robot reads as 600).
+    let unitNote = 'meters';
+    if (maxDim > 200) {
       this._appliedScale = 0.001;
       root.scale.set(0.001, 0.001, 0.001);
-      this._setStatus(`Loaded (auto-scaled from mm)`);
+      unitNote = 'mm→meters';
+    } else if (maxDim > 20) {
+      this._appliedScale = 0.0254;
+      root.scale.set(0.0254, 0.0254, 0.0254);
+      unitNote = 'inches→meters';
     } else {
       this._appliedScale = 1.0;
-      this._setStatus('Loaded (meters)');
     }
 
     // GLTF is Y-up, our scene is Z-up (WPI convention)
-    // Rotate so Y-up becomes Z-up: -90deg around X
     root.rotation.x = -Math.PI / 2;
 
     this.model = root;
     this.scene.add(root);
+
+    // Re-measure after transforms
+    root.updateMatrixWorld(true);
+    const finalBox = new THREE.Box3().setFromObject(root);
+    const finalSize = finalBox.getSize(new THREE.Vector3());
+    const finalCenter = finalBox.getCenter(new THREE.Vector3());
+    console.log(`[CAD] Final bounding box: size=(${finalSize.x.toFixed(4)}, ${finalSize.y.toFixed(4)}, ${finalSize.z.toFixed(4)}) center=(${finalCenter.x.toFixed(4)}, ${finalCenter.y.toFixed(4)}, ${finalCenter.z.toFixed(4)})`);
+
+    // Count meshes for status
+    let meshCount = 0;
+    root.traverse((obj) => { if (obj.isMesh) meshCount++; });
+
+    this._setStatus(`${meshCount} parts (${unitNote})`);
 
     // Collect all meshes, make transparent
     this.meshes = [];
