@@ -75,7 +75,9 @@
   .coord-legend .axis { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
   .coord-legend .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 
-  canvas { display: block; }
+  canvas { display: block; touch-action: none; }
+  canvas:active { cursor: grabbing; }
+  .viewport-container canvas { user-select: none; -webkit-user-select: none; }
 
   /* CAD controls */
   #cadControls {
@@ -1052,6 +1054,8 @@ window.addEventListener('resize', resize);
 document.getElementById('unitSelect').addEventListener('change', (e) => {
   currentUnit = e.target.value;
   updateSidebar();
+  // Re-render selection info in new units
+  if (_lastSelectionInfo) renderSelectionInfo(_lastSelectionInfo);
   // Re-setup sim canvases since sidebar HTML was rebuilt
   camSimViews.length = 0;
   setupCamSimViews();
@@ -1131,7 +1135,9 @@ document.getElementById('cadSelection').addEventListener('click', (e) => {
   });
 });
 
-cadManager.onSelect = (info) => {
+let _lastSelectionInfo = null;
+
+function renderSelectionInfo(info) {
   const el = document.getElementById('cadSelection');
   if (!info) {
     el.innerHTML = '<div class="cam-card" style="color:#666; font-size:12px">Click a CAD component to inspect</div>';
@@ -1163,6 +1169,11 @@ cadManager.onSelect = (info) => {
       <div class="transform-block">Translation3d(${c.x.toFixed(4)}, ${c.y.toFixed(4)}, ${c.z.toFixed(4)})</div>
     </div>
   `;
+}
+
+cadManager.onSelect = (info) => {
+  _lastSelectionInfo = info;
+  renderSelectionInfo(info);
 };
 
 // ── Part tree overlay ────────────────────────────────────────────────
@@ -1178,11 +1189,11 @@ function buildPartTree() {
   // Collapsible header
   const header = document.createElement('div');
   header.className = 'tree-header';
-  header.innerHTML = 'Parts <span id="treeCollapseIcon">\u25BC</span>';
+  header.innerHTML = 'Parts <span id="treeCollapseIcon">\u25B6</span>';
   container.appendChild(header);
 
   const body = document.createElement('div');
-  body.className = 'tree-body';
+  body.className = 'tree-body collapsed';
   container.appendChild(body);
 
   header.addEventListener('click', (e) => {
@@ -1265,40 +1276,107 @@ function buildPartTree() {
 
     item.addEventListener('click', (e) => {
       if (e.target === cb) return;  // don't select on checkbox click
-      // Highlight in 3D
-      const entry = cadManager.meshes.find(m => m.mesh.name === node.name);
-      if (entry) {
-        // Simulate a selection
-        cadManager._removeSelectionBox();
-        if (cadManager.selectedMesh) {
-          const prev = cadManager.meshes.find(m => m.mesh === cadManager.selectedMesh);
-          if (prev) {
-            prev.mesh.material.emissive.setHex(0x000000);
-            prev.mesh.material.emissiveIntensity = 0;
-          }
-        }
-        cadManager.selectedMesh = entry.mesh;
-        entry.mesh.material.emissive.setHex(0xffaa00);
-        entry.mesh.material.emissiveIntensity = 0.4;
-        cadManager._createSelectionBox(entry.mesh);
+      e.preventDefault();
+      e.stopPropagation();
+      _treeClickInProgress = true;
+      const isCtrl = e.ctrlKey || e.metaKey;
 
-        // Build selection info
-        const worldBox = new THREE.Box3().setFromObject(entry.mesh);
-        const center = worldBox.getCenter(new THREE.Vector3());
-        const bboxSize = worldBox.getSize(new THREE.Vector3());
-        cadManager.onSelect({
-          name: node.name,
-          center,
-          size: bboxSize,
-          point: center.clone(),
-        });
+      if (!isCtrl) {
+        // Normal click: clear previous selection
+        cadManager._removeSelectionBox();
+        if (cadManager._highlightedMeshes) {
+          cadManager._highlightedMeshes.forEach(m => {
+            m.material.emissive.setHex(0x000000);
+            m.material.emissiveIntensity = 0;
+          });
+        }
+        cadManager._highlightedMeshes = [];
+        cadManager.selectedMesh = null;
+        container.querySelectorAll('.tree-item.selected').forEach(
+          el => el.classList.remove('selected')
+        );
+      } else {
+        // Ctrl+click: remove bounding box (will be recalculated)
+        cadManager._removeSelectionBox();
+        // If already selected, deselect this node
+        if (item.classList.contains('selected')) {
+          item.classList.remove('selected');
+          // Un-highlight this node's meshes
+          const removeNames = new Set(collectNodeNames(node));
+          cadManager._highlightedMeshes = cadManager._highlightedMeshes.filter(m => {
+            if (removeNames.has(m.name)) {
+              m.material.emissive.setHex(0x000000);
+              m.material.emissiveIntensity = 0;
+              return false;
+            }
+            return true;
+          });
+          // Recalculate bounding box from remaining
+          _updateMultiSelection();
+          _treeClickInProgress = false;
+          return;
+        }
       }
-      // Highlight in tree
-      container.querySelectorAll('.tree-item.selected').forEach(
-        el => el.classList.remove('selected')
-      );
+
+      // Add this node's meshes to selection
       item.classList.add('selected');
+      const partNames = new Set(collectNodeNames(node));
+      const matchingMeshes = cadManager.meshes.filter(
+        m => partNames.has(m.mesh.name) && m.visible
+      );
+
+      matchingMeshes.forEach(({ mesh }) => {
+        mesh.material.emissive.setHex(0xffaa00);
+        mesh.material.emissiveIntensity = 0.4;
+        if (!cadManager._highlightedMeshes.includes(mesh)) {
+          cadManager._highlightedMeshes.push(mesh);
+        }
+      });
+
+      if (matchingMeshes.length > 0 && !cadManager.selectedMesh) {
+        cadManager.selectedMesh = matchingMeshes[0].mesh;
+      }
+
+      _updateMultiSelection();
+      _treeClickInProgress = false;
     });
+
+    function collectNodeNames(n) {
+      let names = [n.name];
+      for (const child of n.children) names = names.concat(collectNodeNames(child));
+      return names;
+    }
+
+    function _updateMultiSelection() {
+      const highlighted = cadManager._highlightedMeshes;
+      if (highlighted.length === 0) {
+        cadManager.selectedMesh = null;
+        cadManager.onSelect(null);
+        return;
+      }
+
+      // Combined bounding box of all highlighted meshes
+      const combinedBox = new THREE.Box3();
+      highlighted.forEach(mesh => combinedBox.expandByObject(mesh));
+      cadManager._createSelectionBoxFromBox3(combinedBox);
+      cadManager.selectedMesh = highlighted[0];
+
+      // Build label from selected tree items
+      const selectedItems = container.querySelectorAll('.tree-item.selected');
+      const names = Array.from(selectedItems).map(el => el.dataset.name);
+      const label = names.length === 1
+        ? names[0]
+        : `${names.length} selections (${highlighted.length} parts)`;
+
+      const center = combinedBox.getCenter(new THREE.Vector3());
+      const bboxSize = combinedBox.getSize(new THREE.Vector3());
+      cadManager.onSelect({
+        name: label,
+        center,
+        size: bboxSize,
+        point: center.clone(),
+      });
+    }
 
     parent.appendChild(item);
 
@@ -1321,11 +1399,13 @@ function buildPartTree() {
   cadManager.partTree.forEach(node => buildNode(node, body));
 }
 
-// Update tree highlight when selecting via 3D click
+// Update tree highlight when selecting via 3D click (not tree click).
+// Tree clicks manage .selected themselves; this only runs for 3D raycasts.
+let _treeClickInProgress = false;
 const origOnSelect = cadManager.onSelect;
 cadManager.onSelect = (info) => {
   origOnSelect(info);
-  // Highlight matching tree item
+  if (_treeClickInProgress) return;  // tree handler manages its own highlights
   const container = document.getElementById('cadPartTree');
   container.querySelectorAll('.tree-item.selected').forEach(
     el => el.classList.remove('selected')
@@ -1420,14 +1500,47 @@ function updateTreeCheckbox(name, checked) {
 // Ctrl+Z = undo hide, Ctrl+Y = redo hide
 document.addEventListener('keydown', (e) => {
   if (!cadManager.model) return;
-  if (e.ctrlKey && e.key === 'z') {
+  const key = e.key.toLowerCase();
+  if (key === 'escape') {
+    // Clear all selections
+    cadManager._removeSelectionBox();
+    if (cadManager._highlightedMeshes) {
+      cadManager._highlightedMeshes.forEach(m => {
+        m.material.emissive.setHex(0x000000);
+        m.material.emissiveIntensity = 0;
+      });
+      cadManager._highlightedMeshes = [];
+    }
+    if (cadManager.selectedMesh) {
+      const prev = cadManager.meshes.find(m => m.mesh === cadManager.selectedMesh);
+      if (prev) {
+        prev.mesh.material.emissive.setHex(0x000000);
+        prev.mesh.material.emissiveIntensity = 0;
+      }
+      cadManager.selectedMesh = null;
+    }
+    cadManager.onSelect(null);
+    document.querySelectorAll('#cadPartTree .tree-item.selected').forEach(
+      el => el.classList.remove('selected')
+    );
+    return;
+  }
+  if (e.ctrlKey && !e.shiftKey && key === 'z') {
     e.preventDefault();
+    e.stopPropagation();
     const name = cadManager.undoHide();
-    if (name) updateTreeCheckbox(name, true);
-  } else if (e.ctrlKey && e.key === 'y') {
+    if (name) {
+      updateTreeCheckbox(name, true);
+      console.log(`[CAD] Undo hide: ${name}`);
+    }
+  } else if (e.ctrlKey && (key === 'y' || (e.shiftKey && key === 'z'))) {
     e.preventDefault();
+    e.stopPropagation();
     const name = cadManager.redoHide();
-    if (name) updateTreeCheckbox(name, false);
+    if (name) {
+      updateTreeCheckbox(name, false);
+      console.log(`[CAD] Redo hide: ${name}`);
+    }
   }
 });
 
@@ -1438,6 +1551,8 @@ function handleCadClick(canvas, camera) {
   canvas.addEventListener('mousedown', (e) => {
     downX = e.clientX;
     downY = e.clientY;
+    // Clear any text selection so it doesn't interfere with orbit drag
+    window.getSelection()?.removeAllRanges();
   });
   canvas.addEventListener('mouseup', (e) => {
     if (!cadManager.model) return;
@@ -1451,18 +1566,85 @@ function handleCadClick(canvas, camera) {
       ((e.clientX - rect.left) / rect.width) * 2 - 1,
       -((e.clientY - rect.top) / rect.height) * 2 + 1
     );
-    // Ctrl+click hides the currently selected part (without re-selecting)
-    if (e.ctrlKey && cadManager.selectedMesh) {
-      const name = cadManager.selectedMesh.name;
-      cadManager.hidePart(name);
-      updateTreeCheckbox(name, false);
-      cadManager.selectedMesh = null;
-      cadManager._removeSelectionBox();
+    // Ctrl+click hides the part under the cursor, but only if it's selected
+    if (e.ctrlKey) {
+      const ray = new THREE.Raycaster();
+      ray.setFromCamera(ndc, camera);
+      const targets = cadManager.meshes
+        .filter((m) => m.visible)
+        .map((m) => m.mesh);
+      const hits = ray.intersectObjects(targets, false);
+      if (hits.length > 0) {
+        const hitMesh = hits[0].object;
+        if (cadManager._highlightedMeshes.includes(hitMesh) ||
+            cadManager.selectedMesh === hitMesh) {
+          cadManager.hidePart(hitMesh.name);
+          updateTreeCheckbox(hitMesh.name, false);
+        }
+      }
       return;
     }
 
     const ray = new THREE.Raycaster();
     ray.setFromCamera(ndc, camera);
+
+    // Shift+click: add/remove from multi-selection
+    if (e.shiftKey) {
+      const targets = cadManager.meshes
+        .filter((m) => m.visible)
+        .map((m) => m.mesh);
+      const hits = ray.intersectObjects(targets, false);
+      if (hits.length === 0) return;
+
+      const mesh = hits[0].object;
+      const idx = cadManager._highlightedMeshes.indexOf(mesh);
+
+      if (idx >= 0) {
+        // Already selected — remove from selection
+        cadManager._highlightedMeshes.splice(idx, 1);
+        mesh.material.emissive.setHex(0x000000);
+        mesh.material.emissiveIntensity = 0;
+        // Update tree
+        const treeItem = document.querySelector(
+          `#cadPartTree .tree-item[data-name="${CSS.escape(mesh.name)}"]`
+        );
+        if (treeItem) treeItem.classList.remove('selected');
+      } else {
+        // Add to selection
+        cadManager._highlightedMeshes.push(mesh);
+        mesh.material.emissive.setHex(0xffaa00);
+        mesh.material.emissiveIntensity = 0.4;
+        // Update tree
+        const treeItem = document.querySelector(
+          `#cadPartTree .tree-item[data-name="${CSS.escape(mesh.name)}"]`
+        );
+        if (treeItem) treeItem.classList.add('selected');
+      }
+
+      // Recalculate combined bounding box
+      cadManager._removeSelectionBox();
+      const highlighted = cadManager._highlightedMeshes;
+      if (highlighted.length === 0) {
+        cadManager.selectedMesh = null;
+        cadManager.onSelect(null);
+        return;
+      }
+      cadManager.selectedMesh = highlighted[0];
+      const combinedBox = new THREE.Box3();
+      highlighted.forEach(m => combinedBox.expandByObject(m));
+      cadManager._createSelectionBoxFromBox3(combinedBox);
+
+      const center = combinedBox.getCenter(new THREE.Vector3());
+      const bboxSize = combinedBox.getSize(new THREE.Vector3());
+      cadManager.onSelect({
+        name: `${highlighted.length} parts selected`,
+        center,
+        size: bboxSize,
+        point: center.clone(),
+      });
+      return;
+    }
+
     cadManager.handleClick(ray);
   });
 }

@@ -10,8 +10,6 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 
-const INCHES_PER_METER = 1 / 0.0254;
-
 export class CadModelManager {
   constructor(scene) {
     this.scene = scene;
@@ -26,6 +24,7 @@ export class CadModelManager {
     this.onStatusChange = null;   // callback(statusText)
     this._hideStack = [];         // undo stack: names hidden in order
     this._redoStack = [];         // redo stack
+    this._highlightedMeshes = []; // multi-mesh highlight for assemblies
     this._loader = new GLTFLoader();
     // Draco decoder for compressed GLTF (e.g. Onshape exports)
     const dracoLoader = new DRACOLoader();
@@ -334,6 +333,17 @@ export class CadModelManager {
   }
 
   hidePart(name) {
+    // Clear highlight before hiding
+    this.meshes.forEach(entry => {
+      if (entry.mesh.name === name) {
+        entry.mesh.material.emissive.setHex(0x000000);
+        entry.mesh.material.emissiveIntensity = 0;
+      }
+    });
+    // Remove from highlighted set
+    this._highlightedMeshes = this._highlightedMeshes.filter(
+      m => m.name !== name
+    );
     this.setPartVisible(name, false);
     this._hideStack.push(name);
     this._redoStack = [];
@@ -343,6 +353,13 @@ export class CadModelManager {
     if (this._hideStack.length === 0) return null;
     const name = this._hideStack.pop();
     this.setPartVisible(name, true);
+    // Ensure emissive is cleared on restore
+    this.meshes.forEach(entry => {
+      if (entry.mesh.name === name) {
+        entry.mesh.material.emissive.setHex(0x000000);
+        entry.mesh.material.emissiveIntensity = 0;
+      }
+    });
     this._redoStack.push(name);
     return name;
   }
@@ -372,7 +389,14 @@ export class CadModelManager {
   handleClick(raycaster) {
     if (!this.model || this.meshes.length === 0) return null;
 
-    // Reset previous selection
+    // Reset previous selection (single or multi)
+    if (this._highlightedMeshes.length > 0) {
+      this._highlightedMeshes.forEach(m => {
+        m.material.emissive.setHex(0x000000);
+        m.material.emissiveIntensity = 0;
+      });
+      this._highlightedMeshes = [];
+    }
     if (this.selectedMesh) {
       const prev = this.meshes.find(
         (m) => m.mesh === this.selectedMesh
@@ -398,6 +422,7 @@ export class CadModelManager {
     const hit = hits[0];
     const mesh = hit.object;
     this.selectedMesh = mesh;
+    this._highlightedMeshes = [mesh];
 
     // Highlight
     mesh.material.emissive.setHex(0xffaa00);
@@ -440,13 +465,89 @@ export class CadModelManager {
     this.selectionBox = new THREE.BoxHelper(mesh, 0xffaa00);
     this.selectionBox.visible = this.showBBox;
     this.scene.add(this.selectionBox);
+
+    // Add center marker with axes and face dots
+    const box = new THREE.Box3().setFromObject(mesh);
+    this._createCenterMarker(box);
+  }
+
+  _createSelectionBoxFromBox3(box3) {
+    // For assemblies where we already have the combined box
+    const helper = new THREE.Box3Helper(box3, 0xffaa00);
+    helper.visible = this.showBBox;
+    this.selectionBox = helper;
+    this.scene.add(helper);
+
+    this._createCenterMarker(box3);
+  }
+
+  _createCenterMarker(box) {
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    this._centerGroup = new THREE.Group();
+    this._centerGroup.visible = this.showBBox;
+    this._centerGroup.renderOrder = 999;
+
+    const minDim = Math.min(size.x, size.y, size.z);
+
+    // Center sphere — scaled to be visible, always rendered on top
+    const sphereRadius = Math.min(Math.max(minDim * 0.06, 0.008), 0.015);
+    const sphereGeo = new THREE.SphereGeometry(sphereRadius, 12, 12);
+    const sphereMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff, depthTest: false, transparent: true, opacity: 0.9,
+    });
+    const sphere = new THREE.Mesh(sphereGeo, sphereMat);
+    sphere.renderOrder = 999;
+    sphere.position.copy(center);
+    this._centerGroup.add(sphere);
+
+    // Mini axes at center — extend to ~60% of the smallest dimension
+    const axisLen = Math.max(minDim * 0.6, 0.03);
+    const axisInfo = [
+      { dir: new THREE.Vector3(1, 0, 0), color: 0xff4444 }, // X red
+      { dir: new THREE.Vector3(0, 1, 0), color: 0x44ff44 }, // Y green
+      { dir: new THREE.Vector3(0, 0, 1), color: 0x4488ff }, // Z blue
+    ];
+    axisInfo.forEach(({ dir, color }) => {
+      const arrow = new THREE.ArrowHelper(dir, center, axisLen, color, axisLen * 0.25, axisLen * 0.15);
+      arrow.renderOrder = 999;
+      this._centerGroup.add(arrow);
+    });
+
+    // Dots at center of each face (6 faces) — dark grey, smaller
+    const dotRadius = Math.max(minDim * 0.025, 0.003);
+    const dotGeo = new THREE.SphereGeometry(dotRadius, 8, 8);
+    const dotMat = new THREE.MeshBasicMaterial({
+      color: 0x444444, depthTest: false, transparent: true, opacity: 0.9,
+    });
+    const halfSize = size.clone().multiplyScalar(0.5);
+    const faceOffsets = [
+      new THREE.Vector3(halfSize.x, 0, 0),   // +X face
+      new THREE.Vector3(-halfSize.x, 0, 0),  // -X face
+      new THREE.Vector3(0, halfSize.y, 0),   // +Y face
+      new THREE.Vector3(0, -halfSize.y, 0),  // -Y face
+      new THREE.Vector3(0, 0, halfSize.z),   // +Z face
+      new THREE.Vector3(0, 0, -halfSize.z),  // -Z face
+    ];
+    faceOffsets.forEach(offset => {
+      const dot = new THREE.Mesh(dotGeo, dotMat);
+      dot.renderOrder = 999;
+      dot.position.copy(center).add(offset);
+      this._centerGroup.add(dot);
+    });
+
+    this.scene.add(this._centerGroup);
   }
 
   _removeSelectionBox() {
     if (this.selectionBox) {
       this.scene.remove(this.selectionBox);
-      this.selectionBox.dispose();
+      if (this.selectionBox.dispose) this.selectionBox.dispose();
       this.selectionBox = null;
+    }
+    if (this._centerGroup) {
+      this.scene.remove(this._centerGroup);
+      this._centerGroup = null;
     }
   }
 
@@ -480,9 +581,8 @@ export class CadModelManager {
 
   setShowBBox(show) {
     this.showBBox = show;
-    if (this.selectionBox) {
-      this.selectionBox.visible = show;
-    }
+    if (this.selectionBox) this.selectionBox.visible = show;
+    if (this._centerGroup) this._centerGroup.visible = show;
   }
 
   // ── Cleanup ──────────────────────────────────────────────────────
