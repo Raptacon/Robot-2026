@@ -25,9 +25,15 @@ FIELD_LIST = [
         'type': 'builtin',
     },
     {
+        'id': 'evergreen',
+        'name': 'Evergreen Field',
+        'description': 'Standard FRC field perimeter (no game elements)',
+        'type': 'builtin',
+    },
+    {
         'id': '2026-field',
         'name': '2026 Field',
-        'description': '2026 FRC Rebuilt field',
+        'description': '2026 FRC Rebuilt field with game elements',
         'zipEntry': 'Field3d_2026FRCFieldV1.zip',
         'type': 'field',
     },
@@ -36,13 +42,6 @@ FIELD_LIST = [
         'name': '2025 Field (Welded)',
         'description': '2025 FRC field, welded variant',
         'zipEntry': 'Field3d_2025FRCFieldWeldedV2.zip',
-        'type': 'field',
-    },
-    {
-        'id': '2025-andymark',
-        'name': '2025 Field (AndyMark)',
-        'description': '2025 FRC field, AndyMark variant',
-        'zipEntry': 'Field3d_2025FRCFieldAndyMarkV2.zip',
         'type': 'field',
     },
     {

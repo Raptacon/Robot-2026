@@ -21,6 +21,7 @@ export class FieldManager {
     this.fieldTags = [];            // AprilTag meshes placed on field
     this.currentMode = 'robot-view';
     this.onStatusChange = null;
+    this.onFieldLoaded = null;     // callback({ lengthM, widthM, robotX, robotY })
 
     this._loader = new GLTFLoader();
     const draco = new DRACOLoader();
@@ -78,6 +79,13 @@ export class FieldManager {
       return;
     }
 
+    if (modeId === 'evergreen') {
+      this._showDefaultEnv(false);
+      await this._buildEvergreenField(robotGroup);
+      this._setStatus('Evergreen Field');
+      return;
+    }
+
     if (modeId === 'cat-box') {
       this._showDefaultEnv(false);
       this._buildCatBox();
@@ -131,6 +139,18 @@ export class FieldManager {
       const fieldWidthM = this.fieldConfig.heightInches * 0.0254;
       root.position.set(fieldLengthM / 2, fieldWidthM / 2, 0);
 
+      // Reduce metalness on all PBR materials so they respond to ambient light
+      // instead of only reflecting the (missing) environment map
+      root.traverse((obj) => {
+        if (obj.isMesh && obj.material) {
+          const mat = obj.material;
+          if (mat.metalness !== undefined) {
+            mat.metalness = Math.min(mat.metalness, 0.3);
+            mat.roughness = Math.max(mat.roughness, 0.5);
+          }
+        }
+      });
+
       this.fieldModel = root;
       this.scene.add(root);
 
@@ -145,6 +165,13 @@ export class FieldManager {
 
       const tagCount = this.fieldTags.length;
       this._setStatus(`${this.fieldConfig.name} (${tagCount} tags)`);
+
+      if (this.onFieldLoaded) {
+        this.onFieldLoaded({
+          lengthM: fieldLengthM, widthM: fieldWidthM,
+          robotX: fieldLengthM / 2, robotY: fieldWidthM / 2,
+        });
+      }
 
     } catch (e) {
       this._setStatus(`Error: ${e.message}`);
@@ -252,6 +279,80 @@ export class FieldManager {
     originLabel.position.set(0.3, -0.15, 0.01);
     originLabel.userData = { isFieldElement: true };
     this.scene.add(originLabel);
+  }
+
+  // ── Evergreen field (programmatic) ───────────────────────────────────
+
+  async _buildEvergreenField(robotGroup) {
+    // Standard FRC field: 54'1" x 26'7.5" = 16.4846m x 8.1153m
+    const fieldLength = 16.4846;
+    const fieldWidth = 8.1153;
+    const wallHeight = 0.508;  // ~20" high walls
+
+    // Carpet
+    const carpetGeo = new THREE.PlaneGeometry(fieldLength, fieldWidth);
+    const carpetMat = new THREE.MeshPhongMaterial({ color: 0x555555, side: THREE.DoubleSide });
+    const carpet = new THREE.Mesh(carpetGeo, carpetMat);
+    carpet.position.set(fieldLength / 2, fieldWidth / 2, 0);
+    carpet.userData = { isFieldElement: true };
+    this.scene.add(carpet);
+
+    // Walls (4 sides)
+    const wallMat = new THREE.MeshPhongMaterial({ color: 0x888888, side: THREE.DoubleSide });
+    const walls = [
+      // Blue wall (X=0)
+      { w: fieldWidth, pos: [0, fieldWidth / 2, wallHeight / 2], rot: [0, Math.PI / 2, 0] },
+      // Red wall (X=fieldLength)
+      { w: fieldWidth, pos: [fieldLength, fieldWidth / 2, wallHeight / 2], rot: [0, Math.PI / 2, 0] },
+      // Side wall (Y=0)
+      { w: fieldLength, pos: [fieldLength / 2, 0, wallHeight / 2], rot: [0, 0, 0] },
+      // Side wall (Y=fieldWidth)
+      { w: fieldLength, pos: [fieldLength / 2, fieldWidth, wallHeight / 2], rot: [0, 0, 0] },
+    ];
+    walls.forEach(({ w, pos, rot }) => {
+      const geo = new THREE.PlaneGeometry(w, wallHeight);
+      const mesh = new THREE.Mesh(geo, wallMat);
+      mesh.position.set(...pos);
+      mesh.rotation.set(...rot);
+      mesh.userData = { isFieldElement: true };
+      this.scene.add(mesh);
+    });
+
+    // Blue alliance markers
+    const blueMarker = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.05, fieldWidth * 0.3),
+      new THREE.MeshBasicMaterial({ color: 0x0044ff, side: THREE.DoubleSide })
+    );
+    blueMarker.position.set(0.01, fieldWidth / 2, wallHeight / 2);
+    blueMarker.rotation.y = Math.PI / 2;
+    blueMarker.userData = { isFieldElement: true };
+    this.scene.add(blueMarker);
+
+    // Red alliance marker
+    const redMarker = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.05, fieldWidth * 0.3),
+      new THREE.MeshBasicMaterial({ color: 0xff0000, side: THREE.DoubleSide })
+    );
+    redMarker.position.set(fieldLength - 0.01, fieldWidth / 2, wallHeight / 2);
+    redMarker.rotation.y = Math.PI / 2;
+    redMarker.userData = { isFieldElement: true };
+    this.scene.add(redMarker);
+
+    // Grid and outline
+    this._addFieldGrid(fieldLength, fieldWidth);
+
+    // Place real AprilTags from robotpy_apriltag
+    await this._placeFieldTags();
+
+    // Robot at field center
+    robotGroup.position.set(fieldLength / 2, fieldWidth / 2, 0);
+
+    if (this.onFieldLoaded) {
+      this.onFieldLoaded({
+        lengthM: fieldLength, widthM: fieldWidth,
+        robotX: fieldLength / 2, robotY: fieldWidth / 2,
+      });
+    }
   }
 
   // ── Cat Box ─────────────────────────────────────────────────────────

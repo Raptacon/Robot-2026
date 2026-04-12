@@ -12,8 +12,6 @@ import os
 import tempfile
 import zipfile
 
-import pytest
-
 # Ensure project root is on path
 import sys
 sys.path.insert(0, os.path.abspath(
@@ -21,7 +19,7 @@ sys.path.insert(0, os.path.abspath(
 ))
 
 from host.camera_visualizer.routes import config, fields, cad, points
-from host.camera_visualizer.field_cache import FieldCache, FIELD_LIST
+from host.camera_visualizer.field_cache import FieldCache
 
 
 # ── Config routes ─────────────────────────────────────────────────────
@@ -206,10 +204,21 @@ class TestFieldCache:
         ids = [f['id'] for f in cache.get_field_list()]
         assert '2026-field' in ids
 
+    def test_field_list_has_evergreen(self):
+        cache = FieldCache('/tmp/test')
+        ids = [f['id'] for f in cache.get_field_list()]
+        assert 'evergreen' in ids
+
     def test_field_list_has_cat_box(self):
         cache = FieldCache('/tmp/test')
         ids = [f['id'] for f in cache.get_field_list()]
         assert 'cat-box' in ids
+
+    def test_extract_evergreen_returns_none(self):
+        """Evergreen is builtin, no zip entry."""
+        cache = FieldCache('/tmp/test')
+        config, glb = cache.extract_field('evergreen')
+        assert config is None
 
     def test_get_field_info_valid(self):
         cache = FieldCache('/tmp/test')
