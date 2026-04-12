@@ -153,7 +153,7 @@
 <body>
 
 <div id="header">
-  <h1>Robot Camera Visualizer <span style="font-size:11px; color:#555; font-weight:normal">v17</span></h1>
+  <h1>Robot Camera Visualizer <span style="font-size:11px; color:#555; font-weight:normal">v18</span></h1>
   <div class="controls">
     <label>Units:
       <select id="unitSelect">
@@ -513,6 +513,16 @@ function addMiniAxes(parentGroup, scale = 0.08) {
   });
 }
 
+// ── Robot group (movable for field placement) ────────────────────────
+const robotGroup = new THREE.Group();
+robotGroup.name = 'robot';
+scene.add(robotGroup);
+
+// ── Environment group (grids, tags — stays at scene root) ────────────
+const envGroup = new THREE.Group();
+envGroup.name = 'environment';
+scene.add(envGroup);
+
 // ── Build robot geometry ─────────────────────────────────────────────
 function buildScene() {
   const frame = CONFIG.robot_frame;
@@ -520,17 +530,17 @@ function buildScene() {
   const l = frame.length_inches * INCH;
   const h = 0.10;
 
-  // Ground grid
+  // Ground grid (environment)
   const gridSize = 2;
   const gridDiv = 40;
   const grid = new THREE.GridHelper(gridSize, gridDiv, 0x333355, 0x222244);
   grid.rotation.x = Math.PI / 2;
-  scene.add(grid);
+  envGroup.add(grid);
 
-  // Larger faint grid for tag context
+  // Larger faint grid for tag context (environment)
   const grid2 = new THREE.GridHelper(8, 40, 0x222233, 0x1a1a28);
   grid2.rotation.x = Math.PI / 2;
-  scene.add(grid2);
+  envGroup.add(grid2);
 
   // Robot body
   const bodyGeo = new THREE.BoxGeometry(l, w, h);
@@ -540,14 +550,14 @@ function buildScene() {
   });
   const body = new THREE.Mesh(bodyGeo, bodyMat);
   body.position.z = h / 2;
-  scene.add(body);
+  robotGroup.add(body);
 
   // Robot wireframe
   const wireGeo = new THREE.EdgesGeometry(bodyGeo);
   const wireMat = new THREE.LineBasicMaterial({ color: 0x88aacc });
   const wire = new THREE.LineSegments(wireGeo, wireMat);
   wire.position.z = h / 2;
-  scene.add(wire);
+  robotGroup.add(wire);
 
   // Front marker
   const fx = l / 2;
@@ -559,9 +569,9 @@ function buildScene() {
   ]);
   frontGeo.setAttribute('position', new THREE.BufferAttribute(frontVerts, 3));
   const frontMat = new THREE.MeshBasicMaterial({ color: 0xff4444, side: THREE.DoubleSide });
-  scene.add(new THREE.Mesh(frontGeo, frontMat));
+  robotGroup.add(new THREE.Mesh(frontGeo, frontMat));
 
-  // Coordinate axes with labels
+  // Coordinate axes with labels (on robot)
   const axisLen = 0.25;
   const axisInfo = [
     { dir: new THREE.Vector3(1, 0, 0), color: 0xff4444, label: '+X', rotLabel: 'Roll' },
@@ -569,18 +579,16 @@ function buildScene() {
     { dir: new THREE.Vector3(0, 0, 1), color: 0x4488ff, label: '+Z', rotLabel: 'Yaw' },
   ];
   axisInfo.forEach(({ dir, color, label, rotLabel }) => {
-    scene.add(new THREE.ArrowHelper(dir, new THREE.Vector3(0, 0, 0), axisLen, color, 0.03, 0.02));
+    robotGroup.add(new THREE.ArrowHelper(dir, new THREE.Vector3(0, 0, 0), axisLen, color, 0.03, 0.02));
 
-    // Axis label sprite (e.g. "+X")
     const axisSprite = makeTextSprite(label, color, 48);
     const labelPos = dir.clone().multiplyScalar(axisLen + 0.04);
     axisSprite.position.copy(labelPos);
     axisSprite.scale.set(0.04 * axisSprite.baseAspect, 0.04, 1);
-    scene.add(axisSprite);
+    robotGroup.add(axisSprite);
 
-    // Rotation arc arrow around this axis with label
     const arcGroup = buildRotationArc(dir, color, rotLabel);
-    scene.add(arcGroup);
+    robotGroup.add(arcGroup);
   });
 
   // Mechanisms
@@ -595,7 +603,7 @@ function buildScene() {
     addCameraViz(cam, h);
   });
 
-  // AprilTags
+  // AprilTags (environment)
   buildAprilTags();
 }
 
@@ -621,7 +629,7 @@ function addCameraViz(cam, robotHeight) {
     new THREE.Vector3(x, y, robotHeight),
     new THREE.Vector3(x, y, z),
   ]);
-  scene.add(new THREE.Line(poleGeo, new THREE.LineBasicMaterial({ color: 0x666666 })));
+  robotGroup.add(new THREE.Line(poleGeo, new THREE.LineBasicMaterial({ color: 0x666666 })));
 
   // Camera body group: rotates with yaw/pitch
   const camBodyGroup = new THREE.Group();
@@ -658,7 +666,7 @@ function addCameraViz(cam, robotHeight) {
   label.position.set(0, 0, 0.04);
   camBodyGroup.add(label);
 
-  scene.add(camBodyGroup);
+  robotGroup.add(camBodyGroup);
 
   // FOV cone
   const fovRad = THREE.MathUtils.degToRad(cam.fov_deg);
@@ -693,7 +701,7 @@ function addCameraViz(cam, robotHeight) {
 
   coneGroup.quaternion.copy(yawQuat.multiply(pitchQuat).multiply(coneQuat));
   coneGroup.add(cone);
-  scene.add(coneGroup);
+  robotGroup.add(coneGroup);
 
   // Direction line
   const dirLen = 0.5;
@@ -705,7 +713,7 @@ function addCameraViz(cam, robotHeight) {
   dirGroup.position.set(x, y, z);
   dirGroup.quaternion.copy(lookQuat);
   dirGroup.add(new THREE.Line(dirGeo, new THREE.LineBasicMaterial({ color })));
-  scene.add(dirGroup);
+  robotGroup.add(dirGroup);
 }
 
 function camColor(name) {
@@ -749,7 +757,7 @@ function addMechanismViz(mech, robotHeight) {
     label.position.set(0, 0, h / 2 + 0.03);
     group.add(label);
 
-    scene.add(group);
+    robotGroup.add(group);
 
   } else if (mech.type === 'turret') {
     const group = new THREE.Group();
@@ -791,7 +799,7 @@ function addMechanismViz(mech, robotHeight) {
     label.position.set(0, 0, 0.05);
     group.add(label);
 
-    scene.add(group);
+    robotGroup.add(group);
 
   } else {
     // Generic: labeled block
@@ -813,7 +821,7 @@ function addMechanismViz(mech, robotHeight) {
     label.position.set(0, 0, h / 2 + 0.025);
     group.add(label);
 
-    scene.add(group);
+    robotGroup.add(group);
   }
 }
 
@@ -1117,7 +1125,7 @@ perspCanvas.addEventListener('mouseleave', () => {
 });
 
 // ── CAD model integration ────────────────────────────────────────────
-const cadManager = new CadModelManager(scene);
+const cadManager = new CadModelManager(scene, robotGroup);
 const cadSlider = document.getElementById('cadOpacitySlider');
 const cadStatus = document.getElementById('cadStatusText');
 

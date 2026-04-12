@@ -11,8 +11,9 @@ import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 
 export class CadModelManager {
-  constructor(scene) {
+  constructor(scene, modelParent = null) {
     this.scene = scene;
+    this.modelParent = modelParent || scene;  // where model gets added (robotGroup or scene)
     this.model = null;            // THREE.Group — loaded GLTF scene root
     this.meshes = [];             // [{ mesh, originalColor, visible }]
     this.partTree = [];           // [{ name, children: [...], meshName }]
@@ -127,7 +128,7 @@ export class CadModelManager {
     this._yawSteps = 2; // 180° yaw — Onshape exports are rear-facing by default
     this.model = root;  // set before _applyOrientation so it doesn't bail
     this._applyOrientation();
-    this.scene.add(root);
+    this.modelParent.add(root);
 
     // Log final bounding box for debugging
     root.updateMatrixWorld(true);
@@ -601,7 +602,7 @@ export class CadModelManager {
           }
         }
       });
-      this.scene.remove(this.model);
+      this.modelParent.remove(this.model);
       this.model = null;
     }
     this.meshes = [];

@@ -91,9 +91,9 @@ def get_camera(name: str) -> CameraGeometry:
 
 # Turret: positioned relative to robot center
 ROBOT_TO_TURRET = transform_from_inches(
-    x_in=-6.0,           # 2" behind center
-    y_in=5.0,
-    z_in=16.0,            # 6" up
+    x_in=-5.00,
+    y_in=6.00,
+    z_in=14.62,
 )
 
 # Hood: positioned relative to turret
