@@ -19,9 +19,13 @@ export class FieldManager {
     this.fieldModel = null;         // THREE.Group for the loaded field
     this.fieldConfig = null;        // parsed config.json
     this.fieldTags = [];            // AprilTag meshes placed on field
+    this.fieldMeshes = [];          // all selectable field meshes
+    this.selectedMesh = null;
+    this._selectionBox = null;
     this.currentMode = 'robot-view';
     this.onStatusChange = null;
     this.onFieldLoaded = null;     // callback({ lengthM, widthM, robotX, robotY })
+    this.onSelect = null;          // callback(info | null)
 
     this._loader = new GLTFLoader();
     const draco = new DRACOLoader();
@@ -151,6 +155,15 @@ export class FieldManager {
         }
       });
 
+      // Collect selectable field meshes
+      this.fieldMeshes = [];
+      root.traverse((obj) => {
+        if (obj.isMesh) {
+          this.fieldMeshes.push(obj);
+        }
+      });
+      console.log(`[Field] ${this.fieldMeshes.length} selectable field meshes`);
+
       this.fieldModel = root;
       this.scene.add(root);
 
@@ -177,6 +190,98 @@ export class FieldManager {
       this._setStatus(`Error: ${e.message}`);
       console.error('[Field] Load error:', e);
     }
+  }
+
+  // ── Field element selection ──────────────────────────────────────────
+
+  handleClick(raycaster, robotGroup) {
+    if (!this.fieldModel || this.fieldMeshes.length === 0) return null;
+
+    // Clear previous
+    this._clearSelection();
+
+    const hits = raycaster.intersectObjects(this.fieldMeshes, false);
+    if (hits.length === 0) {
+      if (this.onSelect) this.onSelect(null);
+      return null;
+    }
+
+    const hit = hits[0];
+    const worldPt = hit.point.clone();
+
+    // Place a marker sphere at the click point (not on the whole mesh)
+    const markerGeo = new THREE.SphereGeometry(0.03, 12, 12);
+    const markerMat = new THREE.MeshBasicMaterial({
+      color: 0xffaa00, depthTest: false, transparent: true, opacity: 0.9,
+    });
+    this._clickMarker = new THREE.Mesh(markerGeo, markerMat);
+    this._clickMarker.position.copy(worldPt);
+    this._clickMarker.renderOrder = 999;
+    this.scene.add(this._clickMarker);
+
+    // Small crosshair lines at the click point
+    const lineLen = 0.1;
+    const lineMat = new THREE.LineBasicMaterial({
+      color: 0xffaa00, depthTest: false,
+    });
+    const crossGroup = new THREE.Group();
+    crossGroup.position.copy(worldPt);
+    [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]].forEach(dir => {
+      const geo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(dir[0]*lineLen, dir[1]*lineLen, dir[2]*lineLen),
+      ]);
+      crossGroup.add(new THREE.Line(geo, lineMat));
+    });
+    crossGroup.renderOrder = 999;
+    this._clickCross = crossGroup;
+    this.scene.add(crossGroup);
+
+    // Find best name (walk up parents)
+    const mesh = hit.object;
+    let name = mesh.name || '';
+    if (!name || name.startsWith('mesh') || name.startsWith('Object')) {
+      let p = mesh.parent;
+      while (p && p !== this.fieldModel) {
+        if (p.name && !p.name.startsWith('Scene')) {
+          name = p.name;
+          break;
+        }
+        p = p.parent;
+      }
+    }
+    if (!name) name = '(field surface)';
+
+    // Use click point as the coordinate (not mesh bounding box center)
+    const robotPos = robotGroup.position;
+    const relX = worldPt.x - robotPos.x;
+    const relY = worldPt.y - robotPos.y;
+    const relZ = worldPt.z - robotPos.z;
+
+    const info = {
+      name,
+      fieldCenter: worldPt,
+      size: new THREE.Vector3(0, 0, 0),
+      clickPoint: worldPt,
+      robotRelative: new THREE.Vector3(relX, relY, relZ),
+    };
+
+    if (this.onSelect) this.onSelect(info);
+    return info;
+  }
+
+  _clearSelection() {
+    if (this._clickMarker) {
+      this.scene.remove(this._clickMarker);
+      this._clickMarker.geometry.dispose();
+      this._clickMarker.material.dispose();
+      this._clickMarker = null;
+    }
+    if (this._clickCross) {
+      this.scene.remove(this._clickCross);
+      this._clickCross = null;
+    }
+    this.selectedMesh = null;
   }
 
   // ── AprilTag placement ──────────────────────────────────────────────
@@ -416,6 +521,9 @@ export class FieldManager {
   }
 
   _unloadField() {
+    this._clearSelection();
+    this.fieldMeshes = [];
+
     // Remove field model
     if (this.fieldModel) {
       this.fieldModel.traverse(obj => {

@@ -167,7 +167,7 @@
 <body>
 
 <div id="header">
-  <h1>Robot Camera Visualizer <span style="font-size:11px; color:#555; font-weight:normal">v28</span></h1>
+  <h1>Robot Camera Visualizer <span style="font-size:11px; color:#555; font-weight:normal">v30</span></h1>
   <div class="controls">
     <label>Scene:
       <select id="sceneSelect">
@@ -1124,6 +1124,38 @@ fieldManager.onStatusChange = (text) => {
   console.log(`[Field] ${text}`);
 };
 
+fieldManager.onSelect = (info) => {
+  const el = document.getElementById('cadSelection');
+  if (!info) {
+    el.innerHTML = '<div class="cam-card" style="color:#666; font-size:12px">Click a CAD or field component to inspect</div>';
+    return;
+  }
+  const c = info.fieldCenter;
+  const r = info.robotRelative;
+  const cIn = { x: (c.x / 0.0254).toFixed(2), y: (c.y / 0.0254).toFixed(2), z: (c.z / 0.0254).toFixed(2) };
+  const rIn = { x: (r.x / 0.0254).toFixed(2), y: (r.y / 0.0254).toFixed(2), z: (r.z / 0.0254).toFixed(2) };
+  el.innerHTML = `
+    <div class="cam-card">
+      <div class="cam-name" style="color:#ffaa00">${info.name} (field)</div>
+      <table>
+        <tr><td>Field X:</td><td>${toDisplay(c.x)} ${unitLabel()}</td></tr>
+        <tr><td>Field Y:</td><td>${toDisplay(c.y)} ${unitLabel()}</td></tr>
+        <tr><td>Field Z:</td><td>${toDisplay(c.z)} ${unitLabel()}</td></tr>
+      </table>
+      <h3>Field coords <button class="copy-btn" data-copy="Translation3d(${c.x.toFixed(4)}, ${c.y.toFixed(4)}, ${c.z.toFixed(4)})">Copy</button></h3>
+      <div class="transform-block">Translation3d(${c.x.toFixed(4)}, ${c.y.toFixed(4)}, ${c.z.toFixed(4)})</div>
+      <h3>Robot-relative <button class="copy-btn" data-copy="transform_from_inches(\\n    x_in=${rIn.x},\\n    y_in=${rIn.y},\\n    z_in=${rIn.z},\\n)">Copy</button></h3>
+      <div class="transform-block">transform_from_inches(
+    x_in=${rIn.x},
+    y_in=${rIn.y},
+    z_in=${rIn.z},
+)</div>
+      <h3>Distance to robot</h3>
+      <div class="transform-block">${toDisplay(r.length())} ${unitLabel()}</div>
+    </div>
+  `;
+};
+
 fieldManager.onFieldLoaded = ({ lengthM, widthM, robotX, robotY }) => {
   // Adjust cameras to show the full field
   const cx = lengthM / 2;
@@ -1649,7 +1681,6 @@ function updateTreeCheckbox(name, checked) {
 
 // Ctrl+Z = undo hide, Ctrl+Y = redo hide
 document.addEventListener('keydown', (e) => {
-  if (!cadManager.model) return;
   const key = e.key.toLowerCase();
   if (key === 'escape') {
     // If renaming a point, revert and blur
@@ -1668,7 +1699,8 @@ document.addEventListener('keydown', (e) => {
       active.blur();
       return;
     }
-    // Clear all selections
+    // Clear all selections (CAD + field)
+    fieldManager._clearSelection();
     cadManager._removeSelectionBox();
     if (cadManager._highlightedMeshes) {
       cadManager._highlightedMeshes.forEach(m => {
@@ -1940,6 +1972,14 @@ function handleCadClick(canvas, camera) {
         updatePointList();
         return;
       }
+    }
+
+    // Check field element selection (only in field modes)
+    if (fieldManager.fieldModel) {
+      const ray = new THREE.Raycaster();
+      ray.setFromCamera(ndc, camera);
+      const hit = fieldManager.handleClick(ray, robotGroup);
+      if (hit) return;
     }
 
     if (!cadManager.model) return;
