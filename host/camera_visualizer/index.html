@@ -167,7 +167,7 @@
 <body>
 
 <div id="header">
-  <h1>Robot Camera Visualizer <span style="font-size:11px; color:#555; font-weight:normal">v30</span></h1>
+  <h1>Robot Camera Visualizer <span style="font-size:11px; color:#555; font-weight:normal">v34</span></h1>
   <div class="controls">
     <label>Scene:
       <select id="sceneSelect">
@@ -266,6 +266,25 @@
         <h3>Robot-relative <button class="copy-btn" id="pointCopyRobot">Copy</button></h3>
         <div class="transform-block" id="pointRobotCoords">—</div>
       </div>
+    </div>
+
+    <h2>Robot Position</h2>
+    <div id="robotPosePanel" class="cam-card" style="font-size:12px;">
+      <table style="width:100%">
+        <tr>
+          <td style="color:#888; width:30px;">X:</td>
+          <td><input type="number" id="robotPoseX" step="0.1" value="0" style="width:70px; background:#0f3460; color:#e0e0e0; border:1px solid #533483; padding:1px 4px; border-radius:3px; font-size:12px;"> m</td>
+          <td style="color:#888; width:30px; padding-left:8px;">Y:</td>
+          <td><input type="number" id="robotPoseY" step="0.1" value="0" style="width:70px; background:#0f3460; color:#e0e0e0; border:1px solid #533483; padding:1px 4px; border-radius:3px; font-size:12px;"> m</td>
+        </tr>
+        <tr>
+          <td style="color:#888;">Hdg:</td>
+          <td colspan="3">
+            <input type="range" id="robotHeadingSlider" min="0" max="360" value="0" style="width:100px; accent-color:#e94560;">
+            <input type="number" id="robotHeadingInput" step="5" value="0" style="width:50px; background:#0f3460; color:#e0e0e0; border:1px solid #533483; padding:1px 4px; border-radius:3px; font-size:12px;">&deg;
+          </td>
+        </tr>
+      </table>
     </div>
 
     <h2>Robot Frame</h2>
@@ -737,39 +756,75 @@ function addCameraViz(cam, robotHeight) {
 
   robotGroup.add(camBodyGroup);
 
-  // FOV cone
+  // FOV cone with detection range zones
+  // Distances from config / community data for 6.5" 36h11 tags:
+  //   Reliable: 0-4m (green)  |  Marginal: 4-6m (yellow)  |  Unlikely: 6m+ (red)
   const fovRad = THREE.MathUtils.degToRad(cam.fov_deg);
-  const coneLen = 0.6;
-  const coneRadius = Math.tan(fovRad / 2) * coneLen;
-
-  const coneGeo = new THREE.ConeGeometry(coneRadius, coneLen, 16, 1, true);
-  const coneMat = new THREE.MeshBasicMaterial({
-    color, transparent: true, opacity: 0.15,
-    side: THREE.DoubleSide, depthWrite: false,
-  });
-  const cone = new THREE.Mesh(coneGeo, coneMat);
-
-  const coneWireGeo = new THREE.EdgesGeometry(coneGeo);
-  const coneWireMat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.4 });
-  cone.add(new THREE.LineSegments(coneWireGeo, coneWireMat));
-
-  // Tip at origin, cone expands in -Y local space
-  cone.position.y = -coneLen / 2;
+  const DETECT_RELIABLE = 4.0;   // meters — matches config.vision_single_tag_max_distance_m
+  const DETECT_MARGINAL = 6.0;   // meters — possible but high ambiguity
+  const DETECT_MAX = 8.0;        // meters — visual cone extent
 
   const coneGroup = new THREE.Group();
   coneGroup.position.set(x, y, z);
 
+  // Build 3 cone sections for the zones
+  const zones = [
+    { len: DETECT_RELIABLE, color: 0x44ff44, opacity: 0.08 },  // green
+    { len: DETECT_MARGINAL - DETECT_RELIABLE, color: 0xffff44, opacity: 0.05 },  // yellow
+    { len: DETECT_MAX - DETECT_MARGINAL, color: 0xff4444, opacity: 0.03 },  // red
+  ];
+
+  let offset = 0;
+  zones.forEach(zone => {
+    const r1 = Math.tan(fovRad / 2) * offset;
+    const r2 = Math.tan(fovRad / 2) * (offset + zone.len);
+    const geo = new THREE.CylinderGeometry(r1, r2, zone.len, 16, 1, true);
+    const mat = new THREE.MeshBasicMaterial({
+      color: zone.color, transparent: true, opacity: zone.opacity,
+      side: THREE.DoubleSide, depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    // CylinderGeometry is along Y axis, centered at origin
+    // Shift so the small end is at offset from origin
+    mesh.position.y = -(offset + zone.len / 2);
+    coneGroup.add(mesh);
+    offset += zone.len;
+  });
+
+  // Range rings at zone boundaries
+  [DETECT_RELIABLE, DETECT_MARGINAL].forEach((dist, i) => {
+    const ringRadius = Math.tan(fovRad / 2) * dist;
+    const ringGeo = new THREE.RingGeometry(ringRadius * 0.95, ringRadius, 32);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: i === 0 ? 0x44ff44 : 0xffff44,
+      transparent: true, opacity: 0.3,
+      side: THREE.DoubleSide, depthWrite: false,
+    });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    // Ring in XZ plane at distance along -Y
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = -dist;
+    coneGroup.add(ring);
+  });
+
+  // Cone outline wireframe (full extent)
+  const fullConeGeo = new THREE.ConeGeometry(
+    Math.tan(fovRad / 2) * DETECT_MAX, DETECT_MAX, 16, 1, true
+  );
+  const coneWireMat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.3 });
+  const wireframe = new THREE.LineSegments(new THREE.EdgesGeometry(fullConeGeo), coneWireMat);
+  wireframe.position.y = -DETECT_MAX / 2;
+  coneGroup.add(wireframe);
+
   const yawRad = THREE.MathUtils.degToRad(cam.yaw_deg);
   const pitchRad = THREE.MathUtils.degToRad(cam.pitch_deg);
 
-  // Rotate cone so it expands along +X (WPI forward):
-  // Cone expands in -Y local, so rotate +90° about Z (-Y → +X)
+  // Rotate cone: -Y local → +X (WPI forward), then apply pitch + yaw
   const coneQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2);
   const pitchQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -pitchRad);
   const yawQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), yawRad);
 
   coneGroup.quaternion.copy(yawQuat.multiply(pitchQuat).multiply(coneQuat));
-  coneGroup.add(cone);
   robotGroup.add(coneGroup);
 
   // Direction line
@@ -904,26 +959,41 @@ function setupCamSimViews() {
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setClearColor(0x111122);
 
-    // Create a perspective camera matching the robot camera's FOV
-    const simCam = new THREE.PerspectiveCamera(cam.fov_deg, 4 / 3, 0.05, 20);
+    const simCam = new THREE.PerspectiveCamera(cam.fov_deg, 4 / 3, 0.05, 50);
 
-    // Position at camera mount location
-    const x = cam.x_inches * INCH;
-    const y = cam.y_inches * INCH;
-    const z = cam.z_inches * INCH;
-    simCam.position.set(x, y, z);
-
-    // Compute look direction from yaw + pitch
+    // Store local (robot-relative) position and orientation
+    const localPos = new THREE.Vector3(
+      cam.x_inches * INCH, cam.y_inches * INCH, cam.z_inches * INCH
+    );
     const lookQuat = getCameraLookQuat(cam);
-    const lookDir = new THREE.Vector3(1, 0, 0).applyQuaternion(lookQuat);
-    const target = new THREE.Vector3(x, y, z).add(lookDir);
-    // Camera up: apply rotation to robot's up vector
-    const upDir = new THREE.Vector3(0, 0, 1).applyQuaternion(lookQuat);
+    const localLookDir = new THREE.Vector3(1, 0, 0).applyQuaternion(lookQuat);
+    const localUpDir = new THREE.Vector3(0, 0, 1).applyQuaternion(lookQuat);
 
-    simCam.up.copy(upDir);
+    camSimViews.push({
+      cam, simCam, renderer, canvas,
+      localPos, localLookDir, localUpDir,
+    });
+  });
+}
+
+function updateCamSimPositions() {
+  // Transform sim cameras to world space based on robotGroup
+  robotGroup.updateMatrixWorld(true);
+  const worldMat = robotGroup.matrixWorld;
+
+  camSimViews.forEach(({ simCam, localPos, localLookDir, localUpDir }) => {
+    // Transform local position to world
+    const worldPos = localPos.clone().applyMatrix4(worldMat);
+    simCam.position.copy(worldPos);
+
+    // Transform look direction (rotation only, no translation)
+    const normalMat = new THREE.Matrix3().getNormalMatrix(worldMat);
+    const worldLookDir = localLookDir.clone().applyMatrix3(normalMat).normalize();
+    const worldUpDir = localUpDir.clone().applyMatrix3(normalMat).normalize();
+
+    const target = worldPos.clone().add(worldLookDir);
+    simCam.up.copy(worldUpDir);
     simCam.lookAt(target);
-
-    camSimViews.push({ cam, simCam, renderer, canvas });
   });
 }
 
@@ -939,7 +1009,6 @@ function resizeCamSimViews() {
 }
 
 function computeVisibleTags(simCam) {
-  // Use a frustum to check which tags the camera can see
   const frustum = new THREE.Frustum();
   const projScreenMatrix = new THREE.Matrix4();
   simCam.updateMatrixWorld();
@@ -947,12 +1016,59 @@ function computeVisibleTags(simCam) {
   frustum.setFromProjectionMatrix(projScreenMatrix);
 
   const visible = [];
-  tagGroup.children.forEach(child => {
+
+  // Check field tags (real positions) when in field mode
+  const tagsToCheck = fieldManager.fieldTags.length > 0
+    ? fieldManager.fieldTags
+    : tagGroup.children;
+
+  // Collect field meshes for occlusion testing
+  const occluders = fieldManager.fieldMeshes.length > 0
+    ? fieldManager.fieldMeshes : [];
+  const _losRaycaster = new THREE.Raycaster();
+
+  tagsToCheck.forEach(child => {
     if (child.userData && child.userData.tagId !== undefined) {
-      if (frustum.containsPoint(child.position)) {
-        // Also check distance
-        const dist = simCam.position.distanceTo(child.position);
-        visible.push({ id: child.userData.tagId, label: child.userData.label, dist });
+      const worldPos = new THREE.Vector3();
+      child.getWorldPosition(worldPos);
+      if (frustum.containsPoint(worldPos)) {
+        const dist = simCam.position.distanceTo(worldPos);
+
+        // Line-of-sight check: raycast from camera to tag,
+        // see if any field geometry is closer
+        let occluded = false;
+        if (occluders.length > 0) {
+          const dir = worldPos.clone().sub(simCam.position).normalize();
+          _losRaycaster.set(simCam.position, dir);
+          _losRaycaster.far = dist - 0.05;  // stop just before the tag
+          const hits = _losRaycaster.intersectObjects(occluders, false);
+          if (hits.length > 0) occluded = true;
+        }
+
+        // Classify by detection range
+        const RELIABLE = 4.0, MARGINAL = 6.0;
+        const MAX_TAG_ANGLE = 60;  // degrees — max oblique angle for detection
+        if (dist > MARGINAL) return;  // too far — won't detect
+
+        // Check tag facing angle: the camera must see the tag face,
+        // not the edge. Get the tag's forward direction (the direction
+        // it faces) and check the angle to the camera.
+        const tagForward = new THREE.Vector3(1, 0, 0);  // default facing
+        // Apply the tag group's world rotation to get actual facing direction
+        const tagWorldQuat = new THREE.Quaternion();
+        child.getWorldQuaternion(tagWorldQuat);
+        tagForward.applyQuaternion(tagWorldQuat);
+
+        // Vector from tag to camera
+        const toCamera = simCam.position.clone().sub(worldPos).normalize();
+        // Angle between tag normal and camera direction
+        const dotProduct = Math.abs(tagForward.dot(toCamera));
+        const angleDeg = THREE.MathUtils.radToDeg(Math.acos(Math.min(dotProduct, 1)));
+        if (angleDeg > MAX_TAG_ANGLE) return;  // too oblique — can't detect
+
+        const label = child.userData.label || `Tag ${child.userData.tagId}`;
+        const range = dist <= RELIABLE ? 'reliable' : 'marginal';
+        visible.push({ id: child.userData.tagId, label, dist, occluded, range });
       }
     }
   });
@@ -1096,10 +1212,14 @@ function animate() {
   // Camera sim views: render every 10th frame (they're small sidebar previews)
   frameCount++;
   if (frameCount % 10 === 0) {
+    updateCamSimPositions();
+
+    // Track tag visibility across all cameras for 3D highlighting
+    const tagStatus = new Map(); // tagId -> 'clear' | 'blocked' | null
+
     camSimViews.forEach(({ simCam, renderer }, idx) => {
       renderer.render(scene, simCam);
 
-      // Update visible tag list (cheap, but batch with render)
       const visible = computeVisibleTags(simCam);
       const el = document.getElementById(`visibleTags_${idx}`);
       if (el) {
@@ -1107,13 +1227,63 @@ function animate() {
           el.textContent = 'Visible tags: none';
           el.style.color = '#886';
         } else {
-          const tagStrs = visible.map(t =>
-            `ID${t.id} (${t.label}, ${toDisplay(t.dist)} ${unitLabel()})`
-          );
-          el.textContent = `Visible tags: ${tagStrs.join(', ')}`;
-          el.style.color = '#8c8';
+          const reliable = visible.filter(t => !t.occluded && t.range === 'reliable');
+          const marginal = visible.filter(t => !t.occluded && t.range === 'marginal');
+          const blocked = visible.filter(t => t.occluded);
+          let html = '';
+          if (reliable.length > 0) {
+            html += '<span style="color:#8c8">' + reliable.map(t =>
+              `ID${t.id} (${toDisplay(t.dist)}${unitLabel()})`
+            ).join(', ') + '</span>';
+          }
+          if (marginal.length > 0) {
+            if (html) html += ' | ';
+            html += '<span style="color:#cc8">' + marginal.map(t =>
+              `ID${t.id} (${toDisplay(t.dist)}${unitLabel()})`
+            ).join(', ') + '?</span>';
+          }
+          if (blocked.length > 0) {
+            if (html) html += ' | ';
+            html += '<span style="color:#c66">blocked: ' +
+              blocked.map(t => `ID${t.id}`).join(',') + '</span>';
+          }
+          el.innerHTML = html || 'Tags: none in range';
+          el.style.color = '';
         }
+
+        // Accumulate tag status: reliable > marginal > blocked
+        visible.forEach(t => {
+          const prev = tagStatus.get(t.id);
+          if (t.occluded) {
+            if (!prev) tagStatus.set(t.id, 'blocked');
+          } else if (t.range === 'reliable') {
+            tagStatus.set(t.id, 'reliable');
+          } else if (t.range === 'marginal' && prev !== 'reliable') {
+            tagStatus.set(t.id, 'marginal');
+          }
+        });
       }
+    });
+
+    // Highlight tags in 3D based on visibility
+    const tagsToHighlight = fieldManager.fieldTags.length > 0
+      ? fieldManager.fieldTags : tagGroup.children;
+    tagsToHighlight.forEach(child => {
+      if (!child.userData || child.userData.tagId === undefined) return;
+      const status = tagStatus.get(child.userData.tagId);
+      child.traverse(obj => {
+        if (obj.isMesh && obj.material) {
+          if (status === 'reliable') {
+            obj.material.color.setHex(0x44ff44);  // green = reliable
+          } else if (status === 'marginal') {
+            obj.material.color.setHex(0xffff44);  // yellow = marginal
+          } else if (status === 'blocked') {
+            obj.material.color.setHex(0xff6644);  // orange-red = blocked
+          } else {
+            obj.material.color.setHex(0xffffff);  // white = not seen
+          }
+        }
+      });
     });
   }
 }
@@ -1181,6 +1351,72 @@ fieldManager.onFieldLoaded = ({ lengthM, widthM, robotX, robotY }) => {
   perspControls.target.set(cx, cy, 0);
   perspControls.update();
 };
+
+// ── Robot position controls ──────────────────────────────────────────
+function updateRobotPose() {
+  const x = parseFloat(document.getElementById('robotPoseX').value) || 0;
+  const y = parseFloat(document.getElementById('robotPoseY').value) || 0;
+  const hdg = parseFloat(document.getElementById('robotHeadingInput').value) || 0;
+  robotGroup.position.set(x, y, 0);
+  robotGroup.rotation.z = THREE.MathUtils.degToRad(hdg);
+}
+
+function syncPoseInputs() {
+  document.getElementById('robotPoseX').value = robotGroup.position.x.toFixed(2);
+  document.getElementById('robotPoseY').value = robotGroup.position.y.toFixed(2);
+  const hdgDeg = Math.round(THREE.MathUtils.radToDeg(robotGroup.rotation.z));
+  document.getElementById('robotHeadingInput').value = hdgDeg;
+  document.getElementById('robotHeadingSlider').value = ((hdgDeg % 360) + 360) % 360;
+}
+
+document.getElementById('robotPoseX').addEventListener('change', updateRobotPose);
+document.getElementById('robotPoseY').addEventListener('change', updateRobotPose);
+document.getElementById('robotHeadingInput').addEventListener('change', (e) => {
+  document.getElementById('robotHeadingSlider').value = ((parseInt(e.target.value) % 360) + 360) % 360;
+  updateRobotPose();
+});
+document.getElementById('robotHeadingSlider').addEventListener('input', (e) => {
+  document.getElementById('robotHeadingInput').value = e.target.value;
+  updateRobotPose();
+});
+
+// Update inputs when field loads (robot gets repositioned)
+const _origFieldLoaded = fieldManager.onFieldLoaded;
+fieldManager.onFieldLoaded = (info) => {
+  if (_origFieldLoaded) _origFieldLoaded(info);
+  // Sync after field positions the robot
+  setTimeout(syncPoseInputs, 100);
+};
+
+// Shift+left-click drag on top-down view to move robot
+let _robotDragActive = false;
+topCanvas.addEventListener('mousedown', (e) => {
+  if (e.button === 0 && e.shiftKey && fieldManager.currentMode !== 'robot-view') {
+    _robotDragActive = true;
+    topControls.enabled = false;  // disable orbit while dragging robot
+    e.preventDefault();
+  }
+});
+topCanvas.addEventListener('mousemove', (e) => {
+  if (!_robotDragActive) return;
+  const rect = topCanvas.getBoundingClientRect();
+  const ndcX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  const ndcY = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+  const ray = new THREE.Raycaster();
+  ray.setFromCamera(new THREE.Vector2(ndcX, ndcY), topCamera);
+  const ground = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+  const pt = new THREE.Vector3();
+  if (ray.ray.intersectPlane(ground, pt)) {
+    robotGroup.position.set(pt.x, pt.y, 0);
+    syncPoseInputs();
+  }
+});
+window.addEventListener('mouseup', () => {
+  if (_robotDragActive) {
+    _robotDragActive = false;
+    topControls.enabled = true;
+  }
+});
 
 // ── Init ─────────────────────────────────────────────────────────────
 buildScene();
