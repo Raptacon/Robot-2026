@@ -153,8 +153,13 @@
 <body>
 
 <div id="header">
-  <h1>Robot Camera Visualizer <span style="font-size:11px; color:#555; font-weight:normal">v18</span></h1>
+  <h1>Robot Camera Visualizer <span style="font-size:11px; color:#555; font-weight:normal">v19</span></h1>
   <div class="controls">
+    <label>Scene:
+      <select id="sceneSelect">
+        <option value="robot-view">Robot View</option>
+      </select>
+    </label>
     <label>Units:
       <select id="unitSelect">
         <option value="inches">Inches</option>
@@ -251,6 +256,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { CadModelManager } from '/cad_loader.js';
+import { FieldManager } from '/field_loader.js';
 
 // ── Config injected by serve.py ──────────────────────────────────────
 const CONFIG = window.__ROBOT_CONFIG__;
@@ -1049,9 +1055,45 @@ function animate() {
   }
 }
 
+// ── Field manager ────────────────────────────────────────────────────
+const fieldManager = new FieldManager(scene, envGroup);
+fieldManager.onStatusChange = (text) => {
+  console.log(`[Field] ${text}`);
+};
+
 // ── Init ─────────────────────────────────────────────────────────────
 buildScene();
 updateSidebar();
+
+// Capture default environment so field manager can hide/show it
+fieldManager.captureDefaultEnv();
+
+// Populate scene selector from server
+(async () => {
+  try {
+    const fields = await fieldManager.fetchFieldList();
+    const sel = document.getElementById('sceneSelect');
+    sel.innerHTML = '';  // clear the placeholder
+    fields.forEach(f => {
+      const opt = document.createElement('option');
+      opt.value = f.id;
+      opt.textContent = f.name;
+      if (f.id === 'robot-view') opt.selected = true;
+      sel.appendChild(opt);
+    });
+  } catch (e) {
+    console.error('Failed to load field list:', e);
+  }
+})();
+
+// Scene mode switching
+document.getElementById('sceneSelect').addEventListener('change', async (e) => {
+  const modeId = e.target.value;
+  const tagDistRow = document.getElementById('tagDistSelect').parentElement;
+  // Hide tag distance selector when not in robot view
+  tagDistRow.style.display = modeId === 'robot-view' ? '' : 'none';
+  await fieldManager.setMode(modeId, robotGroup);
+});
 
 // Setup cam sim views after sidebar DOM is created
 setupCamSimViews();
@@ -1076,13 +1118,20 @@ document.getElementById('tagDistSelect').addEventListener('change', (e) => {
 });
 
 document.getElementById('resetBtn').addEventListener('click', () => {
-  topCamera.position.set(0, 0, 2);
-  topCamera.zoom = 1;
+  if (fieldManager.currentMode === 'robot-view' || fieldManager.currentMode === 'cat-box') {
+    topCamera.position.set(0, 0, 2);
+    topCamera.zoom = 1;
+    perspCamera.position.set(0.8, -0.6, 0.5);
+    perspControls.target.set(0, 0, 0.1);
+  } else {
+    // Field view — zoom out to see full field
+    topCamera.position.set(8, 4, 20);
+    topCamera.zoom = 1;
+    perspCamera.position.set(12, -4, 8);
+    perspControls.target.set(8, 4, 0);
+  }
   topCamera.updateProjectionMatrix();
   topControls.reset();
-
-  perspCamera.position.set(0.8, -0.6, 0.5);
-  perspControls.target.set(0, 0, 0.1);
   perspControls.update();
 });
 

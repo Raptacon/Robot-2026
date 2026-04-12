@@ -131,6 +131,15 @@ Config-driven controller input management. `InputFactory` loads YAML config, cre
 
 See `examples/inputFactory/` for a complete working example.
 
+### Camera Visualizer (`host/camera_visualizer/`)
+
+Three.js web app for visualizing robot geometry, CAD models, and FRC fields. Run with `python -m host.camera_visualizer.serve` (serves on localhost:8070). See `host/camera_visualizer/CLAUDE.md` for detailed architecture and design decisions.
+
+**Robot geometry single source of truth:**
+- `constants/robot_geometry.py` — robot frame, swerve positions, cameras, mechanism transforms
+- `utils/geometry.py` — `transform_from_inches()`, `chain_transforms()`, `CameraGeometry`, `MechanismMount`
+- Edit `robot_geometry.py` and refresh browser to see changes (no server restart needed)
+
 ## Future
 
 - [ ] JSON Schema for controller config YAML validation — IDE autocompletion + red squiggles. `config_io.py` abstraction makes format swaps straightforward.
