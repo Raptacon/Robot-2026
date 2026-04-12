@@ -166,24 +166,43 @@ class TestCadRoutes:
 
 class TestPointRoutes:
     def test_load_points_empty(self):
-        result = points.load_points('/nonexistent/file.json')
-        assert json.loads(result) == {"points": []}
+        result = points.load_points('/nonexistent/dir', 'default')
+        data = json.loads(result)
+        assert data['points'] == []
 
     def test_save_and_load_roundtrip(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            fpath = os.path.join(tmpdir, 'sub', 'points.json')
-            test_data = {"points": [
+            test_data = {"name": "test", "points": [
                 {"id": 1, "name": "test", "x": 1.5, "y": 2.5, "z": 0.5}
             ]}
-            points.save_points(fpath, json.dumps(test_data).encode())
-            loaded = json.loads(points.load_points(fpath))
+            points.save_points(tmpdir, 'myset', json.dumps(test_data).encode())
+            loaded = json.loads(points.load_points(tmpdir, 'myset'))
             assert loaded == test_data
 
     def test_save_creates_directories(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            fpath = os.path.join(tmpdir, 'a', 'b', 'c', 'points.json')
-            points.save_points(fpath, b'{}')
-            assert os.path.isfile(fpath)
+            pts_dir = os.path.join(tmpdir, 'sub', 'points')
+            points.save_points(pts_dir, 'test', b'{}')
+            assert os.path.isdir(pts_dir)
+
+    def test_list_point_sets_empty(self):
+        result = points.list_point_sets('/nonexistent/dir')
+        assert result == []
+
+    def test_list_point_sets(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            points.save_points(tmpdir, 'set_a',
+                               json.dumps({"name": "Set A", "points": [{"id": 1}]}).encode())
+            points.save_points(tmpdir, 'set_b',
+                               json.dumps({"name": "Set B", "points": []}).encode())
+            sets = points.list_point_sets(tmpdir)
+            assert len(sets) == 2
+            names = [s['name'] for s in sets]
+            assert 'Set A' in names
+            assert 'Set B' in names
+            # Check count
+            a = next(s for s in sets if s['name'] == 'Set A')
+            assert a['count'] == 1
 
 
 # ── Field cache ───────────────────────────────────────────────────────

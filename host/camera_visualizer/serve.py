@@ -30,7 +30,7 @@ PORT = 8070
 CAD_DIR = os.path.join(PROJECT_ROOT, 'cad')
 CACHE_DIR = os.path.join(PROJECT_ROOT, 'cache', 'fields')
 BUNDLE_CACHE = os.path.join(PROJECT_ROOT, 'cache', 'frc_assets.zip')
-POINTS_FILE = os.path.join(PROJECT_ROOT, 'data', 'field_points.json')
+POINTS_DIR = os.path.join(PROJECT_ROOT, 'data', 'field_points')
 
 field_cache = FieldCache(CACHE_DIR, BUNDLE_CACHE)
 
@@ -38,7 +38,8 @@ field_cache = FieldCache(CACHE_DIR, BUNDLE_CACHE)
 class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_GET(self):
-        path = self.path
+        from urllib.parse import urlparse
+        path = urlparse(self.path).path
 
         # ── Page ──────────────────────────────────────────────────
         if path in ('/', '/index.html'):
@@ -78,8 +79,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._respond_json(json.dumps(cfg))
 
         # ── API: saved points ─────────────────────────────────────
+        elif path == '/api/points/list':
+            self._respond_json(json.dumps(points.list_point_sets(POINTS_DIR)))
+
         elif path == '/api/points':
-            self._respond_json(points.load_points(POINTS_FILE))
+            set_name = self._query_param('set', 'default')
+            self._respond_json(points.load_points(POINTS_DIR, set_name))
 
         # ── API: CAD model list ───────────────────────────────────
         elif path == '/api/cad-models':
@@ -108,10 +113,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_error(404)
 
     def do_POST(self):
-        if self.path == '/api/points':
+        from urllib.parse import urlparse
+        post_path = urlparse(self.path).path
+        if post_path == '/api/points':
+            set_name = self._query_param('set', 'default')
             length = int(self.headers.get('Content-Length', 0))
             body = self.rfile.read(length)
-            points.save_points(POINTS_FILE, body)
+            points.save_points(POINTS_DIR, set_name, body)
             self._respond_json('{"ok":true}')
         else:
             self.send_error(404)
@@ -124,6 +132,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_header('Cache-Control', cache)
         self.end_headers()
         self.wfile.write(data)
+
+    def _query_param(self, key, default=''):
+        """Extract a query parameter from the request path."""
+        from urllib.parse import urlparse, parse_qs
+        parsed = urlparse(self.path)
+        params = parse_qs(parsed.query)
+        return params.get(key, [default])[0]
 
     def _respond_json(self, json_str):
         data = json_str.encode('utf-8') if isinstance(json_str, str) else json_str

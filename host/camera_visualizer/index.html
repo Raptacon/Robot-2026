@@ -76,6 +76,20 @@
   .coord-legend .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 
   canvas { display: block; touch-action: none; }
+  canvas.add-point-mode { cursor: crosshair !important; }
+
+  .point-list-item {
+    display: flex; align-items: center; gap: 4px; padding: 3px 0;
+    font-size: 12px; cursor: pointer;
+  }
+  .point-list-item:hover { color: #7ec8e3; }
+  .point-list-item.selected { color: #ffaa00; font-weight: 600; }
+  .point-list-item .point-name { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+  .point-list-item .point-del {
+    color: #c44; cursor: pointer; font-size: 14px; padding: 0 4px;
+  }
+  .point-list-item .point-del:hover { color: #f66; }
+  #pointZSlider { width: 100%; accent-color: #00ffaa; }
   canvas:active { cursor: grabbing; }
   .viewport-container canvas { user-select: none; -webkit-user-select: none; }
 
@@ -153,7 +167,7 @@
 <body>
 
 <div id="header">
-  <h1>Robot Camera Visualizer <span style="font-size:11px; color:#555; font-weight:normal">v27</span></h1>
+  <h1>Robot Camera Visualizer <span style="font-size:11px; color:#555; font-weight:normal">v28</span></h1>
   <div class="controls">
     <label>Scene:
       <select id="sceneSelect">
@@ -224,6 +238,36 @@
       <div class="cam-card" style="color:#666; font-size:12px">Click a CAD component to inspect</div>
     </div>
 
+    <h2>Field Points
+      <button id="addPointBtn" style="font-size:10px; padding:1px 6px; margin-left:6px; background:#0f3460; color:#0fa; border:1px solid #533483; border-radius:3px; cursor:pointer;">+ Add</button>
+    </h2>
+    <div style="display:flex; gap:4px; margin-bottom:6px; align-items:center;">
+      <select id="pointSetSelect" style="flex:1; font-size:11px; background:#0f3460; color:#e0e0e0; border:1px solid #533483; padding:2px 4px; border-radius:3px;">
+        <option value="default">default</option>
+      </select>
+      <button id="savePointsBtn" style="font-size:10px; padding:1px 6px; background:#0f3460; color:#8c8; border:1px solid #533483; border-radius:3px; cursor:pointer;">Save</button>
+      <button id="loadPointsBtn" style="font-size:10px; padding:1px 6px; background:#0f3460; color:#88c; border:1px solid #533483; border-radius:3px; cursor:pointer;">Load</button>
+      <button id="newPointSetBtn" style="font-size:10px; padding:1px 6px; background:#0f3460; color:#aaa; border:1px solid #533483; border-radius:3px; cursor:pointer;">New</button>
+    </div>
+    <div id="pointsList" style="font-size:12px; color:#666; margin-bottom:8px;">No points placed</div>
+    <div id="pointDetail" style="display:none;">
+      <div class="cam-card">
+        <input type="text" id="pointDetailName" style="width:100%; background:#0f3460; color:#00ffaa; border:1px solid #533483; padding:2px 6px; border-radius:3px; font-size:13px; font-weight:600; margin-bottom:4px;" value="">
+        <table>
+          <tr><td>X:</td><td id="pointDetailX">—</td></tr>
+          <tr><td>Y:</td><td id="pointDetailY">—</td></tr>
+          <tr><td>Z:</td><td id="pointDetailZ">—</td></tr>
+        </table>
+        <label style="font-size:11px; color:#888;">Height:
+          <input type="range" id="pointZSlider" min="0" max="300" value="0">
+        </label>
+        <h3>Field coords <button class="copy-btn" id="pointCopyField">Copy</button></h3>
+        <div class="transform-block" id="pointFieldCoords">—</div>
+        <h3>Robot-relative <button class="copy-btn" id="pointCopyRobot">Copy</button></h3>
+        <div class="transform-block" id="pointRobotCoords">—</div>
+      </div>
+    </div>
+
     <h2>Robot Frame</h2>
     <div id="robotInfo"></div>
 
@@ -257,6 +301,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { CadModelManager } from '/cad_loader.js';
 import { FieldManager } from '/field_loader.js';
+import { PointManager } from '/point_manager.js';
 
 // ── Config injected by serve.py ──────────────────────────────────────
 const CONFIG = window.__ROBOT_CONFIG__;
@@ -433,7 +478,7 @@ function buildAprilTags() {
     ctx.fillStyle = '#aaa';
     ctx.fillText(tag.label, 64, 54);
     const labelTex = new THREE.CanvasTexture(labelCanvas);
-    const labelMat = new THREE.SpriteMaterial({ map: labelTex });
+    const labelMat = new THREE.SpriteMaterial({ map: labelTex, depthTest: false });
     const sprite = new THREE.Sprite(labelMat);
     const sh = 0.1;
     sprite.scale.set(sh * sprite.baseAspect, sh, 1);
@@ -1607,6 +1652,22 @@ document.addEventListener('keydown', (e) => {
   if (!cadManager.model) return;
   const key = e.key.toLowerCase();
   if (key === 'escape') {
+    // If renaming a point, revert and blur
+    const active = document.activeElement;
+    if (active && active.id === 'pointDetailName') {
+      active.value = _pointNameBeforeEdit;
+      if (pointManager.selectedPoint && _pointNameBeforeEdit) {
+        pointManager.renamePoint(pointManager.selectedPoint.id, _pointNameBeforeEdit);
+        updatePointList();
+      }
+      active.blur();
+      return;
+    }
+    // Skip other focused inputs
+    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
+      active.blur();
+      return;
+    }
     // Clear all selections
     cadManager._removeSelectionBox();
     if (cadManager._highlightedMeshes) {
@@ -1649,6 +1710,192 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
+// ── Point manager ────────────────────────────────────────────────────
+const pointManager = new PointManager(scene);
+
+pointManager.onSelect = (pt) => {
+  const detail = document.getElementById('pointDetail');
+  if (!pt) {
+    detail.style.display = 'none';
+    return;
+  }
+  detail.style.display = 'block';
+  updatePointDetail(pt);
+};
+
+pointManager.onChange = () => {
+  updatePointList();
+};
+
+function updatePointList() {
+  const el = document.getElementById('pointsList');
+  if (pointManager.points.length === 0) {
+    el.textContent = 'No points placed';
+    return;
+  }
+  el.innerHTML = '';
+  pointManager.points.forEach(pt => {
+    const item = document.createElement('div');
+    item.className = 'point-list-item' + (pt.selected ? ' selected' : '');
+    item.innerHTML = `<span class="point-name">${pt.name}</span>` +
+      `<span style="color:#888; font-size:10px;">(${toDisplay(pt.position.x)}, ${toDisplay(pt.position.y)})</span>` +
+      `<span class="point-del" title="Delete">&times;</span>`;
+    item.querySelector('.point-name').addEventListener('click', () => {
+      pointManager.selectPoint(pt.id);
+      updatePointList();
+    });
+    item.querySelector('.point-del').addEventListener('click', (e) => {
+      e.stopPropagation();
+      pointManager.removePoint(pt.id);
+    });
+    el.appendChild(item);
+  });
+}
+
+function updatePointDetail(pt) {
+  document.getElementById('pointDetailName').value = pt.name;
+  document.getElementById('pointDetailX').textContent = `${toDisplay(pt.position.x)} ${unitLabel()}`;
+  document.getElementById('pointDetailY').textContent = `${toDisplay(pt.position.y)} ${unitLabel()}`;
+  document.getElementById('pointDetailZ').textContent = `${toDisplay(pt.position.z)} ${unitLabel()}`;
+  document.getElementById('pointZSlider').value = Math.round(pt.position.z / 0.0254);  // inches
+
+  const xIn = (pt.position.x / 0.0254).toFixed(2);
+  const yIn = (pt.position.y / 0.0254).toFixed(2);
+  const zIn = (pt.position.z / 0.0254).toFixed(2);
+  document.getElementById('pointFieldCoords').textContent =
+    `Translation3d(${pt.position.x.toFixed(4)}, ${pt.position.y.toFixed(4)}, ${pt.position.z.toFixed(4)})`;
+
+  // Robot-relative transform
+  const rx = pt.position.x - robotGroup.position.x;
+  const ry = pt.position.y - robotGroup.position.y;
+  const rz = pt.position.z - robotGroup.position.z;
+  const rxIn = (rx / 0.0254).toFixed(2);
+  const ryIn = (ry / 0.0254).toFixed(2);
+  const rzIn = (rz / 0.0254).toFixed(2);
+  document.getElementById('pointRobotCoords').textContent =
+    `transform_from_inches(\n    x_in=${rxIn},\n    y_in=${ryIn},\n    z_in=${rzIn},\n)`;
+
+  // Wire copy buttons
+  document.getElementById('pointCopyField').dataset.copy =
+    `Translation3d(${pt.position.x.toFixed(4)}, ${pt.position.y.toFixed(4)}, ${pt.position.z.toFixed(4)})`;
+  document.getElementById('pointCopyRobot').dataset.copy =
+    `transform_from_inches(\n    x_in=${rxIn},\n    y_in=${ryIn},\n    z_in=${rzIn},\n)`;
+}
+
+// Z height slider
+document.getElementById('pointZSlider').addEventListener('input', (e) => {
+  if (!pointManager.selectedPoint) return;
+  const zInches = parseInt(e.target.value);
+  pointManager.setPointZ(pointManager.selectedPoint.id, zInches * 0.0254);
+  updatePointDetail(pointManager.selectedPoint);
+});
+
+// Add Point button
+document.getElementById('addPointBtn').addEventListener('click', () => {
+  if (pointManager.isAddMode) {
+    pointManager.exitAddMode();
+  } else {
+    pointManager.enterAddMode();
+  }
+});
+
+pointManager.onAddModeChange = (active) => {
+  const btn = document.getElementById('addPointBtn');
+  btn.textContent = active ? 'Cancel' : '+ Add';
+  btn.style.color = active ? '#f66' : '#0fa';
+  topCanvas.classList.toggle('add-point-mode', active);
+  perspCanvas.classList.toggle('add-point-mode', active);
+};
+
+// Live rename as you type, with Escape to revert
+let _pointNameBeforeEdit = '';
+document.getElementById('pointDetailName').addEventListener('focus', (e) => {
+  _pointNameBeforeEdit = e.target.value;
+});
+document.getElementById('pointDetailName').addEventListener('input', (e) => {
+  if (!pointManager.selectedPoint) return;
+  const newName = e.target.value.trim();
+  if (newName) {
+    pointManager.renamePoint(pointManager.selectedPoint.id, newName);
+    updatePointList();
+  }
+});
+document.getElementById('pointDetailName').addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    // Revert to name before editing started
+    e.target.value = _pointNameBeforeEdit;
+    if (pointManager.selectedPoint && _pointNameBeforeEdit) {
+      pointManager.renamePoint(pointManager.selectedPoint.id, _pointNameBeforeEdit);
+      updatePointList();
+    }
+    e.target.blur();
+    e.stopPropagation();
+  }
+});
+
+// Point set management
+async function refreshPointSets() {
+  const sets = await pointManager.listPointSets();
+  const sel = document.getElementById('pointSetSelect');
+  const current = sel.value;
+  sel.innerHTML = '';
+  if (sets.length === 0) {
+    sel.innerHTML = '<option value="default">default</option>';
+  } else {
+    sets.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.file;
+      opt.textContent = `${s.name} (${s.count})`;
+      sel.appendChild(opt);
+    });
+  }
+  // Restore selection if still exists
+  if ([...sel.options].some(o => o.value === current)) {
+    sel.value = current;
+  }
+}
+
+document.getElementById('pointSetSelect').addEventListener('change', () => {
+  const setName = document.getElementById('pointSetSelect').value;
+  pointManager.loadPoints(setName).then(() => updatePointList());
+});
+document.getElementById('savePointsBtn').addEventListener('click', () => {
+  const setName = document.getElementById('pointSetSelect').value;
+  pointManager.savePoints(setName).then(() => refreshPointSets());
+});
+document.getElementById('loadPointsBtn').addEventListener('click', () => {
+  const setName = document.getElementById('pointSetSelect').value;
+  pointManager.loadPoints(setName).then(() => updatePointList());
+});
+document.getElementById('newPointSetBtn').addEventListener('click', () => {
+  const name = prompt('Point set name:');
+  if (!name) return;
+  const sel = document.getElementById('pointSetSelect');
+  const opt = document.createElement('option');
+  opt.value = name.replace(/[^a-zA-Z0-9_-]/g, '_');
+  opt.textContent = name;
+  sel.appendChild(opt);
+  sel.value = opt.value;
+  // New set starts empty
+  pointManager.clearAll();
+  updatePointList();
+});
+
+// Load available point sets on init
+refreshPointSets();
+
+// Copy buttons for point panel (event delegation)
+document.getElementById('pointDetail').addEventListener('click', (e) => {
+  const btn = e.target.closest('.copy-btn');
+  if (!btn || !btn.dataset.copy) return;
+  const text = btn.dataset.copy.replace(/\\n/g, '\n');
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1500);
+  });
+});
+
 // Click-to-select on both canvases.
 // Track mousedown position to distinguish clicks from drags.
 function handleCadClick(canvas, camera) {
@@ -1660,7 +1907,6 @@ function handleCadClick(canvas, camera) {
     window.getSelection()?.removeAllRanges();
   });
   canvas.addEventListener('mouseup', (e) => {
-    if (!cadManager.model) return;
     // Ignore drags (moved more than 5px)
     const dx = e.clientX - downX;
     const dy = e.clientY - downY;
@@ -1671,6 +1917,32 @@ function handleCadClick(canvas, camera) {
       ((e.clientX - rect.left) / rect.width) * 2 - 1,
       -((e.clientY - rect.top) / rect.height) * 2 + 1
     );
+
+    // Add point mode: place point at ground plane intersection
+    if (pointManager.isAddMode) {
+      const ray = new THREE.Raycaster();
+      ray.setFromCamera(ndc, camera);
+      const groundPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+      const pt = new THREE.Vector3();
+      if (ray.ray.intersectPlane(groundPlane, pt)) {
+        pointManager.addPoint(pt);
+        pointManager.exitAddMode();
+      }
+      return;
+    }
+
+    // Check if clicking a measurement point first
+    {
+      const ray = new THREE.Raycaster();
+      ray.setFromCamera(ndc, camera);
+      const hit = pointManager.handleClick(ray);
+      if (hit) {
+        updatePointList();
+        return;
+      }
+    }
+
+    if (!cadManager.model) return;
     // Ctrl+click hides the part under the cursor, but only if it's selected
     if (e.ctrlKey) {
       const ray = new THREE.Raycaster();

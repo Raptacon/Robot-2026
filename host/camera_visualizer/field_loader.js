@@ -230,7 +230,7 @@ export class FieldManager {
       ctx.textAlign = 'center';
       ctx.fillText(`${tag.id}`, 32, 22);
       const tex = new THREE.CanvasTexture(canvas);
-      const spriteMat = new THREE.SpriteMaterial({ map: tex });
+      const spriteMat = new THREE.SpriteMaterial({ map: tex, depthTest: false });
       const sprite = new THREE.Sprite(spriteMat);
       sprite.scale.set(0.12, 0.06, 1);
       sprite.position.set(0, 0, TAG_SIZE * 0.7);
