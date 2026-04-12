@@ -390,72 +390,124 @@ export class FieldManager {
 
   async _buildEvergreenField(robotGroup) {
     // Standard FRC field: 54'1" x 26'7.5" = 16.4846m x 8.1153m
-    const fieldLength = 16.4846;
-    const fieldWidth = 8.1153;
-    const wallHeight = 0.508;  // ~20" high walls
+    const L = 16.4846;
+    const W = 8.1153;
+    const wallH = 0.508;      // ~20" wall height
+    const wallT = 0.05;       // wall thickness
 
-    // Carpet
-    const carpetGeo = new THREE.PlaneGeometry(fieldLength, fieldWidth);
-    const carpetMat = new THREE.MeshPhongMaterial({ color: 0x555555, side: THREE.DoubleSide });
-    const carpet = new THREE.Mesh(carpetGeo, carpetMat);
-    carpet.position.set(fieldLength / 2, fieldWidth / 2, 0);
-    carpet.userData = { isFieldElement: true };
-    this.scene.add(carpet);
+    // Store config-like data for reset button
+    this.fieldConfig = {
+      name: 'Evergreen Field',
+      widthInches: L / 0.0254,
+      heightInches: W / 0.0254,
+    };
 
-    // Walls (4 sides)
-    const wallMat = new THREE.MeshPhongMaterial({ color: 0x888888, side: THREE.DoubleSide });
-    const walls = [
-      // Blue wall (X=0)
-      { w: fieldWidth, pos: [0, fieldWidth / 2, wallHeight / 2], rot: [0, Math.PI / 2, 0] },
-      // Red wall (X=fieldLength)
-      { w: fieldWidth, pos: [fieldLength, fieldWidth / 2, wallHeight / 2], rot: [0, Math.PI / 2, 0] },
-      // Side wall (Y=0)
-      { w: fieldLength, pos: [fieldLength / 2, 0, wallHeight / 2], rot: [0, 0, 0] },
-      // Side wall (Y=fieldWidth)
-      { w: fieldLength, pos: [fieldLength / 2, fieldWidth, wallHeight / 2], rot: [0, 0, 0] },
-    ];
-    walls.forEach(({ w, pos, rot }) => {
-      const geo = new THREE.PlaneGeometry(w, wallHeight);
-      const mesh = new THREE.Mesh(geo, wallMat);
-      mesh.position.set(...pos);
-      mesh.rotation.set(...rot);
+    const addField = (mesh) => {
       mesh.userData = { isFieldElement: true };
       this.scene.add(mesh);
+    };
+
+    // Carpet (slightly below Z=0 so grid renders on top)
+    const carpet = new THREE.Mesh(
+      new THREE.BoxGeometry(L, W, 0.01),
+      new THREE.MeshPhongMaterial({ color: 0x444444 })
+    );
+    carpet.position.set(L / 2, W / 2, -0.005);
+    addField(carpet);
+
+    // Walls — BoxGeometry for visible thickness
+    const wallMat = new THREE.MeshPhongMaterial({ color: 0x999999 });
+    // Blue alliance wall (X=0)
+    const blueWall = new THREE.Mesh(
+      new THREE.BoxGeometry(wallT, W, wallH), wallMat.clone()
+    );
+    blueWall.material.color.setHex(0x3355aa);
+    blueWall.position.set(-wallT / 2, W / 2, wallH / 2);
+    addField(blueWall);
+
+    // Red alliance wall (X=L)
+    const redWall = new THREE.Mesh(
+      new THREE.BoxGeometry(wallT, W, wallH), wallMat.clone()
+    );
+    redWall.material.color.setHex(0xaa3333);
+    redWall.position.set(L + wallT / 2, W / 2, wallH / 2);
+    addField(redWall);
+
+    // Side walls (Y=0 and Y=W)
+    [0, W].forEach(yPos => {
+      const side = new THREE.Mesh(
+        new THREE.BoxGeometry(L + wallT * 2, wallT, wallH), wallMat
+      );
+      side.position.set(L / 2, yPos + (yPos === 0 ? -wallT / 2 : wallT / 2), wallH / 2);
+      addField(side);
     });
 
-    // Blue alliance markers
-    const blueMarker = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.05, fieldWidth * 0.3),
-      new THREE.MeshBasicMaterial({ color: 0x0044ff, side: THREE.DoubleSide })
+    // Center line
+    const centerLine = new THREE.Mesh(
+      new THREE.BoxGeometry(0.02, W, 0.002),
+      new THREE.MeshBasicMaterial({ color: 0xffffff })
     );
-    blueMarker.position.set(0.01, fieldWidth / 2, wallHeight / 2);
-    blueMarker.rotation.y = Math.PI / 2;
-    blueMarker.userData = { isFieldElement: true };
-    this.scene.add(blueMarker);
+    centerLine.position.set(L / 2, W / 2, 0.001);
+    addField(centerLine);
 
-    // Red alliance marker
-    const redMarker = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.05, fieldWidth * 0.3),
-      new THREE.MeshBasicMaterial({ color: 0xff0000, side: THREE.DoubleSide })
-    );
-    redMarker.position.set(fieldLength - 0.01, fieldWidth / 2, wallHeight / 2);
-    redMarker.rotation.y = Math.PI / 2;
-    redMarker.userData = { isFieldElement: true };
-    this.scene.add(redMarker);
+    // Driver station zones (3 per alliance, marked on floor)
+    const dsWidth = W / 3;
+    const dsDepth = 0.1;
+    [0x2244aa, 0x2244aa, 0x2244aa].forEach((_, i) => {
+      // Blue DS
+      const bds = new THREE.Mesh(
+        new THREE.BoxGeometry(dsDepth, dsWidth * 0.9, 0.002),
+        new THREE.MeshBasicMaterial({ color: 0x2244aa, transparent: true, opacity: 0.5 })
+      );
+      bds.position.set(dsDepth / 2, dsWidth * (i + 0.5), 0.001);
+      addField(bds);
+
+      // Red DS
+      const rds = new THREE.Mesh(
+        new THREE.BoxGeometry(dsDepth, dsWidth * 0.9, 0.002),
+        new THREE.MeshBasicMaterial({ color: 0xaa2222, transparent: true, opacity: 0.5 })
+      );
+      rds.position.set(L - dsDepth / 2, dsWidth * (i + 0.5), 0.001);
+      addField(rds);
+    });
+
+    // Alliance labels
+    const blueLabel = this._makeSprite('BLUE ALLIANCE', 0x4488ff);
+    blueLabel.position.set(0.5, W / 2, wallH + 0.2);
+    addField(blueLabel);
+
+    const redLabel = this._makeSprite('RED ALLIANCE', 0xff4444);
+    redLabel.position.set(L - 0.5, W / 2, wallH + 0.2);
+    addField(redLabel);
 
     // Grid and outline
-    this._addFieldGrid(fieldLength, fieldWidth);
+    this._addFieldGrid(L, W);
 
-    // Place real AprilTags from robotpy_apriltag
+    // Place AprilTags on simple stands at wall positions.
+    // Only place wall-mounted tags (near X=0 or X=L), skip game-element
+    // tags that would float in mid-air without structures.
     await this._placeFieldTags();
+    // Remove tags that aren't near a wall (floating in the field)
+    const wallMargin = 1.0;  // meters from wall to count as wall-mounted
+    this.fieldTags = this.fieldTags.filter(tag => {
+      const worldPos = new THREE.Vector3();
+      tag.getWorldPosition(worldPos);
+      const nearWall = worldPos.x < wallMargin || worldPos.x > (L - wallMargin) ||
+                       worldPos.y < wallMargin || worldPos.y > (W - wallMargin);
+      if (!nearWall) {
+        this.scene.remove(tag);
+        return false;
+      }
+      return true;
+    });
 
     // Robot at field center
-    robotGroup.position.set(fieldLength / 2, fieldWidth / 2, 0);
+    robotGroup.position.set(L / 2, W / 2, 0);
 
     if (this.onFieldLoaded) {
       this.onFieldLoaded({
-        lengthM: fieldLength, widthM: fieldWidth,
-        robotX: fieldLength / 2, robotY: fieldWidth / 2,
+        lengthM: L, widthM: W,
+        robotX: L / 2, robotY: W / 2,
       });
     }
   }
