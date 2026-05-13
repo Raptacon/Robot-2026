@@ -14,6 +14,9 @@
     isAnalogLike,
   } from '../lib/types';
   import type { ActionDefinition, TriggerMode } from '../lib/types';
+  import { defaultSplinePoints, defaultSegmentPoints } from '../lib/curves.js';
+  import CurveEditor from './CurveEditor.svelte';
+  import LivePreview from './LivePreview.svelte';
 
   const original = $derived(
     $selectedAction ? $config.actions[$selectedAction] ?? null : null,
@@ -43,6 +46,35 @@
       draft.trigger_mode !== 'raw',
   );
 
+  const usesSpline = $derived(usesShaping && draft?.trigger_mode === 'spline');
+  const usesSegments = $derived(usesShaping && draft?.trigger_mode === 'segmented');
+
+  // Curve-editor change handlers.  Apply immediately to the draft so the
+  // live preview reflects the edit without needing Apply.
+  function onSplinePointsChange(points: unknown[]): void {
+    if (!draft) return;
+    draft.extra = { ...draft.extra, spline_points: points };
+  }
+  function onSegmentPointsChange(points: unknown[]): void {
+    if (!draft) return;
+    draft.extra = { ...draft.extra, segment_points: points };
+  }
+
+  // Ensure curve-data exists when switching into a curve mode so the editor
+  // has something to render and the preview has a curve to evaluate.
+  function ensureCurveData(): void {
+    if (!draft) return;
+    if (draft.trigger_mode === 'spline' && !Array.isArray(draft.extra?.spline_points)) {
+      draft.extra = { ...draft.extra, spline_points: defaultSplinePoints() };
+    } else if (draft.trigger_mode === 'segmented' && !Array.isArray(draft.extra?.segment_points)) {
+      draft.extra = { ...draft.extra, segment_points: defaultSegmentPoints() };
+    }
+  }
+
+  function onTriggerModeChange(): void {
+    ensureCurveData();
+  }
+
   function onInputTypeChange(): void {
     if (!draft) return;
     const modes = isAnalogLike(draft.input_type)
@@ -51,6 +83,7 @@
     if (!(modes as readonly string[]).includes(draft.trigger_mode)) {
       draft.trigger_mode = defaultTriggerModeFor(draft.input_type);
     }
+    ensureCurveData();
   }
 
   function apply(): void {
@@ -129,7 +162,7 @@
 
       <label>
         <span>Trigger mode</span>
-        <select bind:value={draft.trigger_mode}>
+        <select bind:value={draft.trigger_mode} onchange={onTriggerModeChange}>
           {#each validTriggerModes as m (m)}
             <option value={m}>{m}</option>
           {/each}
@@ -160,6 +193,36 @@
           <span>Threshold</span>
           <input type="number" step="0.05" min="0" max="1" bind:value={draft.threshold} />
         </label>
+      {/if}
+
+      {#if usesSpline}
+        <CurveEditor
+          mode="spline"
+          points={(draft.extra?.spline_points as any[]) ?? defaultSplinePoints()}
+          onChange={onSplinePointsChange}
+        />
+      {/if}
+      {#if usesSegments}
+        <CurveEditor
+          mode="segments"
+          points={(draft.extra?.segment_points as any[]) ?? defaultSegmentPoints()}
+          onChange={onSegmentPointsChange}
+        />
+      {/if}
+
+      {#if isAnalogLike(draft.input_type)}
+        <section class="preview-section">
+          <h4>Live preview</h4>
+          <LivePreview
+            inversion={draft.inversion}
+            deadband={draft.deadband}
+            scale={draft.scale}
+            slewRate={draft.slew_rate}
+            triggerMode={draft.trigger_mode}
+            splinePoints={(draft.extra?.spline_points as any[]) ?? undefined}
+            segmentPoints={(draft.extra?.segment_points as any[]) ?? undefined}
+          />
+        </section>
       {/if}
     </div>
 
@@ -214,4 +277,17 @@
   }
   .danger { background: var(--danger); border-color: var(--danger); color: #111; }
   .danger:hover { background: #f07a72; }
+  .preview-section {
+    border-top: 1px solid var(--border);
+    padding-top: 0.6rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+  .preview-section h4 {
+    margin: 0;
+    font-size: 0.9em;
+    color: var(--muted);
+    font-weight: 500;
+  }
 </style>

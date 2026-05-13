@@ -63,8 +63,6 @@
   let showHitboxes = $state(true);
   let editMode = $state(false);
   let hoverInput = $state<string | null>(null);
-  let hoverScreenX = $state(0);
-  let hoverScreenY = $state(0);
   let dragOverInput = $state<string | null>(null);
   let menuFor = $state<string | null>(null);
   let menuX = $state(0);
@@ -412,6 +410,83 @@
     return bindingsForPort[input] ?? [];
   }
 
+  // Precomputed labels-by-input map.  The second SVG pass iterates this
+  // directly so Svelte tracks reactivity on bindingsForPort once at the
+  // top level rather than through per-iteration {@const} calls --
+  // simpler and more reliable when bindings change at runtime.
+  const labelsByInput = $derived.by((): Record<string, string[]> => {
+    const out: Record<string, string[]> = {};
+    if (!$hitboxes) return out;
+    for (const input of Object.keys($hitboxes.regions)) {
+      out[input] = bindingsForPort[input] ?? [];
+    }
+    return out;
+  });
+
+  // Tray content for the persistent bottom panel.  Recomputed reactively
+  // so right-click / menu-open just suppresses the content -- the tray
+  // wrapper stays in layout so the controller above it doesn't shift.
+  const trayState = $derived.by(() => {
+    const input = (!menuFor && !pickerFor && !editMode) ? hoverInput : null;
+    return {
+      input,
+      hb: input ? actionsForInput(input) : ([] as string[]),
+      cat: input ? categoryFor(input) : null,
+    };
+  });
+
+  // Approximate bbox of the rendered action label for `input`, in SVG
+  // viewBox units.  Returns null when no label is rendered.  Width is
+  // estimated from character count -- good enough for "do these labels
+  // overlap?" — we don't need pixel-accurate metrics for the dim effect.
+  function labelBox(input: string): { cx: number; cy: number; w: number; h: number } | null {
+    const labels = actionsForInput(input);
+    if (labels.length === 0) return null;
+    const shape = effectiveShape(input);
+    const center = regionCenter(shape);
+    const off = currentLabel(input);
+    const fs = currentFonts.action_label;
+    const splits = labels.map(splitAction);
+    const isMulti = splits.length > 1;
+    // When multi-bound only the first action plus "..." is rendered.
+    const groupLine = isMulti
+      ? (splits[0]?.group ?? '')
+      : splits.map((s) => s.group).filter(Boolean).join(' · ');
+    const nameLine = isMulti
+      ? (splits[0]?.name ?? '')
+      : splits.map((s) => s.name).join(' · ');
+    const longest = Math.max(groupLine.length, nameLine.length, isMulti ? 3 : 0);
+    const CHAR_RATIO = 0.55;
+    const w = Math.max(fs, longest * fs * CHAR_RATIO);
+    // Rough line count: group adds 1, name is always 1, "..." adds 1.
+    const lines = (groupLine ? 1 : 0) + 1 + (isMulti ? 1 : 0);
+    const h = fs * Math.max(1.1, lines);
+    return { cx: center.x + off.dx, cy: center.y + off.dy, w, h };
+  }
+
+  // When the user hovers a region, dim every label whose bbox overlaps
+  // the hovered label's bbox.  This is the busy-controller readability
+  // fix -- non-overlapping labels stay bright so the rest of the layout
+  // stays oriented.  Empty in edit-mode / menu-open / no-hover.
+  const dimmedInputs = $derived.by((): Set<string> => {
+    const dimmed = new Set<string>();
+    if (!hoverInput || editMode || menuFor || pickerFor || !$hitboxes) return dimmed;
+    const hovered = labelBox(hoverInput);
+    if (!hovered) return dimmed;
+    for (const input of Object.keys($hitboxes.regions)) {
+      if (input === hoverInput) continue;
+      const b = labelBox(input);
+      if (!b) continue;
+      if (
+        Math.abs(b.cx - hovered.cx) < (b.w + hovered.w) / 2 &&
+        Math.abs(b.cy - hovered.cy) < (b.h + hovered.h) / 2
+      ) {
+        dimmed.add(input);
+      }
+    }
+    return dimmed;
+  });
+
   function compatibleActions(input: string): string[] {
     return Object.keys($config.actions)
       .filter((qn) => {
@@ -454,6 +529,27 @@
 
   function closeMenu(): void {
     menuFor = null;
+  }
+
+  // Action picker: left-click on a region with multiple bound actions
+  // opens this small menu so the user can pick which action to edit.
+  // (Single-bound regions jump straight to the inspector; unbound regions
+  // open the binding menu.)
+  let pickerFor = $state<string | null>(null);
+  let pickerX = $state(0);
+  let pickerY = $state(0);
+
+  function openPicker(input: string, evt: MouseEvent): void {
+    evt.stopPropagation();
+    pickerFor = input;
+    const target = evt.currentTarget as Element;
+    const r = target.getBoundingClientRect();
+    pickerX = r.left + r.width / 2;
+    pickerY = r.bottom;
+  }
+
+  function closePicker(): void {
+    pickerFor = null;
   }
 
   function onDragOver(input: string, evt: DragEvent): void {
@@ -500,7 +596,7 @@
   }
 </script>
 
-<svelte:window onclick={closeMenu} />
+<svelte:window onclick={() => { closeMenu(); closePicker(); }} />
 
 <section class="controller-view">
   <header class="row">
@@ -635,16 +731,8 @@
           role="button"
           tabindex="0"
           aria-label={humanLabel(input)}
-          onmouseenter={(e: MouseEvent) => {
+          onmouseenter={() => {
             hoverInput = input;
-            hoverScreenX = e.clientX;
-            hoverScreenY = e.clientY;
-          }}
-          onmousemove={(e: MouseEvent) => {
-            if (hoverInput === input) {
-              hoverScreenX = e.clientX;
-              hoverScreenY = e.clientY;
-            }
           }}
           onmouseleave={() => {
             if (hoverInput === input) hoverInput = null;
@@ -655,6 +743,22 @@
               editingInput = input;
               return;
             }
+            // Left-click: jump to the bound action in the inspector when
+            // there's exactly one bound.  With multiple bound, show a
+            // picker so the user can choose which one to edit.  With
+            // none bound, fall through to the binding menu.
+            const bound = actionsForInput(input);
+            if (bound.length === 1) {
+              selectedAction.set(bound[0]);
+            } else if (bound.length > 1) {
+              openPicker(input, e);
+            } else {
+              openMenu(input, e);
+            }
+          }}
+          oncontextmenu={(e: MouseEvent) => {
+            if (editMode) return;
+            e.preventDefault();
             openMenu(input, e);
           }}
           onkeydown={(e: KeyboardEvent) => {
@@ -712,16 +816,33 @@
             </text>
           {/if}
         </g>
+      {/each}
+
+      <!-- Second pass: action labels.  Rendered after the hit-region loop
+           so labels paint on top of every region's bbox, not just their
+           own region's.  Iterates labelsByInput so reactivity on
+           bindingsForPort is tracked at the iterable level. -->
+      {#each Object.entries(labelsByInput) as [input, labels] (input)}
+        {@const shape = effectiveShape(input)}
+        {@const center = regionCenter(shape)}
         {@const labelOffset = currentLabel(input)}
         {@const labelHasBindings = labels.length > 0}
         {@const splits = labels.map(splitAction)}
-        {@const groupLine = splits.map((s) => s.group).filter(Boolean).join(' · ')}
-        {@const nameLine = splits.map((s) => s.name).join(' · ')}
+        {@const isMulti = splits.length > 1}
+        <!-- For multi-bound regions show only the first action's group/name
+             with a "..." indicator below; the picker menu shows the rest. -->
+        {@const groupLine = isMulti
+          ? (splits[0]?.group ?? '')
+          : splits.map((s) => s.group).filter(Boolean).join(' · ')}
+        {@const nameLine = isMulti
+          ? (splits[0]?.name ?? '')
+          : splits.map((s) => s.name).join(' · ')}
         {#if labelHasBindings || editMode}
           <g
             class="action-label-group"
             class:edit-mode={editMode}
             class:placeholder={!labelHasBindings}
+            class:dimmed={dimmedInputs.has(input)}
             onpointerdown={(e: PointerEvent) => onLabelPointerDown(input, e)}
             onpointermove={(e: PointerEvent) => onLabelPointerMove(input, e)}
             onpointerup={(e: PointerEvent) => onLabelPointerUp(input, e)}
@@ -750,12 +871,19 @@
               {#if !labelHasBindings}
                 <tspan x={center.x + labelOffset.dx} dy="0.32em">{input}</tspan>
               {:else if groupLine}
-                <!-- Balanced around anchor so the two-line block reads as
-                     vertically centered at center + labelOffset. -->
-                <tspan x={center.x + labelOffset.dx} dy="-0.15em" class="action-group">{groupLine}</tspan>
+                <!-- Two lines balanced around anchor (-0.15em + 1.0em); a
+                     third "..." line shifts the block up so the whole
+                     stack still reads as vertically centered. -->
+                <tspan x={center.x + labelOffset.dx} dy={isMulti ? '-0.65em' : '-0.15em'} class="action-group">{groupLine}</tspan>
                 <tspan x={center.x + labelOffset.dx} dy="1.0em" class="action-name">{nameLine}</tspan>
+                {#if isMulti}
+                  <tspan x={center.x + labelOffset.dx} dy="1.0em" class="action-more">...</tspan>
+                {/if}
               {:else}
-                <tspan x={center.x + labelOffset.dx} dy="0.32em" class="action-name">{nameLine}</tspan>
+                <tspan x={center.x + labelOffset.dx} dy={isMulti ? '-0.15em' : '0.32em'} class="action-name">{nameLine}</tspan>
+                {#if isMulti}
+                  <tspan x={center.x + labelOffset.dx} dy="1.0em" class="action-more">...</tspan>
+                {/if}
               {/if}
             </text>
           </g>
@@ -765,30 +893,50 @@
     {/if}
   </div>
 
-  {#if hoverInput && !menuFor && !editMode}
-    {@const hb = actionsForInput(hoverInput)}
-    {@const cat = categoryFor(hoverInput)}
-    <div
-      class="tooltip"
-      style:left="{hoverScreenX + 14}px"
-      style:top="{hoverScreenY + 14}px"
-    >
-      <div class="tooltip-title">
-        <strong>{humanLabel(hoverInput)}</strong>
-        {#if cat}<span class="muted">·</span><span class="muted">{cat}</span>{/if}
-      </div>
-      <div class="tooltip-sub muted">{hoverInput}</div>
-      {#if hb.length > 0}
-        <ul class="tooltip-actions">
-          {#each hb as qn (qn)}
-            <li>{qn}</li>
-          {/each}
-        </ul>
+  <!-- Bottom info tray.  Always rendered so toggling edit-mode or
+       opening the binding menu doesn't reflow the controller above it.
+       Content switches based on mode. -->
+  <div class="info-tray" class:empty={!trayState.input}>
+      {#if trayState.input}
+        {@const trayInput = trayState.input}
+        {@const hb = trayState.hb}
+        {@const cat = trayState.cat}
+        <div class="tray-head">
+          <strong>{humanLabel(trayInput)}</strong>
+          {#if cat}<span class="muted">·</span><span class="muted">{cat}</span>{/if}
+          <span class="tray-sub muted">{trayInput}</span>
+        </div>
+        {#if hb.length > 0}
+          <div class="tray-actions-list">
+            {#each hb as qn (qn)}
+              {@const act = $config.actions[qn]}
+              <div class="action-card">
+                <span class="qname">{qn}</span>
+                {#if act}
+                  <span class="type-badge type-{act.input_type}">{act.input_type}</span>
+                  <span class="mode-pill">{act.trigger_mode}</span>
+                  {#if act.input_type === 'analog' || act.input_type === 'virtual_analog'}
+                    {#if act.scale !== 1}<span class="cfg">scale {act.scale}</span>{/if}
+                    {#if act.deadband > 0}<span class="cfg">deadband {act.deadband}</span>{/if}
+                    {#if act.inversion}<span class="cfg neg">inverted</span>{/if}
+                    {#if act.slew_rate > 0}<span class="cfg">slew {act.slew_rate}/s</span>{/if}
+                  {/if}
+                  {#if act.input_type === 'boolean_trigger'}
+                    <span class="cfg">threshold {act.threshold}</span>
+                  {/if}
+                {/if}
+              </div>
+            {/each}
+          </div>
+        {:else}
+          <div class="muted tray-empty">no actions bound</div>
+        {/if}
       {:else}
-        <div class="muted tooltip-empty">no actions bound</div>
+        <div class="muted tray-hint">
+          Hover a region to inspect it · left-click to edit · right-click to bind
+        </div>
       {/if}
     </div>
-  {/if}
 
   {#if menuFor}
     {@const m = menuFor}
@@ -838,6 +986,58 @@
               {$config.actions[qn]?.input_type}
             </span>
           </button>
+        {/each}
+      </section>
+    </div>
+  {/if}
+
+  <!-- Action picker for multi-bound regions: lists each bound action,
+       click one to open it in the inspector.  Right-click on the region
+       still opens the full binding menu for assignment/removal. -->
+  {#if pickerFor}
+    {@const p = pickerFor}
+    {@const picked = actionsForInput(p)}
+    <div
+      class="menu picker"
+      style:left="{pickerX}px"
+      style:top="{pickerY}px"
+      onclick={(e) => e.stopPropagation()}
+      oncontextmenu={(e) => e.preventDefault()}
+      onkeydown={() => {}}
+      role="menu"
+      tabindex="-1"
+    >
+      <header>
+        <strong>{humanLabel(p)}</strong>
+        <span class="muted">{categoryFor(p)}</span>
+      </header>
+      <section>
+        <p class="muted small">Edit action:</p>
+        {#each picked as qn (qn)}
+          {@const act = $config.actions[qn]}
+          <div class="menu-row picker-row">
+            <button
+              class="picker-edit"
+              onclick={() => {
+                selectedAction.set(qn);
+                closePicker();
+              }}
+              title="Open in editor"
+            >
+              <span>{qn}</span>
+              <span class="muted small">{act?.input_type ?? ''}</span>
+            </button>
+            <button
+              class="picker-remove"
+              title="Unbind from this region"
+              onclick={() => {
+                unbindAction(p, qn);
+                // If that was the last bound action, dismiss; otherwise
+                // stay open so the user can keep pruning.
+                if (actionsForInput(p).length === 0) closePicker();
+              }}
+            >×</button>
+          </div>
         {/each}
       </section>
     </div>
@@ -1033,6 +1233,14 @@
     pointer-events: auto;
     cursor: grab;
   }
+  /* Labels whose bbox overlaps the currently-hovered region get dimmed
+     so the hovered region's label can be read on busy controllers. */
+  .action-label-group {
+    transition: opacity 120ms ease-out;
+  }
+  .action-label-group.dimmed {
+    opacity: 0.15;
+  }
   /* Placeholder shown in edit mode where a region has no binding yet —
      significantly greyer than a real action label so the eye reads it
      as "drop something here" rather than as actual content. */
@@ -1055,6 +1263,15 @@
     fill: #ffd680;
     font-weight: 700;
   }
+  /* Tail indicator for regions with more than one bound action -- same
+     amber hue as the action name but dimmer and condensed. */
+  .action-more {
+    fill: #ffd680;
+    font-weight: 700;
+    font-size: 0.85em;
+    opacity: 0.7;
+    letter-spacing: 0.15em;
+  }
   .leader {
     stroke: rgba(255, 200, 80, 0.65);
     stroke-width: 0.6;
@@ -1062,29 +1279,89 @@
     pointer-events: none;
   }
 
-  .tooltip {
-    position: fixed;
-    background: var(--panel-2);
+  .info-tray {
+    border-top: 1px solid var(--border);
+    background: var(--panel);
+    padding: 0.5rem 0.75rem;
+    /* Fixed height so swapping content during hover doesn't push the
+       controller up/down.  Tall enough for the head row plus two action
+       cards; very busy bindings scroll within the tray. */
+    height: 8rem;
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    font-size: 0.85em;
+    overflow-y: auto;
+  }
+  .info-tray.empty {
+    justify-content: center;
+  }
+  .tray-head {
+    display: flex;
+    gap: 0.4rem;
+    align-items: baseline;
+    flex-wrap: wrap;
+  }
+  .tray-sub {
+    font-size: 0.85em;
+    font-family: ui-monospace, "SF Mono", Consolas, monospace;
+  }
+  .tray-actions-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  .action-card {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.2rem 0.45rem;
     border: 1px solid var(--border);
     border-radius: 4px;
-    padding: 0.4rem 0.55rem;
-    box-shadow: 0 4px 14px #0009;
-    pointer-events: none;
-    z-index: 20;
-    font-size: 0.85em;
-    max-width: 18rem;
+    background: var(--panel-2);
   }
-  .tooltip-title { display: flex; gap: 0.35rem; align-items: baseline; }
-  .tooltip-sub { font-size: 0.8em; font-family: ui-monospace, "SF Mono", Consolas, monospace; }
-  .tooltip-actions {
-    list-style: none;
-    margin: 0.3rem 0 0;
-    padding: 0;
+  .action-card .qname {
     font-family: ui-monospace, "SF Mono", Consolas, monospace;
-    font-size: 0.9em;
+    font-weight: 600;
   }
-  .tooltip-actions li { padding: 0.05rem 0; }
-  .tooltip-empty { font-style: italic; margin-top: 0.2rem; }
+  .type-badge {
+    text-transform: uppercase;
+    font-size: 0.7em;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    color: #111;
+    background: #888;
+  }
+  /* Distinct hues per input type so the eye can pick the kind of action
+     out without reading the word.  Kept saturated enough to read on the
+     dark tray background. */
+  .type-button { background: #6cb6ff; }
+  .type-analog { background: #8bd17c; }
+  .type-output { background: #c490e4; }
+  .type-boolean_trigger { background: #ffb84d; }
+  .type-virtual_analog { background: #5ec8c1; }
+  .mode-pill {
+    font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    font-size: 0.78em;
+    padding: 0.05rem 0.35rem;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--muted);
+  }
+  .cfg {
+    font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    font-size: 0.78em;
+    color: var(--muted);
+  }
+  .cfg.neg {
+    color: #ff9a83;
+  }
+  .tray-empty { font-style: italic; }
+  .tray-hint { font-style: italic; }
 
   .font-control {
     gap: 0.3rem;
@@ -1132,4 +1409,42 @@
     cursor: pointer;
   }
   .menu-row:hover:not(:disabled) { background: var(--panel); }
+
+  /* Picker rows pair a primary "open in editor" button with a smaller
+     "×" unbind button so the user can prune bindings from the same
+     menu without switching to the right-click binding menu. */
+  .picker-row {
+    cursor: default;
+    padding: 0;
+    align-items: stretch;
+    gap: 0.25rem;
+  }
+  .picker-edit {
+    flex: 1;
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    background: transparent;
+    border: 0;
+    border-radius: 3px;
+    padding: 0.3rem 0.4rem;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .picker-edit:hover { background: var(--panel); }
+  .picker-remove {
+    background: transparent;
+    border: 0;
+    color: var(--muted);
+    padding: 0 0.5rem;
+    font-size: 1.1em;
+    line-height: 1;
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  .picker-remove:hover {
+    background: var(--panel);
+    color: var(--danger, #ff8a7a);
+  }
 </style>
