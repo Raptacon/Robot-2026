@@ -27,6 +27,11 @@ export const config = writable<FullConfig>(emptyConfig());
 export const currentPath = writable<string | null>(null);
 export const selectedAction = writable<string | null>(null);
 export const dirty = writable<boolean>(false);
+// Inspector expanded mode -- when on, the right pane grows wider and the
+// curve editor + live preview move into a side column so the user can see
+// most options without scrolling.  Stored at the app level so App.svelte
+// can resize the grid in lockstep with the inspector's internal layout.
+export const inspectorExpanded = writable<boolean>(false);
 
 const undoStack: FullConfig[] = [];
 const redoStack: FullConfig[] = [];

@@ -10,6 +10,7 @@
     markSaved,
     undo,
     redo,
+    inspectorExpanded,
   } from './lib/store';
   import { listConfigs, loadConfig, saveConfig } from './lib/api';
   import ActionLibrary from './components/ActionLibrary.svelte';
@@ -97,7 +98,7 @@
     <span class="muted status">{status}</span>
   </header>
 
-  <main>
+  <main class:inspector-expanded={$inspectorExpanded}>
     <ActionLibrary />
     <section class="center">
       <div class="tabs" role="tablist">
@@ -154,6 +155,13 @@
     display: grid;
     grid-template-columns: minmax(16rem, 22rem) 1fr minmax(18rem, 24rem);
     min-height: 0;
+    transition: grid-template-columns 180ms ease;
+  }
+  /* Inspector expanded: take roughly twice the room from the center pane
+     so the curve editor + live preview have a column of their own.  The
+     library on the left stays at its normal width. */
+  main.inspector-expanded {
+    grid-template-columns: minmax(16rem, 22rem) 1fr minmax(38rem, 48rem);
   }
   .center {
     display: flex;
