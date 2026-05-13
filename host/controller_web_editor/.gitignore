@@ -1,0 +1,4 @@
+# Vite build output — regenerate with `cd web && npm run build`.
+static/
+# Recoverable backup written by the hitboxes API on save.
+hitboxes/*.bak

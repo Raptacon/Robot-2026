@@ -1,0 +1,188 @@
+<script lang="ts">
+  import { onMount } from 'svelte';
+  import {
+    config,
+    currentPath,
+    dirty,
+    canUndo,
+    canRedo,
+    loadInto,
+    markSaved,
+    undo,
+    redo,
+  } from './lib/store';
+  import { listConfigs, loadConfig, saveConfig } from './lib/api';
+  import ActionLibrary from './components/ActionLibrary.svelte';
+  import ActionInspector from './components/ActionInspector.svelte';
+  import BindingMenu from './components/BindingMenu.svelte';
+  import ControllerView from './components/ControllerView.svelte';
+
+  let centerTab = $state<'controller' | 'list'>('controller');
+  let activePort = $state(0);
+
+  let configs = $state<string[]>([]);
+  let chosen = $state<string>('');
+  let status = $state<string>('');
+  let loading = $state(false);
+
+  async function refreshConfigs(): Promise<void> {
+    try {
+      const r = await listConfigs();
+      configs = r.configs;
+      if (!chosen && configs.length > 0) chosen = configs[0];
+    } catch (e) {
+      status = `Error listing configs: ${(e as Error).message}`;
+    }
+  }
+
+  async function doLoad(): Promise<void> {
+    if (!chosen) return;
+    loading = true;
+    status = `Loading ${chosen}…`;
+    try {
+      const c = await loadConfig(chosen);
+      loadInto(c, chosen);
+      status = `Loaded ${chosen}`;
+    } catch (e) {
+      status = `Error: ${(e as Error).message}`;
+    } finally {
+      loading = false;
+    }
+  }
+
+  async function doSave(): Promise<void> {
+    if (!$currentPath) return;
+    status = `Saving ${$currentPath}…`;
+    try {
+      await saveConfig($currentPath, $config);
+      markSaved();
+      status = `Saved ${$currentPath}`;
+    } catch (e) {
+      status = `Error: ${(e as Error).message}`;
+    }
+  }
+
+  function onKeydown(e: KeyboardEvent): void {
+    const meta = e.ctrlKey || e.metaKey;
+    if (!meta) return;
+    if (e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+    else if ((e.key === 'z' && e.shiftKey) || e.key === 'y') { e.preventDefault(); redo(); }
+    else if (e.key === 's') { e.preventDefault(); doSave(); }
+  }
+
+  onMount(refreshConfigs);
+</script>
+
+<svelte:window onkeydown={onKeydown} />
+
+<div class="app">
+  <header class="top">
+    <strong>Controller Editor</strong>
+    <span class="muted">phase 2</span>
+    <span class="spacer"></span>
+    <label class="row">
+      <span>Config</span>
+      <select bind:value={chosen}>
+        {#each configs as p (p)}
+          <option value={p}>{p}</option>
+        {/each}
+      </select>
+    </label>
+    <button onclick={doLoad} disabled={loading || !chosen}>Load</button>
+    <button class="primary" onclick={doSave} disabled={!$currentPath || !$dirty}>
+      Save{$dirty ? ' •' : ''}
+    </button>
+    <button onclick={undo} disabled={!$canUndo} title="Ctrl+Z">Undo</button>
+    <button onclick={redo} disabled={!$canRedo} title="Ctrl+Shift+Z">Redo</button>
+    <span class="muted status">{status}</span>
+  </header>
+
+  <main>
+    <ActionLibrary />
+    <section class="center">
+      <div class="tabs" role="tablist">
+        <button
+          role="tab"
+          aria-selected={centerTab === 'controller'}
+          class:active={centerTab === 'controller'}
+          onclick={() => (centerTab = 'controller')}
+        >Controller</button>
+        <button
+          role="tab"
+          aria-selected={centerTab === 'list'}
+          class:active={centerTab === 'list'}
+          onclick={() => (centerTab = 'list')}
+        >List</button>
+      </div>
+      <div class="tab-body">
+        {#if centerTab === 'controller'}
+          <ControllerView bind:port={activePort} />
+        {:else}
+          <BindingMenu bind:port={activePort} />
+        {/if}
+      </div>
+    </section>
+    <ActionInspector />
+  </main>
+</div>
+
+<style>
+  .app {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+  .top {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.75rem;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+  }
+  .spacer { flex: 1; }
+  .status {
+    margin-left: 0.5rem;
+    font-size: 0.85em;
+    max-width: 20rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: minmax(16rem, 22rem) 1fr minmax(18rem, 24rem);
+    min-height: 0;
+  }
+  .center {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .tabs {
+    display: flex;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+  }
+  .tabs button {
+    background: transparent;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    padding: 0.5rem 1rem;
+    color: var(--text-dim);
+    cursor: pointer;
+  }
+  .tabs button.active {
+    color: var(--text);
+    border-bottom-color: var(--accent);
+  }
+  .tab-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+</style>
