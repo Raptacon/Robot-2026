@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { config, selectedAction, setBinding, ensureController } from '../lib/store';
+  import { config, selectedAction, setBinding, ensureController, pendingNewAction } from '../lib/store';
   import { isCompatible, humanLabel, categoryFor } from '../lib/inputs';
-  import { InputType } from '../lib/types';
+  import { InputType, newAction, qualifiedName } from '../lib/types';
   import {
     hitboxes,
     fetchHitboxes,
@@ -743,17 +743,31 @@
               editingInput = input;
               return;
             }
-            // Left-click: jump to the bound action in the inspector when
-            // there's exactly one bound.  With multiple bound, show a
-            // picker so the user can choose which one to edit.  With
-            // none bound, fall through to the binding menu.
+            // Left-click behavior depends on how many actions are bound:
+            //   1   -> open that action in the inspector
+            //   2+  -> show the picker
+            //   0   -> open the inspector with a NEW blank action whose
+            //          binding is pre-set to this region.  The action
+            //          isn't saved until the user clicks Apply, so it
+            //          can be abandoned by selecting something else.
             const bound = actionsForInput(input);
             if (bound.length === 1) {
               selectedAction.set(bound[0]);
             } else if (bound.length > 1) {
               openPicker(input, e);
             } else {
-              openMenu(input, e);
+              const stub = newAction('general', input);
+              const cat = categoryFor(input);
+              stub.input_type = cat === 'axis'
+                ? InputType.Analog
+                : cat === 'output'
+                  ? InputType.Output
+                  : InputType.Button;
+              pendingNewAction.set({
+                action: stub,
+                binding: { port, input },
+              });
+              selectedAction.set(qualifiedName(stub));
             }
           }}
           oncontextmenu={(e: MouseEvent) => {
@@ -933,7 +947,7 @@
         {/if}
       {:else}
         <div class="muted tray-hint">
-          Hover a region to inspect it · left-click to edit · right-click to bind
+          Hover a region to inspect · left-click to edit bound actions · right-click to bind
         </div>
       {/if}
     </div>

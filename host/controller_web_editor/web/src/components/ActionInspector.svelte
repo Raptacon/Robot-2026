@@ -8,6 +8,8 @@
     setBinding,
     ensureController,
     inspectorExpanded,
+    pendingNewAction,
+    mutate,
   } from '../lib/store';
   import {
     InputType,
@@ -19,24 +21,67 @@
   import type { ActionDefinition, TriggerMode } from '../lib/types';
   import { defaultSplinePoints, defaultSegmentPoints } from '../lib/curves.js';
   import { ALL_INPUTS, categoryFor, humanLabel, isCompatible } from '../lib/inputs';
+  import { get } from 'svelte/store';
   import CurveEditor from './CurveEditor.svelte';
   import LivePreview from './LivePreview.svelte';
 
+  // When a pending new action is active, treat it as the original for
+  // draft purposes -- the inspector renders a normal editor view, but
+  // nothing is persisted until Apply.
+  const isPending = $derived($pendingNewAction !== null);
+
   const original = $derived(
-    $selectedAction ? $config.actions[$selectedAction] ?? null : null,
+    $pendingNewAction !== null
+      ? $pendingNewAction.action
+      : ($selectedAction ? $config.actions[$selectedAction] ?? null : null),
   );
+
+  // Sorted list of every group currently in use plus any empty groups.
+  // Surfaced as a <datalist> on the Group field so the user can pick
+  // existing groups but still type a new one freely.
+  const knownGroups = $derived.by((): string[] => {
+    const set = new Set<string>();
+    for (const a of Object.values($config.actions)) set.add(a.group);
+    for (const g of $config.empty_groups) set.add(g);
+    return [...set].sort();
+  });
 
   // Editable copy.  Resets when the selection changes.
   let draft = $state<ActionDefinition | null>(null);
   let originalQname = $state<string | null>(null);
 
+  // Binding snapshot captured when the draft is first loaded for a given
+  // action (and refreshed after Apply).  Reset uses this to undo any
+  // unbind / add-binding edits the user made through the inspector.
+  // Bindings themselves are still committed to the store immediately --
+  // we just remember the starting state so we can roll back.
+  interface BindingRef { port: number; input: string }
+  let originalBindings = $state<BindingRef[]>([]);
+
+  function collectBindingsForQname(qname: string): BindingRef[] {
+    const out: BindingRef[] = [];
+    const cfg = get(config);
+    for (const [portKey, ctrl] of Object.entries(cfg.controllers)) {
+      const port = Number(portKey);
+      if (!Number.isFinite(port)) continue;
+      for (const [input, qnames] of Object.entries(ctrl.bindings ?? {})) {
+        if (qnames.includes(qname)) out.push({ port, input });
+      }
+    }
+    return out.sort((a, b) =>
+      a.port !== b.port ? a.port - b.port : a.input.localeCompare(b.input));
+  }
+
   $effect(() => {
     if (original && originalQname !== `${original.group}.${original.name}`) {
+      const qname = `${original.group}.${original.name}`;
       draft = structuredClone(original);
-      originalQname = `${original.group}.${original.name}`;
+      originalQname = qname;
+      originalBindings = collectBindingsForQname(qname);
     } else if (!original) {
       draft = null;
       originalQname = null;
+      originalBindings = [];
     }
   });
 
@@ -112,12 +157,42 @@
       alert(`An action named '${newQname}' already exists.`);
       return;
     }
+    // Pending-new flow: action doesn't exist in $config yet.  Create it
+    // and bind it to the region recorded on the pending stub, all in one
+    // mutate so it lands as a single undo step.
+    const pending = $pendingNewAction;
+    if (pending) {
+      const port = pending.binding.port;
+      const input = pending.binding.input;
+      mutate(`add ${newQname}`, (c) => {
+        c.actions[newQname] = next;
+        c.empty_groups = c.empty_groups.filter((g) => g !== trimmedGroup);
+        if (!c.controllers[String(port)]) {
+          c.controllers[String(port)] = {
+            port, name: '', controller_type: 'xbox', bindings: {},
+          };
+        }
+        const cur = c.controllers[String(port)].bindings[input] ?? [];
+        if (!cur.includes(newQname)) {
+          c.controllers[String(port)].bindings[input] = [...cur, newQname];
+        }
+      });
+      pendingNewAction.set(null);
+      selectedAction.set(newQname);
+      originalBindings = collectBindingsForQname(newQname);
+      return;
+    }
     if (newQname === originalQname) {
       upsertAction(next);
     } else {
       renameAction(originalQname, next);
       selectedAction.set(newQname);
     }
+    // The committed state is now the new baseline -- refresh the binding
+    // snapshot so a subsequent Reset doesn't revert past this point.
+    // Use the post-Apply qname; renameAction has already remapped the
+    // bindings across all controllers.
+    originalBindings = collectBindingsForQname(newQname);
   }
 
   function remove(): void {
@@ -127,18 +202,70 @@
     selectedAction.set(null);
   }
 
+  // Duplicate the current action: clone everything except the name and
+  // bindings.  Auto-suffix the name with `_copy` (and `_copy_2`,
+  // `_copy_3`, ... if needed to avoid collisions in the same group).
+  function copy(): void {
+    if (!original) return;
+    const base = `${original.name}_copy`;
+    let candidate = base;
+    let n = 2;
+    while ($config.actions[`${original.group}.${candidate}`]) {
+      candidate = `${base}_${n}`;
+      n += 1;
+    }
+    const dup: ActionDefinition = {
+      ...structuredClone(original),
+      name: candidate,
+    };
+    upsertAction(dup);
+    selectedAction.set(`${dup.group}.${dup.name}`);
+  }
+
   // Apply commits the draft to the in-memory config -- not to disk.  The
   // toolbar Save button writes to YAML.  Reset throws away pending edits
-  // and re-clones the current config state into the draft.
+  // (both action fields and binding changes) and re-clones the current
+  // config state into the draft + binding snapshot.
   function reset(): void {
-    if (!original) return;
+    // Pending-new flow: Reset discards the unsaved action entirely.
+    if ($pendingNewAction) {
+      pendingNewAction.set(null);
+      selectedAction.set(null);
+      return;
+    }
+    if (!original || !originalQname) return;
+    // Revert binding changes first so the store update for action fields
+    // doesn't race with our binding diff.  Walk both sets; remove what
+    // shouldn't be there, restore what should.
+    const want = new Set(originalBindings.map(bindingKey));
+    const have = new Set(currentBindings.map(bindingKey));
+    for (const ref of currentBindings) {
+      if (!want.has(bindingKey(ref))) {
+        const list = (get(config).controllers[String(ref.port)]?.bindings[ref.input]) ?? [];
+        setBinding(ref.port, ref.input, list.filter((a) => a !== originalQname));
+      }
+    }
+    for (const ref of originalBindings) {
+      if (!have.has(bindingKey(ref))) {
+        ensureController(ref.port);
+        const list = (get(config).controllers[String(ref.port)]?.bindings[ref.input]) ?? [];
+        if (!list.includes(originalQname)) {
+          setBinding(ref.port, ref.input, [...list, originalQname]);
+        }
+      }
+    }
     draft = structuredClone(original);
     originalQname = `${original.group}.${original.name}`;
   }
 
   const isDirty = $derived.by(() => {
     if (!draft || !original) return false;
-    return JSON.stringify(draft) !== JSON.stringify(original);
+    // A pending new action is "dirty" by definition -- it doesn't exist
+    // in the store yet, so Apply must be enabled even if the user hasn't
+    // touched a field.
+    if (isPending) return true;
+    if (JSON.stringify(draft) !== JSON.stringify(original)) return true;
+    return bindingsDirty;
   });
 
   // True when the draft's qualified name differs from the persisted one.
@@ -160,27 +287,33 @@
 
   // --- Bindings panel ---
   //
-  // Bindings are NOT part of the draft -- they live in the store and any
-  // change here goes directly through setBinding so the controller view
-  // reflects it immediately.  We re-key the panel by `originalQname`
-  // (the persisted name) because that's what shows up in the store; the
-  // draft's group/name may differ if the user is renaming and hasn't
-  // applied yet.
-
-  interface BindingRef { port: number; input: string }
+  // Binding edits go directly through setBinding so the controller view
+  // updates immediately, but we also track the starting state in
+  // `originalBindings` so Reset can roll the bindings back along with
+  // the draft fields.  We re-key the panel by `originalQname` (the
+  // persisted name) because that's what's stored in $config; the draft's
+  // group/name may differ if the user is renaming and hasn't applied yet.
 
   const currentBindings = $derived.by((): BindingRef[] => {
     if (!originalQname) return [];
-    const out: BindingRef[] = [];
-    for (const [portKey, ctrl] of Object.entries($config.controllers)) {
-      const port = Number(portKey);
-      if (!Number.isFinite(port)) continue;
-      for (const [input, qnames] of Object.entries(ctrl.bindings ?? {})) {
-        if (qnames.includes(originalQname)) out.push({ port, input });
-      }
+    // Read $config so the derived re-runs when bindings change in the
+    // store -- collectBindingsForQname uses get() internally which
+    // doesn't track reactivity on its own.
+    void $config.controllers;
+    return collectBindingsForQname(originalQname);
+  });
+
+  function bindingKey(b: BindingRef): string {
+    return `${b.port}:${b.input}`;
+  }
+
+  const bindingsDirty = $derived.by((): boolean => {
+    if (currentBindings.length !== originalBindings.length) return true;
+    const a = new Set(currentBindings.map(bindingKey));
+    for (const b of originalBindings) {
+      if (!a.has(bindingKey(b))) return true;
     }
-    return out.sort((a, b) =>
-      a.port !== b.port ? a.port - b.port : a.input.localeCompare(b.input));
+    return false;
   });
 
   const availablePorts = $derived.by((): number[] => {
@@ -264,7 +397,7 @@
     <p class="muted placeholder">Select an action to edit it.</p>
   {:else}
     <header class="header">
-      <strong>{originalQname}</strong>
+      <strong>{originalQname}{isPending ? ' (new)' : ''}</strong>
       <div class="header-actions">
         <button
           class="icon-btn"
@@ -273,7 +406,14 @@
         >
           {$inspectorExpanded ? '⤡' : '⤢'}
         </button>
-        <button class="danger" onclick={remove}>Delete</button>
+        {#if !isPending}
+          <button
+            class="icon-btn"
+            onclick={copy}
+            title="Duplicate this action (no bindings carried over)"
+          >Copy</button>
+          <button class="danger" onclick={remove}>Delete</button>
+        {/if}
       </div>
     </header>
 
@@ -286,60 +426,91 @@
 
     <div class="form">
       <section class="bindings-section top">
-        <h4>Bindings ({currentBindings.length})</h4>
-        {#if currentBindings.length === 0}
-          <p class="muted small">No bindings.  Add one below.</p>
-        {:else}
+        {#if isPending && $pendingNewAction}
+          <h4>Binding (pending)</h4>
           <ul class="binding-rows">
-            {#each currentBindings as ref (ref.port + ':' + ref.input)}
-              {@const incompat = !isCompatible(ref.input, draft.input_type)}
-              <li class="binding-row" class:incompat>
-                <span class="binding-port">P{ref.port}</span>
-                <span class="binding-input" title={ref.input}>
-                  {humanLabel(ref.input)}
-                  <span class="binding-cat muted">{categoryFor(ref.input) ?? ''}</span>
-                </span>
-                {#if incompat}
-                  <span class="incompat-flag" title="Input type changed -- this binding is no longer compatible">!</span>
-                {/if}
-                <button class="unbind" title="Unbind" onclick={() => unbind(ref)}>×</button>
-              </li>
-            {/each}
+            <li class="binding-row pending-row">
+              <span class="binding-port">P{$pendingNewAction.binding.port}</span>
+              <span class="binding-input" title={$pendingNewAction.binding.input}>
+                {humanLabel($pendingNewAction.binding.input)}
+                <span class="binding-cat muted">{categoryFor($pendingNewAction.binding.input) ?? ''}</span>
+              </span>
+              <span class="pending-flag" title="Bound on Apply">new</span>
+            </li>
           </ul>
-        {/if}
+          <p class="muted small">Click Apply to create this action and bind it.  Click Reset to discard.</p>
+        {:else}
+          <h4>Bindings ({currentBindings.length})</h4>
+          {#if currentBindings.length === 0}
+            <p class="muted small">No bindings.  Add one below.</p>
+          {:else}
+            <ul class="binding-rows">
+              {#each currentBindings as ref (ref.port + ':' + ref.input)}
+                {@const incompat = !isCompatible(ref.input, draft.input_type)}
+                <li class="binding-row" class:incompat>
+                  <span class="binding-port">P{ref.port}</span>
+                  <span class="binding-input" title={ref.input}>
+                    {humanLabel(ref.input)}
+                    <span class="binding-cat muted">{categoryFor(ref.input) ?? ''}</span>
+                  </span>
+                  {#if incompat}
+                    <span class="incompat-flag" title="Input type changed -- this binding is no longer compatible">!</span>
+                  {/if}
+                  <button class="unbind" title="Unbind" onclick={() => unbind(ref)}>×</button>
+                </li>
+              {/each}
+            </ul>
+          {/if}
 
-        <div class="add-binding">
-          <label>
-            <span>Port</span>
-            <select bind:value={addPort}>
-              {#each availablePorts as p (p)}
-                <option value={p}>{p}</option>
-              {/each}
-            </select>
-          </label>
-          <label>
-            <span>Add input</span>
-            <select
-              value=""
-              disabled={freeInputs.length === 0}
-              onchange={(e) => {
-                const v = (e.currentTarget as HTMLSelectElement).value;
-                if (v) addBinding(v);
-                (e.currentTarget as HTMLSelectElement).value = '';
-              }}
-            >
-              <option value="">{freeInputs.length ? '(pick an input)' : '(none compatible)'}</option>
-              {#each freeInputs as input (input)}
-                <option value={input}>{humanLabel(input)} · {categoryFor(input)}</option>
-              {/each}
-            </select>
-          </label>
-        </div>
+          <div class="add-binding">
+            <label>
+              <span>Port</span>
+              <select bind:value={addPort}>
+                {#each availablePorts as p (p)}
+                  <option value={p}>{p}</option>
+                {/each}
+              </select>
+            </label>
+            <label>
+              <span>Add input</span>
+              <select
+                value=""
+                disabled={freeInputs.length === 0}
+                onchange={(e) => {
+                  const v = (e.currentTarget as HTMLSelectElement).value;
+                  if (v) addBinding(v);
+                  (e.currentTarget as HTMLSelectElement).value = '';
+                }}
+              >
+                <option value="">{freeInputs.length ? '(pick an input)' : '(none compatible)'}</option>
+                {#each freeInputs as input (input)}
+                  <option value={input}>{humanLabel(input)} · {categoryFor(input)}</option>
+                {/each}
+              </select>
+            </label>
+          </div>
+        {/if}
       </section>
 
       <label>
         <span>Group</span>
+        <!-- Plain text input -- no `list`/datalist.  The browser's
+             datalist dropdown filters options by the current input value,
+             which misled users into thinking only the current group
+             existed.  The chips below show every known group instead. -->
         <input type="text" bind:value={draft.group} />
+        {#if knownGroups.length > 0}
+          <div class="group-chips">
+            {#each knownGroups as g (g)}
+              <button
+                type="button"
+                class="group-chip"
+                class:active={draft.group === g}
+                onclick={() => { if (draft) draft.group = g; }}
+              >{g}</button>
+            {/each}
+          </div>
+        {/if}
       </label>
 
       <label>
@@ -415,15 +586,17 @@
 
     <footer>
       <span class="dirty-hint muted" class:dirty={isDirty}>
-        {#if isDirty}
+        {#if isPending}
+          New action · click Apply to create, or Reset to discard
+        {:else if isDirty}
           Pending edits · click Apply to commit, or Reset to discard
         {:else}
           No pending edits
         {/if}
       </span>
       <div class="footer-buttons">
-        <button onclick={reset} disabled={!isDirty}>Reset</button>
-        <button class="primary" onclick={apply} disabled={!isDirty}>Apply</button>
+        <button onclick={reset} disabled={!isDirty}>{isPending ? 'Cancel' : 'Reset'}</button>
+        <button class="primary" onclick={apply} disabled={!isDirty}>{isPending ? 'Create' : 'Apply'}</button>
       </div>
     </footer>
   {/if}
@@ -619,10 +792,48 @@
   .binding-row.incompat {
     border-color: rgba(255, 138, 122, 0.6);
   }
+  .binding-row.pending-row {
+    border-color: rgba(255, 184, 77, 0.6);
+    background: rgba(255, 184, 77, 0.08);
+  }
   .incompat-flag {
     color: var(--danger, #ff8a7a);
     font-weight: 700;
     font-family: ui-monospace, monospace;
+  }
+  .pending-flag {
+    color: #ffb84d;
+    font-size: 0.7em;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 0.05rem 0.35rem;
+    border: 1px solid rgba(255, 184, 77, 0.5);
+    border-radius: 3px;
+  }
+  .group-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    margin-top: 0.25rem;
+  }
+  .group-chip {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 0.05rem 0.5rem;
+    font-size: 0.78em;
+    cursor: pointer;
+    color: var(--muted);
+  }
+  .group-chip:hover {
+    background: var(--panel);
+    color: var(--text);
+  }
+  .group-chip.active {
+    color: #111;
+    background: #6cb6ff;
+    border-color: #6cb6ff;
   }
   .unbind {
     background: transparent;

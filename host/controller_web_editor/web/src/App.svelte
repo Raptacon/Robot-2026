@@ -11,6 +11,7 @@
     undo,
     redo,
     inspectorExpanded,
+    emptyConfig,
   } from './lib/store';
   import { listConfigs, loadConfig, saveConfig } from './lib/api';
   import ActionLibrary from './components/ActionLibrary.svelte';
@@ -51,6 +52,24 @@
     }
   }
 
+  function doNew(): void {
+    const raw = prompt('New config filename (saved under data/):', 'new.yaml')?.trim();
+    if (!raw) return;
+    const path = raw.endsWith('.yaml') || raw.endsWith('.yml') ? raw : `${raw}.yaml`;
+    if (configs.includes(path)) {
+      if (!confirm(`'${path}' already exists.  Overwrite with a blank config when you Save?`)) return;
+    }
+    // Spin up a fresh in-memory config bound to the new path.  Nothing is
+    // written to disk until the user clicks Save.  Mark dirty so the Save
+    // button enables immediately -- the user clearly wants this file to
+    // exist on disk.
+    loadInto(emptyConfig(), path);
+    dirty.set(true);
+    if (!configs.includes(path)) configs = [...configs, path];
+    chosen = path;
+    status = `New config: ${path} (unsaved -- click Save to write to disk)`;
+  }
+
   async function doSave(): Promise<void> {
     if (!$currentPath) return;
     status = `Saving ${$currentPath}…`;
@@ -89,6 +108,7 @@
         {/each}
       </select>
     </label>
+    <button onclick={doNew}>New</button>
     <button onclick={doLoad} disabled={loading || !chosen}>Load</button>
     <button class="primary" onclick={doSave} disabled={!$currentPath || !$dirty}>
       Save{$dirty ? ' •' : ''}
