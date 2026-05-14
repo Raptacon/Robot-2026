@@ -50,6 +50,15 @@ pip install -r host/requirements.txt   # First time only (Pillow, PyYAML)
 python -m host.controller_config       # Launch GUI
 ```
 
+**Run controller web editor (Svelte SPA):**
+```bash
+pip install -r host/requirements.txt
+python -m host.controller_web_editor   # http://127.0.0.1:8071
+```
+Compiled bundle is committed under `host/controller_web_editor/static/`,
+so Node isn't required for end users.  Setup details, dev workflow, and
+CI export instructions in [host/controller_web_editor/README.md](host/controller_web_editor/README.md).
+
 **Style:**
 Follow major style guidelines from PEP8 based on what is configured for flake8.
 

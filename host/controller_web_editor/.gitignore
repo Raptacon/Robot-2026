@@ -1,4 +1,8 @@
-# Vite build output — regenerate with `cd web && npm run build`.
-static/
+# The compiled SPA in static/ is checked in so a fresh clone can run
+# `python -m host.controller_web_editor` without Node.  Rebuild on
+# changes via `cd web && npm run build` (the server also rebuilds
+# automatically when src/ is newer than static/ and Node is available).
 # Recoverable backup written by the hitboxes API on save.
 hitboxes/*.bak
+# Per-install user preferences (theme, etc.) -- not tracked.
+prefs.json

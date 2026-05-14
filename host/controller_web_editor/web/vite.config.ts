@@ -11,7 +11,10 @@ export default defineConfig({
   build: {
     outDir: `${here}/../static`,
     emptyOutDir: true,
-    sourcemap: true,
+    // Source maps inflate the git-tracked build by ~700KB and aren't
+    // useful for end users.  Run `vite dev` (proxy to :8071) for
+    // SPA debugging instead.
+    sourcemap: false,
   },
   server: {
     port: 5173,

@@ -18,6 +18,10 @@
   import ActionInspector from './components/ActionInspector.svelte';
   import BindingMenu from './components/BindingMenu.svelte';
   import ControllerView from './components/ControllerView.svelte';
+  import ExportMenu from './components/ExportMenu.svelte';
+  import { theme, setTheme, initTheme, THEMES } from './lib/theme';
+  import type { ThemeName } from './lib/api';
+  import raptaconLogo from './assets/raptacon-gear.png';
 
   let centerTab = $state<'controller' | 'list'>('controller');
   let activePort = $state(0);
@@ -90,16 +94,32 @@
     else if (e.key === 's') { e.preventDefault(); doSave(); }
   }
 
-  onMount(refreshConfigs);
+  onMount(() => {
+    initTheme();
+    refreshConfigs();
+  });
+
+  function onThemeChange(e: Event): void {
+    const value = (e.currentTarget as HTMLSelectElement).value as ThemeName;
+    setTheme(value);
+  }
 </script>
 
 <svelte:window onkeydown={onKeydown} />
 
 <div class="app">
   <header class="top">
+    <img class="brand-logo" src={raptaconLogo} alt="Raptacon 3200" />
     <strong>Controller Editor</strong>
-    <span class="muted">phase 2</span>
     <span class="spacer"></span>
+    <label class="row" title="Color theme">
+      <span>Theme</span>
+      <select value={$theme} onchange={onThemeChange}>
+        {#each THEMES as t (t.value)}
+          <option value={t.value}>{t.label}</option>
+        {/each}
+      </select>
+    </label>
     <label class="row">
       <span>Config</span>
       <select bind:value={chosen}>
@@ -115,6 +135,7 @@
     </button>
     <button onclick={undo} disabled={!$canUndo} title="Ctrl+Z">Undo</button>
     <button onclick={redo} disabled={!$canRedo} title="Ctrl+Shift+Z">Redo</button>
+    <ExportMenu />
     <span class="muted status">{status}</span>
   </header>
 
@@ -160,6 +181,14 @@
     padding: 0.4rem 0.75rem;
     background: var(--panel);
     border-bottom: 1px solid var(--border);
+  }
+  .brand-logo {
+    height: 1.8rem;
+    width: 1.8rem;
+    object-fit: contain;
+    border-radius: 4px;
+    margin-right: 0.1rem;
+    flex-shrink: 0;
   }
   .spacer { flex: 1; }
   .status {

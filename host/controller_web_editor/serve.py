@@ -20,19 +20,51 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
+from .build import maybe_build_spa
 from .paths import PathNotAllowedError, list_yaml_configs, safe_resolve
 from .routes.config import load_as_json, save_from_json
+from .routes.export import ExportRequestError, export_from_yaml
 from .routes.hitboxes import (
     LayoutNotAllowedError,
     list_layouts,
     load_layout,
     save_layout,
 )
+from .routes.prefs import load_prefs, save_prefs
 
 
 log = logging.getLogger("controller_web_editor")
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+
+# Shown in the browser when ``static/index.html`` is missing -- e.g. a
+# bare checkout without Node and without the committed bundle.  Plain
+# string so we don't need a template file on disk.
+_MISSING_BUILD_HTML = """<!doctype html>
+<html><head><meta charset="utf-8"><title>Controller Editor: build missing</title>
+<style>
+body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 4rem auto;
+       padding: 0 1rem; color: #222; }
+h1 { font-size: 1.4rem; }
+code, pre { background: #f3f3f3; padding: 0.1rem 0.4rem; border-radius: 4px;
+            font-family: Consolas, "SF Mono", monospace; }
+pre { padding: 0.6rem 0.8rem; overflow-x: auto; }
+.tip { color: #555; font-size: 0.9em; margin-top: 1.5rem; }
+</style></head><body>
+<h1>The SPA isn't built yet</h1>
+<p>The server is running but <code>static/index.html</code> doesn't exist,
+so there's nothing to serve at <code>/</code>.</p>
+<p>Build the frontend with:</p>
+<pre>cd host/controller_web_editor/web
+npm install
+npm run build</pre>
+<p>Then reload this page.  After that, the server will rebuild
+automatically whenever you edit files under <code>web/src/</code>.</p>
+<p class="tip">If you don't have Node installed, grab it from
+<a href="https://nodejs.org">nodejs.org</a> (LTS is fine).  Or pull a
+fresh checkout -- the compiled bundle is checked in.</p>
+</body></html>
+"""
 
 # MIME types we explicitly recognise.  Anything else falls back to octet-stream.
 _MIME = {
@@ -127,6 +159,50 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(HTTPStatus.OK, {"layouts": list_layouts()})
             return
 
+        if parts.path == "/api/prefs":
+            self._send_json(HTTPStatus.OK, load_prefs())
+            return
+
+        if parts.path == "/api/export":
+            path_param = (query.get("path") or [""])[0]
+            orientation = (query.get("orientation") or ["landscape"])[0]
+            fmt = (query.get("format") or ["pdf"])[0]
+            hide_raw = (query.get("hide_unassigned") or ["0"])[0].lower()
+            hide_unassigned = hide_raw in ("1", "true", "yes", "on")
+            try:
+                resolved = safe_resolve(path_param)
+            except PathNotAllowedError as exc:
+                self._send_error_json(HTTPStatus.BAD_REQUEST, str(exc))
+                return
+            if not resolved.is_file():
+                self._send_error_json(
+                    HTTPStatus.NOT_FOUND, f"no such file: {path_param}")
+                return
+            try:
+                data, content_type, filename = export_from_yaml(
+                    resolved, orientation, fmt, hide_unassigned)
+            except ExportRequestError as exc:
+                self._send_error_json(HTTPStatus.BAD_REQUEST, str(exc))
+                return
+            except ValueError as exc:
+                # No controllers, multi-page PNG, etc.
+                self._send_error_json(HTTPStatus.BAD_REQUEST, str(exc))
+                return
+            except Exception as exc:
+                log.exception("export failed for %s", resolved)
+                self._send_error_json(
+                    HTTPStatus.INTERNAL_SERVER_ERROR, str(exc))
+                return
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header(
+                "Content-Disposition", f'attachment; filename="{filename}"')
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(data)
+            return
+
         # Static files.  Default route serves index.html.
         rel = parts.path.lstrip("/") or "index.html"
         target = (STATIC_DIR / rel).resolve()
@@ -140,7 +216,14 @@ class Handler(BaseHTTPRequestHandler):
             # frontend router can decide.
             target = STATIC_DIR / "index.html"
             if not target.is_file():
-                self._send_error_json(HTTPStatus.NOT_FOUND, parts.path)
+                # Friendly explainer when nobody has built the bundle.
+                body = _MISSING_BUILD_HTML.encode("utf-8")
+                self.send_response(HTTPStatus.OK)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(body)
                 return
         self._send_file(target)
 
@@ -197,6 +280,31 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(HTTPStatus.OK, {"saved": layout})
             return
 
+        if parts.path == "/api/prefs":
+            length = int(self.headers.get("Content-Length", "0"))
+            try:
+                payload = json.loads(self.rfile.read(length).decode("utf-8"))
+            except json.JSONDecodeError as exc:
+                self._send_error_json(
+                    HTTPStatus.BAD_REQUEST, f"invalid JSON: {exc}")
+                return
+            if not isinstance(payload, dict):
+                self._send_error_json(
+                    HTTPStatus.BAD_REQUEST, "payload must be a JSON object")
+                return
+            try:
+                updated = save_prefs(payload)
+            except ValueError as exc:
+                self._send_error_json(HTTPStatus.BAD_REQUEST, str(exc))
+                return
+            except Exception as exc:
+                log.exception("prefs save failed")
+                self._send_error_json(
+                    HTTPStatus.INTERNAL_SERVER_ERROR, str(exc))
+                return
+            self._send_json(HTTPStatus.OK, updated)
+            return
+
         self._send_error_json(HTTPStatus.NOT_FOUND, parts.path)
 
 
@@ -205,6 +313,11 @@ def run(host: str = "127.0.0.1", port: int = 8071) -> None:
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+    # Auto-build the SPA if web/src/ is newer than static/.  Best-effort;
+    # skipped silently when Node isn't installed or
+    # CONTROLLER_WEB_EDITOR_SKIP_BUILD is set.
+    status = maybe_build_spa()
+    log.info("spa build: %s", status)
     server = ThreadingHTTPServer((host, port), Handler)
     log.info("serving on http://%s:%d (static=%s)", host, port, STATIC_DIR)
     try:

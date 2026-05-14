@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { config, selectedAction, setBinding, ensureController, pendingNewAction } from '../lib/store';
+  import { config, selectedAction, setBinding, ensureController, pendingNewAction, renameController } from '../lib/store';
   import { isCompatible, humanLabel, categoryFor } from '../lib/inputs';
   import { InputType, newAction, qualifiedName } from '../lib/types';
   import {
@@ -60,7 +60,7 @@
 
   let { port = $bindable(0) } = $props<{ port?: number }>();
 
-  let showHitboxes = $state(true);
+  let showHitboxes = $state(false);
   let editMode = $state(false);
   let hoverInput = $state<string | null>(null);
   let dragOverInput = $state<string | null>(null);
@@ -574,8 +574,51 @@
 
   function addController(): void {
     const next = (portsAvailable.at(-1) ?? -1) + 1;
-    ensureController(next);
+    const raw = prompt(
+      `Name for controller on port ${next}? (leave blank for none)`,
+      '',
+    );
+    // null = the user cancelled; empty string is fine and just leaves
+    // the name unset.
+    if (raw === null) return;
+    ensureController(next, raw.trim());
     port = next;
+  }
+
+  // Inline rename of the active tab.  The clicked tab swaps to an
+  // <input>; commit on Enter / blur, cancel on Escape.
+  let renamingPort = $state<number | null>(null);
+  let renameDraft = $state('');
+
+  function startRename(p: number): void {
+    renamingPort = p;
+    renameDraft = $config.controllers[String(p)]?.name ?? '';
+  }
+  function commitRename(): void {
+    if (renamingPort === null) return;
+    renameController(renamingPort, renameDraft.trim());
+    renamingPort = null;
+  }
+  function cancelRename(): void {
+    renamingPort = null;
+  }
+  function renameKey(e: KeyboardEvent): void {
+    if (e.key === 'Enter') { e.preventDefault(); commitRename(); }
+    else if (e.key === 'Escape') { e.preventDefault(); cancelRename(); }
+  }
+
+  function tabLabel(p: number): string {
+    const ctrl = $config.controllers[String(p)];
+    const name = ctrl?.name?.trim();
+    return name ? `${p} – ${name}` : String(p);
+  }
+
+  // Programmatic focus + select-all on the rename input.  Used by the
+  // controller-tab inline rename; avoids the autofocus attribute (which
+  // fires on every mount and the a11y linter flags).
+  function focusOnMount(node: HTMLInputElement): void {
+    node.focus();
+    node.select();
   }
 
   function shapeAttrs(s: HitShape): Record<string, number> {
@@ -600,31 +643,68 @@
 
 <section class="controller-view">
   <header class="row">
-    <label class="row">
-      <span>Port</span>
-      <select bind:value={port}>
-        {#each portsAvailable as p (p)}
-          <option value={p}>{p}</option>
-        {/each}
-        {#if portsAvailable.length === 0}
-          <option value={0}>0</option>
+    <div class="controller-tabs" role="tablist">
+      {#if portsAvailable.length === 0}
+        <span class="muted no-controllers">No controllers yet</span>
+      {/if}
+      {#each portsAvailable as p (p)}
+        {#if renamingPort === p}
+          <input
+            class="rename-input"
+            value={renameDraft}
+            oninput={(e) => (renameDraft = (e.currentTarget as HTMLInputElement).value)}
+            onkeydown={renameKey}
+            onblur={commitRename}
+            placeholder={`controller ${p} name`}
+            autocomplete="off"
+            use:focusOnMount
+          />
+        {:else}
+          <button
+            type="button"
+            class="controller-tab"
+            class:active={p === port}
+            role="tab"
+            aria-selected={p === port}
+            title="Click to select. Double-click to rename."
+            onclick={() => (port = p)}
+            ondblclick={() => startRename(p)}
+          >{tabLabel(p)}</button>
         {/if}
-      </select>
-    </label>
-    <button onclick={addController}>＋ controller</button>
+      {/each}
+      <button
+        type="button"
+        class="add-controller"
+        onclick={addController}
+        title="Add a controller"
+      >＋</button>
+    </div>
     <span class="spacer"></span>
-    <label class="row">
-      <input type="checkbox" bind:checked={showHitboxes} />
-      <span>Show hit regions</span>
-    </label>
     <label class="row">
       <input
         type="checkbox"
-        bind:checked={editMode}
-        onchange={() => { if (!editMode) editingInput = null; }}
+        bind:checked={showHitboxes}
+        onchange={() => {
+          // Hiding regions also exits edit mode so the user can't get
+          // stuck with editMode=true and no toggle visible to flip it back.
+          if (!showHitboxes) {
+            editMode = false;
+            editingInput = null;
+          }
+        }}
       />
-      <span>Edit hit regions</span>
+      <span>Show hit regions</span>
     </label>
+    {#if showHitboxes}
+      <label class="row">
+        <input
+          type="checkbox"
+          bind:checked={editMode}
+          onchange={() => { if (!editMode) editingInput = null; }}
+        />
+        <span>Edit hit regions</span>
+      </label>
+    {/if}
     {#if editMode}
       <label class="row font-control" title="Font size for the per-region input name labels">
         <span>Name</span>
@@ -1072,6 +1152,54 @@
     background: var(--panel);
   }
   .spacer { flex: 1; }
+  .controller-tabs {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    flex-wrap: wrap;
+  }
+  .no-controllers {
+    font-size: 0.9em;
+    padding: 0.2rem 0.4rem;
+  }
+  .controller-tab {
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px solid transparent;
+    border-bottom: 2px solid transparent;
+    border-radius: 4px 4px 0 0;
+    padding: 0.3rem 0.7rem;
+    cursor: pointer;
+    font: inherit;
+  }
+  .controller-tab:hover {
+    color: var(--text);
+    background: var(--panel-hover);
+  }
+  .controller-tab.active {
+    color: var(--text);
+    background: var(--panel-2);
+    border-color: var(--border);
+    border-bottom-color: var(--accent);
+  }
+  .add-controller {
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px dashed var(--border);
+    border-radius: 4px;
+    padding: 0.25rem 0.55rem;
+    font: inherit;
+    cursor: pointer;
+  }
+  .add-controller:hover {
+    color: var(--text);
+    border-color: var(--accent);
+  }
+  .rename-input {
+    padding: 0.25rem 0.45rem;
+    font: inherit;
+    min-width: 8rem;
+  }
   .canvas {
     flex: 1;
     display: flex;

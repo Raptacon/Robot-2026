@@ -251,16 +251,25 @@ export function setBinding(port: number, input: string, actions: string[]): void
   });
 }
 
-export function ensureController(port: number): void {
+export function ensureController(port: number, name = ''): void {
   const c = get(config);
   if (c.controllers[String(port)]) return;
   mutate(`add controller ${port}`, (cfg) => {
     cfg.controllers[String(port)] = {
       port,
-      name: '',
+      name,
       controller_type: 'xbox',
       bindings: {},
     };
+  });
+}
+
+export function renameController(port: number, name: string): void {
+  const key = String(port);
+  const current = get(config).controllers[key];
+  if (!current || current.name === name) return;
+  mutate(`rename controller ${port}`, (cfg) => {
+    if (cfg.controllers[key]) cfg.controllers[key].name = name;
   });
 }
 
