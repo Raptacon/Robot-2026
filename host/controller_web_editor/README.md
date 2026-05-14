@@ -9,10 +9,25 @@ See [CLAUDE.md](CLAUDE.md) for the architecture and design notes.
 ## Quick start (just running it)
 
 The compiled SPA is committed under [static/](static), so a fresh checkout
-runs without Node:
+runs without Node.  From the repo root:
+
+**Windows (PowerShell):**
+```powershell
+.\scripts\controller_editor\launch.ps1
+```
+
+**macOS / Linux:**
+```bash
+./scripts/controller_editor/launch.sh
+```
+
+The script creates `venv/` if missing, installs deps the first time
+(skipped on subsequent runs unless the requirements files change), then
+launches the server and opens <http://127.0.0.1:8071> in your browser.
+
+If you'd rather do it by hand:
 
 ```bash
-# From the repo root
 python -m venv venv
 
 # Windows
@@ -25,8 +40,6 @@ pip install -r host/requirements.txt
 
 python -m host.controller_web_editor
 ```
-
-Open <http://127.0.0.1:8071> in a browser.
 
 ### Common flags
 

@@ -52,6 +52,11 @@ python -m host.controller_config       # Launch GUI
 
 **Run controller web editor (Svelte SPA):**
 ```bash
+# One-shot launcher (creates venv, installs deps, opens browser):
+scripts/controller_editor/launch.ps1     # Windows
+scripts/controller_editor/launch.sh      # macOS / Linux
+
+# Or by hand:
 pip install -r host/requirements.txt
 python -m host.controller_web_editor   # http://127.0.0.1:8071
 ```
