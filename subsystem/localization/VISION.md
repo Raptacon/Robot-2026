@@ -140,6 +140,61 @@ def get_std_devs(estimated_pose, targets_used, field_layout):
 | 4.0 | 0.02 | Very low trust (single-tag base) |
 | inf | 0.00 | Vision ignored |
 
+## Detection Range and Viewing Angle
+
+### Range Zones for 6.5" 36h11 Tags
+
+Detection quality degrades with distance. These are practical thresholds
+based on community data and our config settings:
+
+| Zone | Distance | Behavior |
+|------|----------|----------|
+| **Reliable** | 0 - 4 m | Good detection, acceptable ambiguity. Config: `vision_single_tag_max_distance_m = 4.0` |
+| **Marginal** | 4 - 6 m | Detection possible but high ambiguity. Multi-tag helps. Single-tag rejected by our filter. |
+| **Unlikely** | > 6 m | Detection unreliable at any resolution. Not worth processing. |
+
+### Resolution Impact on Range
+
+Higher camera resolution extends detection range by providing more pixels
+on the tag at distance:
+
+| Resolution | Approx Reliable Range | FPS Trade-off |
+|------------|----------------------|---------------|
+| 640x480 | ~3-4 m | High FPS (100+) |
+| 1280x720 | ~4-5 m | Good FPS (60+), best compromise |
+| 1920x1080 | ~5-6 m | Lower FPS (30), highest range |
+
+### Viewing Angle
+
+Tags cannot be detected when viewed edge-on. The camera must see enough
+of the tag face for corner detection to work.
+
+| Angle from Head-on | Detection Quality |
+|--------------------|-------------------|
+| 0 - 30 deg | Excellent (but ambiguity is HIGH at 0 deg — see below) |
+| 30 - 45 deg | Good — sweet spot for single-tag |
+| 45 - 60 deg | Marginal — may work with good calibration |
+| > 60 deg | Unreliable — too oblique for corner detection |
+
+**Important:** While 0 deg (head-on) gives the best corner visibility,
+it produces the *worst* PnP ambiguity. The ideal mounting angle is
+10-20 deg off-perpendicular (our cameras use 15 deg pitch up).
+
+The camera visualizer (`host/camera_visualizer/`) models these ranges
+with a 3-zone FOV cone (green/yellow/red) and filters detected tags
+by both range and viewing angle (>60 deg rejected).
+
+### Distance-Based Standard Deviation Scaling
+
+Error grows quadratically with distance:
+
+```
+scale = 1.0 + (avg_distance^2 / 30.0)
+effective_std_dev = base_std_dev * scale
+```
+
+At 4m: scale = 1.53, at 6m: scale = 2.2, at 8m: scale = 3.13.
+
 ## Common Pitfalls
 
 1. **Head-on viewing angle** -- PnP solver fails when camera is perpendicular to

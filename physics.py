@@ -9,6 +9,22 @@ visualization all respond correctly in simulation without tuning a dynamic model
 Robot field pose is integrated from swerve kinematics and fed back to:
   - The Field2d widget (visible in the sim GUI)
   - The NavX gyro sim device (so heading-based field-relative drive works)
+
+macOS notes
+-----------
+Two platform-specific workarounds are applied during simulation on Mac:
+
+1. **CANcoder sim frames unavailable at init** — CTRE phoenix6's sim backend
+   on macOS does not deliver CAN frames in time for module initialization.
+   ``baseline_relative_encoders()`` in ``swerve_module.py`` handles this by
+   defaulting the steer baseline to 0° instead of raising.  The physics engine
+   also guards against an empty module list (``len(module_states) != 4``).
+
+2. **Xbox/PlayStation controller input** — Apple's Game Controller framework
+   intercepts these devices, making them invisible to GLFW (the input backend
+   used by the WPILib sim GUI).  An SDL2-based bridge
+   (``utils/sim/sdl2_controller_bridge``) reads controllers via SDL2 and writes
+   their state to the HAL sim.  See that module's docstring for setup details.
 """
 
 import typing
@@ -22,6 +38,8 @@ from wpimath.system.plant import LinearSystemId
 from wpimath.geometry import Pose2d, Rotation2d, Twist2d
 from wpimath.kinematics import SwerveModuleState
 from wpimath.system.plant import DCMotor
+
+from utils.sim.sdl2_controller_bridge import start_controller_bridge
 
 if typing.TYPE_CHECKING:
     from robot import MyRobot
@@ -85,6 +103,11 @@ class PhysicsEngine:
                 DCMotor.neoVortex(2),
             )
 
+        # Vision simulation — safe to skip if localization is disabled
+        self._localization = getattr(robot.container, 'localization', None)
+        if self._localization is not None:
+            self._localization.setup_sim()
+
         # Seed pose from the drivetrain's configured default starting position.
         self._pose = robot.container.drivetrain.get_default_starting_pose()
 
@@ -102,6 +125,9 @@ class PhysicsEngine:
             # NavX sim device or Yaw entry may be unavailable in some sim setups;
             # ignore errors here and leave _navx_yaw as None.
             pass
+
+        # On macOS, start the SDL2 controller bridge (see module docstring).
+        start_controller_bridge()
 
     def update_sim(self, now: float, tm_diff: float) -> None:
         """
@@ -149,6 +175,8 @@ class PhysicsEngine:
             )
 
         # Integrate chassis speeds into robot pose.
+        if len(module_states) != 4:
+            return
         speeds = self.kinematics.toChassisSpeeds(tuple(module_states))
         self._pose = self._pose.exp(
             Twist2d(
@@ -157,6 +185,10 @@ class PhysicsEngine:
                 speeds.omega * tm_diff,
             )
         )
+
+        # Feed ground-truth pose to vision sim so cameras see AprilTags
+        if self._localization is not None:
+            self._localization.update_sim(self._pose)
 
         # Update Field2d widget and struct publisher with the integrated pose.
         self.physics_controller.field.setRobotPose(self._pose)

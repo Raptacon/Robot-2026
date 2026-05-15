@@ -50,6 +50,22 @@ pip install -r host/requirements.txt   # First time only (Pillow, PyYAML)
 python -m host.controller_config       # Launch GUI
 ```
 
+**Run controller web editor (Svelte SPA):**
+```bash
+# One-shot launcher (creates venv, installs deps, opens browser):
+scripts/controller_editor/launch.ps1     # Windows
+scripts/controller_editor/launch.sh      # macOS / Linux
+
+# Or by hand:
+pip install -r host/requirements.txt
+python -m host.controller_web_editor   # http://127.0.0.1:8071
+```
+The launcher scripts auto-install Node (via `winget` on Windows or
+`brew` on macOS) and build the SPA on first run.  `static/` is NOT
+committed -- the server builds it on startup when `web/src/` is newer
+or `static/` is missing.  Setup details, dev workflow, and CI export
+instructions in [host/controller_web_editor/README.md](host/controller_web_editor/README.md).
+
 **Style:**
 Follow major style guidelines from PEP8 based on what is configured for flake8.
 
@@ -100,7 +116,7 @@ Subsystems contain code to control or logically group mechanisms and software co
 - **`drivetrain/`** : Contains code for the drivetrain of the robot
 - **`drivetrain/swerve_drivetrain.py`** - `SwerveDrivetrain(Subsystem)`: manages 4 swerve modules, gyroscope (NavX), pose estimation (SwerveDrive4PoseEstimator), PathPlanner integration, field-relative drive. Owns a `Field2d` for dashboard visualization. Uses "always blue" coordinate system.
 - **`drivetrain/swerve_module.py`** - `SwerveModuleMk4iSparkMaxNeoCanCoder`: individual module with drive motor, steer motor (both SparkMax/NEO via REV), and absolute encoder (CANcoder via Phoenix6). CAN IDs use consecutive numbering: base=drive, base+1=steer, base+2=encoder.
-- **`localization/`** : Contains code pertaining to locating the robot physically on the field of play and determining correct goals based on red or blue alliance teams.
+- **`localization/`** : Contains code pertaining to locating the robot physically on the field of play and determining correct goals based on red or blue alliance teams. See `subsystem/localization/VISION.md` for AprilTag detection ranges, viewing angles, filtering thresholds, std dev tuning, and PhotonVision integration best practices.
 - **`mechanisms/`** : Contains robot mechanisms such as turrets, flywheel shooters, intakes, hoppers and climbers.
 
 ### Commands (`commands/`)
@@ -130,6 +146,19 @@ See `host/controller_config/ARCHITECTURE.md` for detailed GUI architecture and d
 Config-driven controller input management. `InputFactory` loads YAML config, creates `wpilib.XboxController` instances, and provides `getButton()`, `getAnalog()`, `getRumbleControl()` and raw variants. All managed objects are eagerly created at init so NT entries publish immediately. Analog shaping pipeline: inversion -> deadband -> curve -> scale -> slew rate limit. Parameters published to NT under `/inputs/actions/<group>/<action>/` for runtime tuning; NT sync is automatic each scheduler cycle. Create the factory in `robotInit` **before** subsystems; use `get_factory()` for subsystem-local access.
 
 See `examples/inputFactory/` for a complete working example.
+
+### Camera Visualizer (`host/camera_visualizer/`)
+
+Three.js web app for visualizing robot geometry, CAD models, and FRC fields. Run with `python -m host.camera_visualizer.serve` (serves on localhost:8070). See `host/camera_visualizer/CLAUDE.md` for detailed architecture and design decisions.
+
+**Robot geometry single source of truth:**
+- `constants/robot_geometry.py` — robot frame, swerve positions, cameras, mechanism transforms
+- `utils/geometry.py` — `transform_from_inches()`, `chain_transforms()`, `CameraGeometry`, `MechanismMount`
+- Edit `robot_geometry.py` and refresh browser to see changes (no server restart needed)
+
+### CAD Tools (`host/cad_tools/`)
+
+STEP→GLTF conversion script and storage for robot CAD models. The visualizer reads from `host/cad_tools/models/` (gitignored — large binaries live in a separate team CAD repo). See `host/cad_tools/README.md`.
 
 ## Future
 
@@ -164,9 +193,11 @@ GitHub Actions (`.github/workflows/robot_ci.yml`) runs on Windows:
  - Unit tests should use sim feedback when working with hardware based devices
  - Prefer pytest style (plain classes + `assert`) over `unittest.TestCase` — pyfrc/robotpy uses pytest as its test runner
 
-## NetworkTables Persistence
+## NetworkTables
 
-Use `ntcore.util.ntproperty` for values that need to persist across reboots (calibration data, saved positions, etc.). Declare as class-level attributes with `persistent=True` and `writeDefault=False` so existing persisted values are not overwritten on startup:
+**Prefer `ntproperty` over `SmartDashboard`** for publishing subsystem state. `ntproperty` creates proper NT entries under the subsystem's own path (e.g. `/SubsystemName/value`) and is the standard pattern for this codebase. Avoid `wpilib.SmartDashboard.putString/putNumber` in subsystems — it puts values under `/SmartDashboard/` which doesn't organize well and doesn't create a proper subsystem NT entry. During code reviews, flag any `SmartDashboard.put*` in subsystem code as something to convert to `ntproperty`.
+
+**Persistence:** Use `ntproperty` with `persistent=True` and `writeDefault=False` for values that need to persist across reboots (calibration data, saved positions, etc.) so existing persisted values are not overwritten on startup:
 
 ```python
 from ntcore.util import ntproperty
@@ -174,6 +205,13 @@ from ntcore.util import ntproperty
 class MySubsystem:
     saved_limit = ntproperty('/MySubsystem/saved_limit', 0.0,
                              writeDefault=False, persistent=True)
+```
+
+**Non-persistent state:** Use `ntproperty` with `writeDefault=True` (default) for runtime telemetry that doesn't need to persist:
+
+```python
+class MySubsystem:
+    status = ntproperty('/MySubsystem/status', 'unknown', writeDefault=True)
 ```
 
 See `examples/nt-persistence-test/` for a comparison of persistence approaches.

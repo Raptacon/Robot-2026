@@ -34,7 +34,8 @@ requires = [
     "robotpy-pathplannerlib",
     "pyyaml",
     "photonlibpy",
-    "robotpy-urcl"
+    "robotpy-urcl",
+    "pyserial"
 ]
 
 pyfrc.isolated = true

@@ -320,7 +320,12 @@ class SwerveModuleMk4iSparkMaxNeoCanCoder(Subsystem):
         self.drive_motor_encoder.setPosition(0)
         current_absolute_rotation = self.absolute_encoder.get_absolute_position(refresh=True)
         if not current_absolute_rotation.status.is_ok():
-            raise RuntimeError("Failed to retrieve starting absolute encoder position baselining relative encoders")
+            wpilib.reportWarning(
+                f"CANcoder {self.id_lookup['absolute_encoder']}: absolute position unavailable "
+                f"({current_absolute_rotation.status}), defaulting steer baseline to 0°"
+            )
+            self.steer_motor_encoder.setPosition(0)
+            return
         self.steer_motor_encoder.setPosition((current_absolute_rotation.value_as_double * 360.0) % (360.0))
 
     def current_raw_absolute_encoder_value(self) -> float | None:

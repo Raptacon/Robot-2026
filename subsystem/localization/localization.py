@@ -5,19 +5,25 @@ Processes camera results from one or more PhotonVision cameras, filters
 bad estimates, computes dynamic standard deviations, and feeds vision
 poses into the drivetrain's SwerveDrive4PoseEstimator.
 
+On hardware, uses a ctypes-based fast deserializer (fast_photon_reader.py)
+that bypasses photonlibpy's slow Python-level struct.unpack calls. In
+simulation, falls back to photonlibpy's PhotonCamera + VisionSystemSim
+since sim performance is not constrained.
+
 See VISION.md in this directory for best practices and tuning guidance.
 """
 
 import math
-from typing import List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import ntcore
+import wpilib
 from wpimath.geometry import (
-    Pose2d, Pose3d, Rotation3d, Transform3d, Translation3d,
+    Pose2d, Pose3d, Transform3d, Translation2d,
 )
 from robotpy_apriltag import AprilTagField, AprilTagFieldLayout
-import photonlibpy
 
+from constants.robot_geometry import CAMERAS
 from config import OperatorRobotConfig
 
 # FRC field dimensions (meters) -- standard for 2024+ fields
@@ -26,20 +32,30 @@ FIELD_WIDTH_M = 8.21
 
 
 class VisionCamera:
-    """Wraps a single PhotonVision camera and its pose estimator."""
+    """Wraps a single PhotonVision camera with fast or sim-mode readers."""
 
     def __init__(
         self,
         name: str,
         robot_to_camera: Transform3d,
         field_layout: AprilTagFieldLayout,
+        use_fast_reader: bool,
     ):
         self.name = name
         self.robot_to_camera = robot_to_camera
-        self.camera = photonlibpy.PhotonCamera(name)
-        self.pose_estimator = photonlibpy.PhotonPoseEstimator(
-            field_layout, robot_to_camera
-        )
+
+        if use_fast_reader:
+            from .fast_photon_reader import FastPhotonSubscriber
+            self.fast_sub = FastPhotonSubscriber(name, robot_to_camera)
+            self.photon_camera = None
+            self.pose_estimator = None
+        else:
+            import photonlibpy
+            self.fast_sub = None
+            self.photon_camera = photonlibpy.PhotonCamera(name)
+            self.pose_estimator = photonlibpy.PhotonPoseEstimator(
+                field_layout, robot_to_camera
+            )
 
 
 class Localization:
@@ -66,17 +82,23 @@ class Localization:
 
         cfg = OperatorRobotConfig
 
+        # Use fast ctypes reader on hardware, photonlibpy in sim
+        self._use_fast_reader = not wpilib.RobotBase.isSimulation()
+
         self.cameras: List[VisionCamera] = []
-        self._add_camera(
-            cfg.back_cam_name,
-            cfg.back_cam_translation,
-            cfg.back_cam_rotation_deg,
-        )
-        self._add_camera(
-            cfg.side_cam_name,
-            cfg.side_cam_translation,
-            cfg.side_cam_rotation_deg,
-        )
+        for cam_geo in CAMERAS:
+            self._add_camera_from_geometry(cam_geo)
+
+        # Cache tag poses at init to avoid repeated lookups in hot loops
+        self._tag_pose_cache: Dict[int, Pose3d] = {}
+        self._tag_translation_cache: Dict[int, Translation2d] = {}
+        for tag_id in range(1, 23):
+            pose = self.field_layout.getTagPose(tag_id)
+            if pose is not None:
+                self._tag_pose_cache[tag_id] = pose
+                self._tag_translation_cache[tag_id] = (
+                    pose.toPose2d().translation()
+                )
 
         # Filtering thresholds
         self.ambiguity_threshold = cfg.vision_ambiguity_threshold
@@ -109,19 +131,16 @@ class Localization:
             "Vision/detectedTagPoses", Pose3d
         ).publish()
 
-    def _add_camera(
-        self,
-        name: str,
-        translation: Tuple[float, float, float],
-        rotation_deg: Tuple[float, float, float],
-    ) -> None:
-        robot_to_camera = Transform3d(
-            Translation3d(*translation),
-            Rotation3d.fromDegrees(*rotation_deg),
-        )
+    def _add_camera_from_geometry(self, cam_geo) -> None:
+        """Create a VisionCamera from a CameraGeometry definition."""
         self.cameras.append(
-            VisionCamera(name, robot_to_camera, self.field_layout)
+            VisionCamera(
+                cam_geo.name, cam_geo.robot_to_camera, self.field_layout,
+                self._use_fast_reader,
+            )
         )
+
+    # ── Main update loop ───────────────────────────────────────────────
 
     def update(self) -> None:
         """Process all camera results and feed valid estimates to the drivetrain.
@@ -130,37 +149,146 @@ class Localization:
         """
         self._detected_tag_ids.clear()
         self._detected_tag_poses.clear()
+        had_results = False
 
-        for cam in self.cameras:
-            if not cam.camera.isConnected():
-                continue
+        if self._use_fast_reader:
+            had_results = self._update_fast()
+        else:
+            had_results = self._update_sim()
 
-            for result in cam.camera.getAllUnreadResults():
-                self._process_result(cam, result)
-
-        # Publish telemetry to NT for AdvantageScope
-        self._nt_vision.putNumber("accepted_count", self._accepted_count)
-        self._nt_vision.putNumber("rejected_count", self._rejected_count)
-        self._nt_vision.putNumberArray(
-            "detected_tag_ids", self._detected_tag_ids
-        )
-
-        # Publish detected tag poses as struct array (AdvantageScope 3D field)
-        tag_poses_3d = []
-        for tag_id in self._detected_tag_ids:
-            tag_pose = self.field_layout.getTagPose(tag_id)
-            if tag_pose is not None:
-                tag_poses_3d.append(tag_pose)
-        self._detected_tags_pub.set(tag_poses_3d)
-
-        # Publish detected tag poses to Field2d (sim GUI 2D view)
-        if self._field is not None:
-            self._field.getObject("Detected Tags").setPoses(
-                self._detected_tag_poses
+        # Only publish telemetry when new results were processed
+        if had_results:
+            self._nt_vision.putNumber(
+                "accepted_count", self._accepted_count
+            )
+            self._nt_vision.putNumber(
+                "rejected_count", self._rejected_count
+            )
+            self._nt_vision.putNumberArray(
+                "detected_tag_ids", self._detected_tag_ids
             )
 
-    def _process_result(self, cam: VisionCamera, result) -> None:
-        """Try multi-tag first, fall back to single-tag lowest ambiguity."""
+            # Detected tag poses as struct array (AdvantageScope 3D field)
+            tag_poses_3d = [
+                self._tag_pose_cache[tid]
+                for tid in self._detected_tag_ids
+                if tid in self._tag_pose_cache
+            ]
+            self._detected_tags_pub.set(tag_poses_3d)
+
+            # Field2d 2D view (sim GUI)
+            if self._field is not None:
+                self._field.getObject("Detected Tags").setPoses(
+                    self._detected_tag_poses
+                )
+
+    def _update_fast(self) -> bool:
+        """Process results using the ctypes fast reader. Returns True if any results."""
+        had_results = False
+
+        for cam in self.cameras:
+            connected = cam.fast_sub.is_connected()
+            if not connected:
+                # Temp debug: log connection status
+                self._nt_vision.putString(
+                    f"debug/{cam.name}/status", "disconnected"
+                )
+                continue
+
+            results = cam.fast_sub.read_queue()
+            self._nt_vision.putNumber(
+                f"debug/{cam.name}/result_count", len(results)
+            )
+            for result in results:
+                had_results = True
+                n_targets = len(result.targets)
+                has_mt = result.multitag_result is not None
+                self._nt_vision.putString(
+                    f"debug/{cam.name}/last_result",
+                    f"targets={n_targets} multitag={has_mt}"
+                )
+                try:
+                    self._process_fast_result(cam, result)
+                except Exception as e:
+                    self._nt_vision.putString(
+                        f"debug/{cam.name}/error", str(e)
+                    )
+
+        return had_results
+
+    def _update_sim(self) -> bool:
+        """Process results using photonlibpy (sim mode). Returns True if any results."""
+        had_results = False
+
+        for cam in self.cameras:
+            # Skip isConnected() in sim — VisionSystemSim doesn't publish
+            # heartbeats, so isConnected() always returns False.
+            for result in cam.photon_camera.getAllUnreadResults():
+                had_results = True
+                self._process_photonlib_result(cam, result)
+
+        return had_results
+
+    # ── Fast-reader result processing ──────────────────────────────────
+
+    def _process_fast_result(self, cam: VisionCamera, result) -> None:
+        """Process a FastPhotonResult — try multi-tag, fall back to single-tag."""
+        is_multi_tag = result.multitag_result is not None
+        estimated_pose_3d: Optional[Pose3d] = None
+        timestamp = result.timestamp_sec
+        target_ids: List[int] = []
+
+        if is_multi_tag:
+            # Multi-tag: coprocessor-computed pose
+            best_tf = result.multitag_result.bestTransform
+            estimated_pose_3d = (
+                Pose3d()
+                .transformBy(best_tf)
+                .relativeTo(self.field_layout.getOrigin())
+                .transformBy(cam.robot_to_camera.inverse())
+            )
+            target_ids = result.multitag_result.fiducialIDsUsed
+        elif result.targets:
+            # Single-tag fallback: lowest ambiguity fiducial target
+            best_target = None
+            best_ambiguity = 10.0
+            for t in result.targets:
+                if (t.poseAmbiguity != -1
+                        and t.poseAmbiguity < best_ambiguity):
+                    best_ambiguity = t.poseAmbiguity
+                    best_target = t
+
+            if best_target is not None:
+                tag_pose = self._tag_pose_cache.get(best_target.fiducialId)
+                if tag_pose is not None:
+                    estimated_pose_3d = (
+                        tag_pose
+                        .transformBy(
+                            best_target.bestCameraToTarget.inverse()
+                        )
+                        .transformBy(cam.robot_to_camera.inverse())
+                    )
+                    target_ids = [best_target.fiducialId]
+
+        if estimated_pose_3d is None:
+            return
+
+        # Collect tag IDs and poses for telemetry
+        for tid in target_ids:
+            self._detected_tag_ids.append(tid)
+            cached = self._tag_pose_cache.get(tid)
+            if cached is not None:
+                self._detected_tag_poses.append(cached.toPose2d())
+
+        self._apply_estimate(
+            estimated_pose_3d, target_ids, timestamp, is_multi_tag,
+            targets=result.targets,
+        )
+
+    # ── Photonlib (sim) result processing ──────────────────────────────
+
+    def _process_photonlib_result(self, cam: VisionCamera, result) -> None:
+        """Process a photonlibpy PhotonPipelineResult (sim mode)."""
         pose_est = cam.pose_estimator.estimateCoprocMultiTagPose(result)
         is_multi_tag = pose_est is not None
 
@@ -174,24 +302,37 @@ class Localization:
         targets_used = pose_est.targetsUsed
         timestamp = pose_est.timestampSeconds
 
-        # Collect detected tag IDs and poses for telemetry
-        for target in targets_used:
-            self._detected_tag_ids.append(target.fiducialId)
-            tag_pose = self.field_layout.getTagPose(target.fiducialId)
-            if tag_pose is not None:
-                self._detected_tag_poses.append(tag_pose.toPose2d())
+        target_ids = [t.fiducialId for t in targets_used]
+        for tid in target_ids:
+            self._detected_tag_ids.append(tid)
+            cached = self._tag_pose_cache.get(tid)
+            if cached is not None:
+                self._detected_tag_poses.append(cached.toPose2d())
 
-        # --- Filtering ---
+        self._apply_estimate(
+            estimated_pose_3d, target_ids, timestamp, is_multi_tag,
+            targets=targets_used,
+        )
+
+    # ── Shared filtering + pose estimator feed ─────────────────────────
+
+    def _apply_estimate(
+        self,
+        estimated_pose_3d: Pose3d,
+        target_ids: List[int],
+        timestamp: float,
+        is_multi_tag: bool,
+        targets=None,
+    ) -> None:
+        """Filter, compute std devs, and feed to the drivetrain pose estimator."""
         if not self._passes_filters(
-            estimated_pose_3d, targets_used, is_multi_tag
+            estimated_pose_3d, targets or [], is_multi_tag
         ):
             self._rejected_count += 1
             return
 
-        # --- Dynamic standard deviations ---
-        std_devs = self._compute_std_devs(estimated_pose_3d, targets_used)
+        std_devs = self._compute_std_devs(estimated_pose_3d, target_ids)
 
-        # If all std devs are infinite, skip (fully rejected by distance)
         if all(s == float('inf') for s in std_devs):
             self._rejected_count += 1
             return
@@ -200,11 +341,8 @@ class Localization:
         pose_2d = estimated_pose_3d.toPose2d()
         self.drivetrain.add_vision_pose_estimate(pose_2d, timestamp, std_devs)
 
-        # Publish for AdvantageScope (struct for drag-and-drop onto 3D field)
         self._accepted_pose_pub.set(pose_2d)
-        self._nt_vision.putNumberArray(
-            "last_std_devs", list(std_devs)
-        )
+        self._nt_vision.putNumberArray("last_std_devs", list(std_devs))
 
     def _passes_filters(
         self,
@@ -254,22 +392,21 @@ class Localization:
     def _compute_std_devs(
         self,
         estimated_pose: Pose3d,
-        targets: list,
+        target_ids: List[int],
     ) -> Tuple[float, float, float]:
         """Compute dynamic standard deviations based on tag count and distance."""
         num_tags = 0
         total_dist = 0.0
 
-        for target in targets:
-            tag_pose = self.field_layout.getTagPose(target.fiducialId)
-            if tag_pose is None:
+        # Hoist conversion out of the loop
+        robot_translation = estimated_pose.toPose2d().translation()
+
+        for tid in target_ids:
+            tag_trans = self._tag_translation_cache.get(tid)
+            if tag_trans is None:
                 continue
             num_tags += 1
-            total_dist += (
-                tag_pose.toPose2d().translation().distance(
-                    estimated_pose.toPose2d().translation()
-                )
-            )
+            total_dist += tag_trans.distance(robot_translation)
 
         if num_tags == 0:
             return self.single_tag_std_devs
@@ -312,7 +449,7 @@ class Localization:
 
         for vcam in self.cameras:
             props = SimCameraProperties.PERFECT_90DEG()
-            cam_sim = PhotonCameraSim(vcam.camera, props)
+            cam_sim = PhotonCameraSim(vcam.photon_camera, props)
             self._vision_sim.addCamera(cam_sim, vcam.robot_to_camera)
 
     def update_sim(self, robot_pose) -> None:

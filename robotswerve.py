@@ -20,14 +20,15 @@ import constants.swerve_constants as consts
 from data.telemetry import Telemetry
 import commands
 import subsystem
+from subsystem.health_and_status import HealthAndStatus
+from subsystem.nfc_battery_tracker import NfcBatteryTracker
+from subsystem.robot_state import RobotState
 from utils.input import InputFactory
 from utils.odometry_logic_2026 import determineShooterTargets2026
-from subsystem.robot_state import RobotState
 
 # Third-party imports
 import commands2
 import wpilib
-from commands2.button import Trigger
 from pathplannerlib.auto import AutoBuilder
 from wpimath.geometry import Rotation2d
 
@@ -47,8 +48,15 @@ class RobotSwerve:
                 encoder = phoenix6.hardware.CANcoder(encoder_id)
                 encoder.sim_state.set_supply_voltage(12.0)
 
-        # Subsystem instantiation — toggle each to True/False individually
+        # Subsystem instantiation
         self.drivetrain = subsystem.drivetrain.swerve_drivetrain.SwerveDrivetrain()
+        self.health_and_status = HealthAndStatus()
+        self.nfc_battery_tracker = NfcBatteryTracker()
+        from subsystem.localization.localization import Localization
+        self.localization = Localization(self.drivetrain, field=self.field)
+        self._vision_cycle_counter = 0
+
+        # Mechanism subsystems — toggle each to True/False individually
         _enable_shooter = False
         _enable_feed = False
         _enable_hood = False
@@ -95,35 +103,18 @@ class RobotSwerve:
         if self._enable_telemetry:
             self.telemetry = Telemetry(
                 driveTrain=self.drivetrain,
-                driverController=self.factory.getController(0),
-                mechController=self.factory.getController(1),
             )
 
         wpilib.SmartDashboard.putString("Robot Version", self.getDeployInfo("git-hash"))
         wpilib.SmartDashboard.putString("Git Branch", self.getDeployInfo("git-branch"))
-        wpilib.SmartDashboard.putString(
-            "Deploy Host", self.getDeployInfo("deploy-host")
-        )
-        wpilib.SmartDashboard.putString(
-            "Deploy User", self.getDeployInfo("deploy-user")
-        )
 
-        # Update drivetrain motor idle modes 3 seconds after the robot has been disabled.
-        # to_break should be False at competitions where the robot is turned off between matches
-        Trigger(is_disabled()).debounce(3).onTrue(
-            commands2.cmd.runOnce(
-                self.drivetrain.set_motor_stop_modes(
-                    to_drive=True, to_break=True, all_motor_override=True, burn_flash=True
-                ),
-                self.drivetrain
-            )
-        )
 
 
     def robotPeriodic(self):
-        # TODO: localization.update() removed — eating 10ms+/cycle from
-        # PhotonVision deserialization. Re-enable on a background thread
-        # or rate-limited to every Nth cycle.
+        self._vision_cycle_counter += 1
+        if self._vision_cycle_counter >= OperatorRobotConfig.vision_update_rate_divisor:
+            self._vision_cycle_counter = 0
+            self.localization.update()
 
         if self._enable_telemetry and self.telemetry:
             self.telemetry.runDefaultDataCollections()
@@ -134,6 +125,7 @@ class RobotSwerve:
         self.updateAlliance()
         self.drivetrain.set_motor_stop_modes(to_drive=True, to_break=True, all_motor_override=True, burn_flash=False)
         self.drivetrain.stop_driving()
+        self.nfc_battery_tracker.onDisabledInit()
 
         if self.shooter:
             self.shooter.setRPM(0)
@@ -188,13 +180,11 @@ class RobotSwerve:
 
         if self.hood:
             self.hood.setDefaultCommand(self.hood.autoAngleCommand())
-            
 
     def teleopPeriodic(self):
         pass
 
     def testInit(self):
-        #TODO Move to NT listener on change listener
         self.updateAlliance()
         commands2.CommandScheduler.getInstance().cancelAll()
         # See teleopInit for DefaultDrive vs DefaultDriveCircular notes
@@ -329,8 +319,6 @@ class RobotSwerve:
             # Read from ~/deploy.json
             with open(release_file, "r") as openfile:
                 json_object = json.load(openfile)
-                print(json_object)
-                print(type(json_object))
                 if key in json_object:
                     return json_object[key]
                 else:

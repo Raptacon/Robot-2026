@@ -1,3 +1,12 @@
+# match_monitor live config (contains API keys / webhook URLs)
+match_monitor_config.json
+
+# Downloaded field assets cache (fetched at runtime)
+cache/
+
+# CAD model files (large binaries — live in separate team CAD repo)
+host/cad_tools/models/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -16,6 +25,10 @@ eggs/
 .eggs/
 lib/
 lib64/
+# The Python-packaging `lib/` ignore above catches the web editor's
+# SPA source folder by accident -- re-include it.
+!host/controller_web_editor/web/src/lib/
+!host/controller_web_editor/web/src/lib/**
 parts/
 sdist/
 var/
