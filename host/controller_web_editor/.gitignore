@@ -1,0 +1,9 @@
+# Vite build output -- the launcher script installs Node and runs the
+# build automatically, and the server also rebuilds when web/src/ is
+# newer than static/.  Not tracked because the minified bundle is
+# noisy in PR diffs.
+static/
+# Recoverable backup written by the hitboxes API on save.
+hitboxes/*.bak
+# Per-install user preferences (theme, etc.) -- not tracked.
+prefs.json

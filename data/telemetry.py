@@ -1,7 +1,6 @@
 # Internal imports
 from config import OperatorRobotConfig
 from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
-from subsystem.intakeactions import IntakeSubsystem
 
 # Third-party imports
 import wpilib
@@ -39,24 +38,17 @@ driverStationEntries = [
     ["enabled", BooleanLogEntry, "enabled"],
 ]
 
-intakeEntries = [
-    # ["intakeSpeed", "intakespeed"],
-    ["rollerSpeed", "rollerspeed"],
-]
-
 class Telemetry:
 
     def __init__(
         self,
         driveTrain: SwerveDrivetrain = None,
         driverStation: wpilib.DriverStation = None,
-        intake: IntakeSubsystem = None
     ):
         self.odometryPosition = driveTrain.pose_estimator
         self.driveTrain = driveTrain
         self.swerveModules = driveTrain.swerve_modules
         self.driverStation = driverStation
-        self.intake = intake
 
         self.networkTable = NetworkTableInstance.getDefault()
         for entryname, logname in telemetryOdometryEntries:
@@ -89,14 +81,6 @@ class Telemetry:
                         "swervedrivetrain/" + logname, entrytype
                     ).publish(),
                 )
-        for entryname, logname in intakeEntries:
-            setattr(
-                self,
-                entryname,
-                self.networkTable.getStructTopic(
-                    "intake/" + logname, entrytype
-                ).publish(),
-            )
 
         # DataLogManager is started in robot.py telemInit() — just get the log
         self.datalog = wpilib.DataLogManager.getLog()
@@ -162,17 +146,11 @@ class Telemetry:
             self.test.append(self.driverStation.isTest())
             self.enabled.append(self.driverStation.isEnabled())
 
-
-    def getIntakeInputs(self):
-        if self.intake is not None:
-            # self.intake.intakeVelocity = self.intakeSpeed.getEntry(getattr(self, "intakeSpeed"))
-            self.intake.rollerVelocity = self.rollerSpeed.getEntry(getattr(self, "rollerSpeed"))
-
     def runDefaultDataCollections(self):
         self.getOdometryInputs()
         self.getFullSwerveState()
         self.getRawSwerveInputs()
-        self.getIntakeInputs()
+        self.getDriverStationInputs()
 
     def logAdditionalOdometry(
         self, odometer_value: Pose2d, log_entry_name: str

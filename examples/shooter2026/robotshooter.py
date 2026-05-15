@@ -7,7 +7,7 @@ import typing
 
 # Internal imports
 from config import ShooterConfig
-from subsystem.shooter import Shooter
+from subsystem.mechanisms.shooter import Shooter
 
 # Third-party imports
 import commands2

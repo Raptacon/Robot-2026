@@ -6,7 +6,7 @@
 [tool.robotpy]
 
 # Version of robotpy this project depends on
-robotpy_version = "2026.2.1.1"
+robotpy_version = "2026.2.2"
 
 # Which extra RobotPy components should be installed
 # -> equivalent to `pip install robotpy[extra1, ...]
@@ -32,13 +32,20 @@ requires = [
     "robotpy-rev",
     "robotpy-navx",
     "robotpy-pathplannerlib",
+    "pyyaml",
     "photonlibpy",
-    "pyyaml"
+    "robotpy-urcl",
+    "pyserial"
 ]
 
 pyfrc.isolated = true
 
 [tool.pytest.ini_options]
+# Exclude example directories from main test collection to avoid
+# module name collisions (multiple pyfrc_test.py files)
+testpaths = ["tests"]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "graph: marks tests that generate graphs (run with '-m graph')",
 ]
+addopts = "-m 'not graph'"

@@ -47,6 +47,7 @@ _LOG_LEVEL_MAP: dict[str, int] = {
 
 # References kept alive to prevent GC of NT subscribers/publishers
 _nt_refs: list = []
+_initialized: bool = False
 
 
 def _on_log_level_changed(event: ntcore.Event) -> None:
@@ -55,7 +56,8 @@ def _on_log_level_changed(event: ntcore.Event) -> None:
     level = _LOG_LEVEL_MAP.get(value.strip().lower())
     if level is not None:
         logging.getLogger().setLevel(level)
-        logging.info("Log level changed to %s (%d)", value.strip(), level)
+        # Use print to avoid feeding back through the WPILog handler
+        print(f"Log level changed to {value.strip()} ({level})")
 
 
 def setup_logging(default_level: int = logging.INFO) -> None:
@@ -67,9 +69,13 @@ def setup_logging(default_level: int = logging.INFO) -> None:
     - Creates a persistent NT string entry at ``/robot/logLevel``
       with a listener that updates the root level on change.
 
-    Safe to call once at robot init.  Calling multiple times will add
-    duplicate handlers — avoid that.
+    Safe to call multiple times — subsequent calls are no-ops.
     """
+    global _initialized
+    if _initialized:
+        return
+    _initialized = True
+
     # Attach wpilog handler to root logger
     handler = _WPILogHandler()
     handler.setFormatter(logging.Formatter(

@@ -5,3 +5,4 @@ XInput-Python
 pystray
 robotpy-wpiutil
 matplotlib
+pyserial

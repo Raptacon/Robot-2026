@@ -1,9 +1,11 @@
-# Building the Controller Config GUI Executable
+# Building GUI Executables
 
-Packages the controller configuration tool as a standalone executable
-that runs without a Python installation.
+Packages the host GUI tools as standalone executables that run without
+a Python installation.
 
-## Quick Build (Windows)
+## Controller Config GUI
+
+### Quick Build
 
 ```bash
 make gui-exe
@@ -11,7 +13,7 @@ make gui-exe
 
 The built executable appears at `dist/raptacon-controls-editor.exe`.
 
-## Manual Build
+### Manual Build
 
 ```bash
 pip install pyinstaller
@@ -25,21 +27,53 @@ cd host
 pyinstaller controller_config_win.spec --distpath ../dist --workpath ../build/gui --clean -y
 ```
 
-## Platform Spec Files
+### Platform Spec Files
 
-| Platform | Spec file | Status |
-|----------|-----------|--------|
-| Windows  | `host/controller_config_win.spec` | Active |
-| macOS    | `host/controller_config_mac.spec` | Active |
-| Linux    | `host/controller_config_linux.spec` | Active |
+| Platform | Spec file |
+|----------|-----------|
+| Windows  | `host/controller_config_win.spec` |
+| macOS    | `host/controller_config_mac.spec` |
+| Linux    | `host/controller_config_linux.spec` |
+
+## NFC Battery Tag Tool
+
+### Quick Build
+
+```bash
+make nfc-exe
+```
+
+The built executable appears at `dist/raptacon-nfc-tool.exe`.
+
+### Manual Build
+
+```bash
+pip install pyinstaller
+pip install -r host/requirements.txt
+
+# Generate icon (first time or after logo change)
+python host/make_ico.py
+
+# Build
+cd host
+pyinstaller nfc_tool_win.spec --distpath ../dist --workpath ../build/gui --clean -y
+```
+
+### Platform Spec Files
+
+| Platform | Spec file |
+|----------|-----------|
+| Windows  | `host/nfc_tool_win.spec` |
+| macOS    | `host/nfc_tool_mac.spec` |
+| Linux    | `host/nfc_tool_linux.spec` |
 
 ## CI/CD
 
 The GitHub Actions workflow `.github/workflows/gui_release.yml` automatically
-builds and uploads the executable when a GitHub Release is published.
+builds and uploads both executables when a GitHub Release is published.
 
-Use **Actions > Build Controller Config GUI > Run workflow** to trigger
-a test build manually (the artifact is downloadable from the workflow run).
+Use **Actions > Build GUI Tools > Run workflow** to trigger
+a test build manually (artifacts are downloadable from the workflow run).
 
 ## Code Signing
 

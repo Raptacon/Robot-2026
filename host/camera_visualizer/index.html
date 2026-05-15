@@ -1,0 +1,2305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Robot Camera Visualizer</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #1a1a2e; color: #e0e0e0; overflow: hidden; }
+
+  #header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 12px; background: #16213e; border-bottom: 1px solid #0f3460;
+    min-height: 44px; gap: 12px;
+  }
+  #header h1 { font-size: 16px; font-weight: 600; color: #e94560; white-space: nowrap; }
+  #header .controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  #header label { font-size: 13px; }
+  #header select, #header button {
+    background: #0f3460; color: #e0e0e0; border: 1px solid #533483;
+    padding: 4px 8px; border-radius: 4px; font-size: 13px; cursor: pointer;
+  }
+  #header button:hover { background: #533483; }
+
+  #main { display: flex; height: calc(100vh - 44px); }
+
+  .viewport-container {
+    flex: 1; position: relative; border-right: 1px solid #0f3460;
+  }
+  .viewport-container:last-of-type { border-right: none; }
+  .viewport-label {
+    position: absolute; top: 8px; left: 12px; z-index: 10;
+    font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 1px;
+  }
+  .viewport-coords {
+    position: absolute; bottom: 8px; left: 12px; z-index: 10;
+    font-size: 12px; color: #aaa; font-family: 'Consolas', monospace;
+    background: rgba(22, 33, 62, 0.85); padding: 2px 8px; border-radius: 4px;
+  }
+
+  #sidebar {
+    width: 340px; min-width: 340px; background: #16213e;
+    border-left: 1px solid #0f3460; overflow-y: auto; padding: 12px;
+  }
+  #sidebar h2 { font-size: 14px; color: #e94560; margin-bottom: 8px; border-bottom: 1px solid #0f3460; padding-bottom: 4px; }
+  #sidebar h3 { font-size: 13px; color: #7ec8e3; margin: 10px 0 4px; }
+
+  .cam-card {
+    background: #1a1a2e; border: 1px solid #0f3460; border-radius: 6px;
+    padding: 10px; margin-bottom: 10px;
+  }
+  .cam-card .cam-name { font-weight: 600; font-size: 14px; margin-bottom: 6px; }
+  .cam-card table { width: 100%; font-size: 12px; border-collapse: collapse; }
+  .cam-card td { padding: 2px 4px; }
+  .cam-card td:first-child { color: #888; width: 130px; }
+  .cam-card td:last-child { font-family: 'Consolas', monospace; text-align: right; }
+
+  .cam-view-canvas {
+    width: 100%; aspect-ratio: 4/3; border-radius: 4px;
+    border: 1px solid #333; margin-top: 6px; display: block;
+  }
+  .cam-view-label {
+    font-size: 11px; color: #666; margin-top: 2px; text-align: center;
+  }
+  .visible-tags { font-size: 11px; color: #8c8; margin-top: 4px; }
+
+  .transform-block {
+    background: #0f3460; border-radius: 4px; padding: 6px 8px;
+    margin-top: 6px; font-family: 'Consolas', monospace; font-size: 11px;
+    white-space: pre; line-height: 1.5;
+  }
+
+  .coord-legend {
+    font-size: 12px; margin-top: 12px;
+  }
+  .coord-legend .axis { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
+  .coord-legend .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+  canvas { display: block; touch-action: none; }
+  canvas.add-point-mode { cursor: crosshair !important; }
+
+  .point-list-item {
+    display: flex; align-items: center; gap: 4px; padding: 3px 0;
+    font-size: 12px; cursor: pointer;
+  }
+  .point-list-item:hover { color: #7ec8e3; }
+  .point-list-item.selected { color: #ffaa00; font-weight: 600; }
+  .point-list-item .point-name { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+  .point-list-item .point-del {
+    color: #c44; cursor: pointer; font-size: 14px; padding: 0 4px;
+  }
+  .point-list-item .point-del:hover { color: #f66; }
+  #pointZSlider { width: 100%; accent-color: #00ffaa; }
+  canvas:active { cursor: grabbing; }
+  .viewport-container canvas { user-select: none; -webkit-user-select: none; }
+
+  /* CAD controls */
+  #cadControls {
+    display: flex; align-items: center; gap: 8px;
+    border-left: 1px solid #0f3460; padding-left: 12px;
+  }
+  #cadOpacitySlider { width: 80px; accent-color: #e94560; }
+  #cadStatusText { font-size: 11px; color: #888; max-width: 160px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* CAD load modal */
+  #cadModal {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7); z-index: 100;
+    align-items: center; justify-content: center;
+  }
+  #cadModal .modal-body {
+    background: #16213e; border: 1px solid #533483; border-radius: 8px;
+    padding: 20px; min-width: 360px; max-width: 480px;
+  }
+  #cadModal h3 { color: #e94560; margin-bottom: 12px; font-size: 15px; }
+  #cadModal .model-btn {
+    display: block; width: 100%; text-align: left; margin: 4px 0;
+    background: #0f3460; color: #e0e0e0; border: 1px solid #533483;
+    padding: 8px 12px; border-radius: 4px; cursor: pointer; font-size: 13px;
+  }
+  #cadModal .model-btn:hover { background: #533483; }
+  #cadModal .model-btn .size { color: #888; font-size: 11px; float: right; }
+
+  /* CAD selection info in sidebar */
+  #cadSelection .transform-block { user-select: all; cursor: text; }
+  .copy-btn {
+    font-size: 10px; padding: 1px 6px; margin-left: 6px; vertical-align: middle;
+    background: #0f3460; color: #8c8; border: 1px solid #533483;
+    border-radius: 3px; cursor: pointer;
+  }
+  .copy-btn:hover { background: #533483; }
+  .copy-btn.copied { color: #4f4; }
+
+  /* CAD part tree overlay */
+  #cadPartTree {
+    position: absolute; top: 32px; left: 8px; z-index: 20;
+    background: rgba(22, 33, 62, 0.92); border: 1px solid #533483;
+    border-radius: 6px; font-size: 12px;
+    max-height: 60%; min-width: 180px; max-width: 280px;
+    display: none;
+  }
+  #cadPartTree .tree-header {
+    font-size: 11px; color: #e94560; font-weight: 600;
+    padding: 6px 8px; cursor: pointer; user-select: none;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  #cadPartTree .tree-header:hover { color: #ff6680; }
+  #cadPartTree .tree-body {
+    overflow-y: auto; max-height: calc(60vh - 30px); padding: 0 8px 8px;
+    border-top: 1px solid #0f3460;
+  }
+  #cadPartTree .tree-body.collapsed { display: none; }
+  #cadPartTree .tree-item {
+    display: flex; align-items: center; gap: 4px; padding: 2px 0;
+    cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #cadPartTree .tree-item:hover { color: #7ec8e3; }
+  #cadPartTree .tree-item.selected { color: #ffaa00; font-weight: 600; }
+  #cadPartTree .tree-item input[type="checkbox"] { flex-shrink: 0; }
+  #cadPartTree .tree-children { padding-left: 14px; }
+  #cadPartTree .tree-toggle {
+    cursor: pointer; font-size: 10px; width: 12px; text-align: center;
+    color: #888; flex-shrink: 0;
+  }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <h1>Robot Camera Visualizer <span style="font-size:11px; color:#555; font-weight:normal">v34</span></h1>
+  <div class="controls">
+    <label>Scene:
+      <select id="sceneSelect">
+        <option value="robot-view">Robot View</option>
+      </select>
+    </label>
+    <label>Units:
+      <select id="unitSelect">
+        <option value="inches">Inches</option>
+        <option value="meters">Meters</option>
+        <option value="cm">Centimeters</option>
+      </select>
+    </label>
+    <label>Tag dist:
+      <select id="tagDistSelect">
+        <option value="4">4 ft</option>
+        <option value="6" selected>6 ft</option>
+        <option value="8">8 ft</option>
+        <option value="10">10 ft</option>
+        <option value="12">12 ft</option>
+      </select>
+    </label>
+    <button id="resetBtn">Reset Views</button>
+    <div id="cadControls">
+      <button id="cadLoadBtn">Load CAD</button>
+      <label style="font-size:13px">Opacity:
+        <input type="range" id="cadOpacitySlider" min="0" max="100" value="50" disabled>
+      </label>
+      <button id="cadTiltBtn" disabled>Tilt 90</button>
+      <button id="cadRotBtn" disabled>Rot 90</button>
+      <label style="font-size:13px"><input type="checkbox" id="cadBBoxToggle" checked> BBox</label>
+      <span id="cadStatusText">No model</span>
+    </div>
+  </div>
+</div>
+
+<!-- CAD load modal -->
+<div id="cadModal">
+  <div class="modal-body">
+    <h3>Load CAD Model</h3>
+    <div style="font-size:13px; color:#888; margin-bottom:6px">Available in host/cad_tools/models/:</div>
+    <div id="cadModelList" style="margin-bottom:12px; font-size:13px; color:#666">Scanning...</div>
+    <hr style="border-color:#0f3460; margin:12px 0">
+    <div style="font-size:13px; color:#888; margin-bottom:6px">Or pick a local .glb / .gltf file:</div>
+    <input type="file" id="cadFileInput" accept=".glb,.gltf" style="font-size:13px; color:#e0e0e0">
+    <div style="display:flex; gap:8px; margin-top:16px; justify-content:flex-end">
+      <button id="cadModalCancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="main">
+  <div class="viewport-container" id="topViewContainer">
+    <div class="viewport-label">Top View (XY Plane)</div>
+    <div class="viewport-coords" id="topCoords">X: -- Y: --</div>
+    <div style="position:absolute; bottom:8px; right:12px; font-size:10px; color:#555; z-index:10;">v7</div>
+    <canvas id="topCanvas"></canvas>
+  </div>
+  <div class="viewport-container" id="perspViewContainer">
+    <div class="viewport-label">3/4 Perspective</div>
+    <div class="viewport-coords" id="perspCoords">X: -- Y: -- Z: --</div>
+    <div id="cadPartTree"></div>
+    <canvas id="perspCanvas"></canvas>
+  </div>
+  <div id="sidebar">
+    <h2>Selected Component</h2>
+    <div id="cadSelection">
+      <div class="cam-card" style="color:#666; font-size:12px">Click a CAD component to inspect</div>
+    </div>
+
+    <h2>Field Points
+      <button id="addPointBtn" style="font-size:10px; padding:1px 6px; margin-left:6px; background:#0f3460; color:#0fa; border:1px solid #533483; border-radius:3px; cursor:pointer;">+ Add</button>
+    </h2>
+    <div style="display:flex; gap:4px; margin-bottom:6px; align-items:center;">
+      <select id="pointSetSelect" style="flex:1; font-size:11px; background:#0f3460; color:#e0e0e0; border:1px solid #533483; padding:2px 4px; border-radius:3px;">
+        <option value="default">default</option>
+      </select>
+      <button id="savePointsBtn" style="font-size:10px; padding:1px 6px; background:#0f3460; color:#8c8; border:1px solid #533483; border-radius:3px; cursor:pointer;">Save</button>
+      <button id="loadPointsBtn" style="font-size:10px; padding:1px 6px; background:#0f3460; color:#88c; border:1px solid #533483; border-radius:3px; cursor:pointer;">Load</button>
+      <button id="newPointSetBtn" style="font-size:10px; padding:1px 6px; background:#0f3460; color:#aaa; border:1px solid #533483; border-radius:3px; cursor:pointer;">New</button>
+    </div>
+    <div id="pointsList" style="font-size:12px; color:#666; margin-bottom:8px;">No points placed</div>
+    <div id="pointDetail" style="display:none;">
+      <div class="cam-card">
+        <input type="text" id="pointDetailName" style="width:100%; background:#0f3460; color:#00ffaa; border:1px solid #533483; padding:2px 6px; border-radius:3px; font-size:13px; font-weight:600; margin-bottom:4px;" value="">
+        <table>
+          <tr><td>X:</td><td id="pointDetailX">—</td></tr>
+          <tr><td>Y:</td><td id="pointDetailY">—</td></tr>
+          <tr><td>Z:</td><td id="pointDetailZ">—</td></tr>
+        </table>
+        <label style="font-size:11px; color:#888;">Height:
+          <input type="range" id="pointZSlider" min="0" max="300" value="0">
+        </label>
+        <h3>Field coords <button class="copy-btn" id="pointCopyField">Copy</button></h3>
+        <div class="transform-block" id="pointFieldCoords">—</div>
+        <h3>Robot-relative <button class="copy-btn" id="pointCopyRobot">Copy</button></h3>
+        <div class="transform-block" id="pointRobotCoords">—</div>
+      </div>
+    </div>
+
+    <h2>Robot Position</h2>
+    <div id="robotPosePanel" class="cam-card" style="font-size:12px;">
+      <table style="width:100%">
+        <tr>
+          <td style="color:#888; width:30px;">X:</td>
+          <td><input type="number" id="robotPoseX" step="0.1" value="0" style="width:70px; background:#0f3460; color:#e0e0e0; border:1px solid #533483; padding:1px 4px; border-radius:3px; font-size:12px;"> m</td>
+          <td style="color:#888; width:30px; padding-left:8px;">Y:</td>
+          <td><input type="number" id="robotPoseY" step="0.1" value="0" style="width:70px; background:#0f3460; color:#e0e0e0; border:1px solid #533483; padding:1px 4px; border-radius:3px; font-size:12px;"> m</td>
+        </tr>
+        <tr>
+          <td style="color:#888;">Hdg:</td>
+          <td colspan="3">
+            <input type="range" id="robotHeadingSlider" min="0" max="360" value="0" style="width:100px; accent-color:#e94560;">
+            <input type="number" id="robotHeadingInput" step="5" value="0" style="width:50px; background:#0f3460; color:#e0e0e0; border:1px solid #533483; padding:1px 4px; border-radius:3px; font-size:12px;">&deg;
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <h2>Robot Frame</h2>
+    <div id="robotInfo"></div>
+
+    <h2>Camera Mounts</h2>
+    <div id="cameraCards"></div>
+
+    <h2>WPI Coordinate System</h2>
+    <div class="coord-legend">
+      <div class="axis"><span class="dot" style="background:#ff4444"></span> +X = Forward (Red)</div>
+      <div class="axis"><span class="dot" style="background:#44ff44"></span> +Y = Left (Green)</div>
+      <div class="axis"><span class="dot" style="background:#4488ff"></span> +Z = Up (Blue)</div>
+    </div>
+
+    <h2>Transforms</h2>
+    <div id="transformInfo"></div>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CadModelManager } from '/cad_loader.js';
+import { FieldManager } from '/field_loader.js';
+import { PointManager } from '/point_manager.js';
+
+// ── Config injected by serve.py ──────────────────────────────────────
+const CONFIG = window.__ROBOT_CONFIG__;
+
+const INCH = 0.0254;
+const FOOT = 0.3048;
+
+// ── Unit conversion ──────────────────────────────────────────────────
+const UNIT_SCALES = { meters: 1, inches: 1/INCH, cm: 100 };
+const UNIT_LABELS = { meters: 'm', inches: 'in', cm: 'cm' };
+let currentUnit = 'inches';
+let tagDistance = 6;  // feet
+
+function toDisplay(meters) {
+  return (meters * UNIT_SCALES[currentUnit]).toFixed(2);
+}
+function unitLabel() { return UNIT_LABELS[currentUnit]; }
+
+// ── AprilTag definitions ─────────────────────────────────────────────
+// 8 tags around the robot: cardinal + intercardinal directions
+// Angles in WPI coords: 0=+X(front), 90=+Y(left), etc.
+const TAG_DIRECTIONS = [
+  { id: 1,  label: 'Front',       angle: 0 },
+  { id: 2,  label: 'Front-Left',  angle: 45 },
+  { id: 3,  label: 'Left',        angle: 90 },
+  { id: 4,  label: 'Back-Left',   angle: 135 },
+  { id: 5,  label: 'Back',        angle: 180 },
+  { id: 6,  label: 'Back-Right',  angle: 225 },
+  { id: 7,  label: 'Right',       angle: 270 },
+  { id: 8,  label: 'Front-Right', angle: 315 },
+];
+const TAG_HEIGHT = 2 * FOOT;     // 2 ft off ground
+const TAG_SIZE = 6.5 * INCH;     // 6.5" AprilTag (FRC standard)
+
+// ── Scene setup ──────────────────────────────────────────────────────
+const topCanvas = document.getElementById('topCanvas');
+const perspCanvas = document.getElementById('perspCanvas');
+
+function createRenderer(canvas) {
+  const r = new THREE.WebGLRenderer({ canvas, antialias: true });
+  r.setPixelRatio(window.devicePixelRatio);
+  r.setClearColor(0x1a1a2e);
+  return r;
+}
+
+const topRenderer = createRenderer(topCanvas);
+const perspRenderer = createRenderer(perspCanvas);
+
+// Shared scene for all views (main views + camera sim views)
+const scene = new THREE.Scene();
+
+const topCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 100);
+const perspCamera = new THREE.PerspectiveCamera(50, 1, 0.01, 100);
+
+topCamera.position.set(0, 0, 2);
+topCamera.up.set(0, 1, 0);
+topCamera.lookAt(0, 0, 0);
+
+perspCamera.position.set(0.8, -0.6, 0.5);
+perspCamera.up.set(0, 0, 1);
+perspCamera.lookAt(0, 0, 0.1);
+
+const topControls = new OrbitControls(topCamera, topCanvas);
+topControls.enableRotate = false;
+topControls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+
+const perspControls = new OrbitControls(perspCamera, perspCanvas);
+perspControls.target.set(0, 0, 0.1);
+perspControls.update();
+
+// Lighting — no environment map (causes top-down blowout on PBR materials).
+// Use ambient + hemisphere + directional spread for even coverage.
+const ambLight = new THREE.AmbientLight(0xffffff, 0.8);
+scene.add(ambLight);
+const hemiLight = new THREE.HemisphereLight(0xffffff, 0x666666, 0.5);
+scene.add(hemiLight);
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+dirLight.position.set(1, 1, 2);
+scene.add(dirLight);
+
+function setLightingMode(mode) {
+  if (mode === 'robot') {
+    ambLight.intensity = 0.8;
+    hemiLight.intensity = 0.5;
+    dirLight.intensity = 0.8;
+  } else {
+    // Field: lower ambient to avoid washing out the robot CAD model.
+    // Hemisphere does more work (softer on close objects).
+    ambLight.intensity = 1.2;
+    hemiLight.intensity = 1.5;
+    dirLight.intensity = 0.6;
+  }
+}
+
+// ── Robot group (movable for field placement) ────────────────────────
+const robotGroup = new THREE.Group();
+robotGroup.name = 'robot';
+scene.add(robotGroup);
+
+// ── Environment group (grids, tags — stays at scene root) ────────────
+const envGroup = new THREE.Group();
+envGroup.name = 'environment';
+scene.add(envGroup);
+
+// ── Camera sim view state ────────────────────────────────────────────
+const camSimViews = [];  // { cam config, Three.js camera, renderer, canvas, frustum }
+
+// ── AprilTag objects (tracked for repositioning) ─────────────────────
+let tagGroup = new THREE.Group();
+envGroup.add(tagGroup);
+
+function buildAprilTags() {
+  // Clear old tags
+  while (tagGroup.children.length) tagGroup.remove(tagGroup.children[0]);
+
+  const dist = tagDistance * FOOT;
+
+  TAG_DIRECTIONS.forEach(tag => {
+    const angleRad = THREE.MathUtils.degToRad(tag.angle);
+    const tx = Math.cos(angleRad) * dist;
+    const ty = Math.sin(angleRad) * dist;
+
+    const group = new THREE.Group();
+    group.position.set(tx, ty, TAG_HEIGHT);
+    group.userData = { tagId: tag.id, label: tag.label };
+
+    // Tag face: vertical square facing the robot center
+    // We rotate the entire group to face inward, so children use local coords
+    // Compute yaw angle from tag position back toward origin
+    const faceYaw = Math.atan2(-ty, -tx) + Math.PI;
+    group.rotation.z = faceYaw;          // rotate about Z (up) to face robot
+    // No X rotation needed — PlaneGeometry is in XY, we want it vertical
+
+    const faceGeo = new THREE.PlaneGeometry(TAG_SIZE, TAG_SIZE);
+    const faceMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff, side: THREE.DoubleSide,
+    });
+    const face = new THREE.Mesh(faceGeo, faceMat);
+    // PlaneGeometry default is in XY facing +Z. We want it vertical facing -X local
+    // (toward robot after group yaw rotation). Rotate -90° about Z so plane
+    // is in YZ, then it faces +X local. But we want facing -X (inward), so +90°.
+    face.rotation.y = -Math.PI / 2;
+    group.add(face);
+
+    // Dark inner pattern (simplified AprilTag look)
+    const innerGeo = new THREE.PlaneGeometry(TAG_SIZE * 0.7, TAG_SIZE * 0.7);
+    const innerMat = new THREE.MeshBasicMaterial({
+      color: 0x111111, side: THREE.DoubleSide,
+    });
+    const inner = new THREE.Mesh(innerGeo, innerMat);
+    inner.rotation.y = -Math.PI / 2;
+    inner.position.x = -0.001;  // slight offset toward robot to prevent z-fighting
+    group.add(inner);
+
+    // Border outline
+    const borderGeo = new THREE.EdgesGeometry(new THREE.PlaneGeometry(TAG_SIZE, TAG_SIZE));
+    const borderMat = new THREE.LineBasicMaterial({ color: 0x888888 });
+    const border = new THREE.LineSegments(borderGeo, borderMat);
+    border.rotation.y = -Math.PI / 2;
+    group.add(border);
+
+    // ID label using a sprite
+    const labelCanvas = document.createElement('canvas');
+    labelCanvas.width = 128;
+    labelCanvas.height = 64;
+    const ctx = labelCanvas.getContext('2d');
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, 128, 64);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 36px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(`ID ${tag.id}`, 64, 30);
+    ctx.font = '16px sans-serif';
+    ctx.fillStyle = '#aaa';
+    ctx.fillText(tag.label, 64, 54);
+    const labelTex = new THREE.CanvasTexture(labelCanvas);
+    const labelMat = new THREE.SpriteMaterial({ map: labelTex, depthTest: false });
+    const sprite = new THREE.Sprite(labelMat);
+    const sh = 0.1;
+    sprite.scale.set(sh * sprite.baseAspect, sh, 1);
+    sprite.position.set(0, 0, TAG_SIZE * 0.8);
+    group.add(sprite);
+
+    // Pole from ground to tag
+    const poleGeo = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(tx, ty, 0),
+      new THREE.Vector3(tx, ty, TAG_HEIGHT),
+    ]);
+    const poleMat = new THREE.LineBasicMaterial({ color: 0x444444 });
+    tagGroup.add(new THREE.Line(poleGeo, poleMat));
+
+    tagGroup.add(group);
+  });
+}
+
+// ── Helper: text sprite ──────────────────────────────────────────────
+function makeTextSprite(text, color, fontSize = 48) {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  // Measure text first to size the canvas
+  ctx.font = `bold ${fontSize}px monospace`;
+  const measured = ctx.measureText(text);
+  const padding = fontSize * 0.4;
+  canvas.width = Math.max(128, Math.ceil(measured.width + padding * 2));
+  canvas.height = Math.ceil(fontSize * 1.4);
+  // Re-set font after resize (canvas reset clears state)
+  const hexColor = '#' + new THREE.Color(color).getHexString();
+  ctx.font = `bold ${fontSize}px monospace`;
+  ctx.fillStyle = hexColor;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+  const tex = new THREE.CanvasTexture(canvas);
+  const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false });
+  const sprite = new THREE.Sprite(mat);
+  // Scale sprite to maintain aspect ratio
+  const aspect = canvas.width / canvas.height;
+  sprite.baseAspect = aspect;  // store for callers that set scale
+  return sprite;
+}
+
+// ── Helper: curved rotation arc with arrowhead and label ─────────────
+function buildRotationArc(axis, color, label) {
+  const group = new THREE.Group();
+  const radius = 0.15;
+  const arcAngle = Math.PI * 0.6;  // ~108° arc
+  const segments = 24;
+
+  // Determine two perpendicular vectors to draw the arc in the plane normal to axis
+  const perp1 = new THREE.Vector3();
+  const perp2 = new THREE.Vector3();
+  if (Math.abs(axis.x) > 0.9) {
+    perp1.set(0, 1, 0);
+  } else {
+    perp1.set(1, 0, 0);
+  }
+  perp2.crossVectors(axis, perp1).normalize();
+  perp1.crossVectors(perp2, axis).normalize();
+
+  // Arc points
+  const points = [];
+  for (let i = 0; i <= segments; i++) {
+    const t = (i / segments) * arcAngle - arcAngle * 0.1;  // start slightly before 0
+    const p = new THREE.Vector3()
+      .addScaledVector(perp1, Math.cos(t) * radius)
+      .addScaledVector(perp2, Math.sin(t) * radius);
+    points.push(p);
+  }
+
+  const arcGeo = new THREE.BufferGeometry().setFromPoints(points);
+  const arcMat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.6 });
+  group.add(new THREE.Line(arcGeo, arcMat));
+
+  // Arrowhead at end of arc (small cone)
+  const lastPt = points[points.length - 1];
+  const prevPt = points[points.length - 2];
+  const tangent = new THREE.Vector3().subVectors(lastPt, prevPt).normalize();
+  const arrowGeo = new THREE.ConeGeometry(0.012, 0.03, 6);
+  const arrowMat = new THREE.MeshBasicMaterial({ color });
+  const arrowMesh = new THREE.Mesh(arrowGeo, arrowMat);
+  arrowMesh.position.copy(lastPt);
+  // Orient cone along tangent direction
+  const up = new THREE.Vector3(0, 1, 0);
+  const q = new THREE.Quaternion().setFromUnitVectors(up, tangent);
+  arrowMesh.quaternion.copy(q);
+  group.add(arrowMesh);
+
+  // Label sprite near the arc midpoint
+  const midIdx = Math.floor(segments / 2);
+  const midPt = points[midIdx].clone();
+  const labelSprite = makeTextSprite(label, color, 32);
+  labelSprite.position.copy(midPt.multiplyScalar(1.35));
+  labelSprite.scale.set(0.05 * labelSprite.baseAspect, 0.05, 1);
+  group.add(labelSprite);
+
+  return group;
+}
+
+// ── Helper: mini axes for camera mounts ──────────────────────────────
+function addMiniAxes(parentGroup, scale = 0.08) {
+  const dirs = [
+    { dir: new THREE.Vector3(1, 0, 0), color: 0xff4444 },
+    { dir: new THREE.Vector3(0, 1, 0), color: 0x44ff44 },
+    { dir: new THREE.Vector3(0, 0, 1), color: 0x4488ff },
+  ];
+  dirs.forEach(({ dir, color }) => {
+    parentGroup.add(new THREE.ArrowHelper(dir, new THREE.Vector3(0, 0, 0), scale, color, scale * 0.3, scale * 0.15));
+  });
+}
+
+// ── Build robot geometry ─────────────────────────────────────────────
+function buildScene() {
+  const frame = CONFIG.robot_frame;
+  const w = frame.width_inches * INCH;
+  const l = frame.length_inches * INCH;
+  const h = 0.10;
+
+  // Ground grid (environment)
+  const gridSize = 2;
+  const gridDiv = 40;
+  const grid = new THREE.GridHelper(gridSize, gridDiv, 0x333355, 0x222244);
+  grid.rotation.x = Math.PI / 2;
+  envGroup.add(grid);
+
+  // Larger faint grid for tag context (environment)
+  const grid2 = new THREE.GridHelper(8, 40, 0x222233, 0x1a1a28);
+  grid2.rotation.x = Math.PI / 2;
+  envGroup.add(grid2);
+
+  // Robot body
+  const bodyGeo = new THREE.BoxGeometry(l, w, h);
+  const bodyMat = new THREE.MeshPhongMaterial({
+    color: 0x335577, transparent: true, opacity: 0.5,
+    side: THREE.DoubleSide,
+  });
+  const body = new THREE.Mesh(bodyGeo, bodyMat);
+  body.position.z = h / 2;
+  robotGroup.add(body);
+
+  // Robot wireframe
+  const wireGeo = new THREE.EdgesGeometry(bodyGeo);
+  const wireMat = new THREE.LineBasicMaterial({ color: 0x88aacc });
+  const wire = new THREE.LineSegments(wireGeo, wireMat);
+  wire.position.z = h / 2;
+  robotGroup.add(wire);
+
+  // Front marker
+  const fx = l / 2;
+  const frontGeo = new THREE.BufferGeometry();
+  const frontVerts = new Float32Array([
+    fx, -0.03, h + 0.01,
+    fx, 0.03, h + 0.01,
+    fx + 0.04, 0, h + 0.01,
+  ]);
+  frontGeo.setAttribute('position', new THREE.BufferAttribute(frontVerts, 3));
+  const frontMat = new THREE.MeshBasicMaterial({ color: 0xff4444, side: THREE.DoubleSide });
+  robotGroup.add(new THREE.Mesh(frontGeo, frontMat));
+
+  // Coordinate axes with labels (on robot)
+  const axisLen = 0.25;
+  const axisInfo = [
+    { dir: new THREE.Vector3(1, 0, 0), color: 0xff4444, label: '+X', rotLabel: 'Roll' },
+    { dir: new THREE.Vector3(0, 1, 0), color: 0x44ff44, label: '+Y', rotLabel: 'Pitch' },
+    { dir: new THREE.Vector3(0, 0, 1), color: 0x4488ff, label: '+Z', rotLabel: 'Yaw' },
+  ];
+  axisInfo.forEach(({ dir, color, label, rotLabel }) => {
+    robotGroup.add(new THREE.ArrowHelper(dir, new THREE.Vector3(0, 0, 0), axisLen, color, 0.03, 0.02));
+
+    const axisSprite = makeTextSprite(label, color, 48);
+    const labelPos = dir.clone().multiplyScalar(axisLen + 0.04);
+    axisSprite.position.copy(labelPos);
+    axisSprite.scale.set(0.04 * axisSprite.baseAspect, 0.04, 1);
+    robotGroup.add(axisSprite);
+
+    const arcGroup = buildRotationArc(dir, color, rotLabel);
+    robotGroup.add(arcGroup);
+  });
+
+  // Mechanisms
+  if (CONFIG.mechanisms) {
+    CONFIG.mechanisms.forEach(mech => {
+      addMechanismViz(mech, h);
+    });
+  }
+
+  // Cameras
+  CONFIG.cameras.forEach(cam => {
+    addCameraViz(cam, h);
+  });
+
+  // AprilTags (environment)
+  buildAprilTags();
+}
+
+// ── Camera look direction quaternion ─────────────────────────────────
+function getCameraLookQuat(cam) {
+  const yawRad = THREE.MathUtils.degToRad(cam.yaw_deg);
+  const pitchRad = THREE.MathUtils.degToRad(cam.pitch_deg);
+
+  const yawQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), yawRad);
+  const pitchQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -pitchRad);
+  return yawQuat.multiply(pitchQuat);
+}
+
+function addCameraViz(cam, robotHeight) {
+  const x = cam.x_inches * INCH;
+  const y = cam.y_inches * INCH;
+  const z = cam.z_inches * INCH;
+  const color = camColor(cam.name);
+  const lookQuat = getCameraLookQuat(cam);
+
+  // Mount pole (not rotated)
+  const poleGeo = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(x, y, robotHeight),
+    new THREE.Vector3(x, y, z),
+  ]);
+  robotGroup.add(new THREE.Line(poleGeo, new THREE.LineBasicMaterial({ color: 0x666666 })));
+
+  // Camera body group: rotates with yaw/pitch
+  const camBodyGroup = new THREE.Group();
+  camBodyGroup.position.set(x, y, z);
+  camBodyGroup.quaternion.copy(lookQuat);
+
+  // Camera body box (longer in X = look direction)
+  const camGeo = new THREE.BoxGeometry(0.04, 0.05, 0.03);
+  const camMat = new THREE.MeshPhongMaterial({ color });
+  camBodyGroup.add(new THREE.Mesh(camGeo, camMat));
+
+  // Lens indicator: small cylinder on the front face (+X in local = look direction)
+  const lensGeo = new THREE.CylinderGeometry(0.012, 0.015, 0.015, 8);
+  const lensMat = new THREE.MeshPhongMaterial({ color: 0x222222 });
+  const lens = new THREE.Mesh(lensGeo, lensMat);
+  lens.rotation.z = Math.PI / 2;  // cylinder default is +Y, rotate to +X
+  lens.position.x = 0.02 + 0.007;  // front face of body + half lens depth
+  camBodyGroup.add(lens);
+
+  // Lens ring (bright ring to make it visible)
+  const ringGeo = new THREE.RingGeometry(0.012, 0.016, 16);
+  const ringMat = new THREE.MeshBasicMaterial({ color: 0x88bbff, side: THREE.DoubleSide });
+  const ring = new THREE.Mesh(ringGeo, ringMat);
+  ring.rotation.y = Math.PI / 2;  // face +X
+  ring.position.x = 0.02 + 0.015 + 0.001;
+  camBodyGroup.add(ring);
+
+  // Mini coordinate axes on camera (shows local frame after rotation)
+  addMiniAxes(camBodyGroup, 0.06);
+
+  // Camera name label
+  const label = makeTextSprite(cam.name, color, 28);
+  label.scale.set(0.04 * label.baseAspect, 0.04, 1);
+  label.position.set(0, 0, 0.04);
+  camBodyGroup.add(label);
+
+  robotGroup.add(camBodyGroup);
+
+  // FOV cone with detection range zones
+  // Distances from config / community data for 6.5" 36h11 tags:
+  //   Reliable: 0-4m (green)  |  Marginal: 4-6m (yellow)  |  Unlikely: 6m+ (red)
+  const fovRad = THREE.MathUtils.degToRad(cam.fov_deg);
+  const DETECT_RELIABLE = 4.0;   // meters — matches config.vision_single_tag_max_distance_m
+  const DETECT_MARGINAL = 6.0;   // meters — possible but high ambiguity
+  const DETECT_MAX = 8.0;        // meters — visual cone extent
+
+  const coneGroup = new THREE.Group();
+  coneGroup.position.set(x, y, z);
+
+  // Build 3 cone sections for the zones
+  const zones = [
+    { len: DETECT_RELIABLE, color: 0x44ff44, opacity: 0.08 },  // green
+    { len: DETECT_MARGINAL - DETECT_RELIABLE, color: 0xffff44, opacity: 0.05 },  // yellow
+    { len: DETECT_MAX - DETECT_MARGINAL, color: 0xff4444, opacity: 0.03 },  // red
+  ];
+
+  let offset = 0;
+  zones.forEach(zone => {
+    const r1 = Math.tan(fovRad / 2) * offset;
+    const r2 = Math.tan(fovRad / 2) * (offset + zone.len);
+    const geo = new THREE.CylinderGeometry(r1, r2, zone.len, 16, 1, true);
+    const mat = new THREE.MeshBasicMaterial({
+      color: zone.color, transparent: true, opacity: zone.opacity,
+      side: THREE.DoubleSide, depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    // CylinderGeometry is along Y axis, centered at origin
+    // Shift so the small end is at offset from origin
+    mesh.position.y = -(offset + zone.len / 2);
+    coneGroup.add(mesh);
+    offset += zone.len;
+  });
+
+  // Range rings at zone boundaries
+  [DETECT_RELIABLE, DETECT_MARGINAL].forEach((dist, i) => {
+    const ringRadius = Math.tan(fovRad / 2) * dist;
+    const ringGeo = new THREE.RingGeometry(ringRadius * 0.95, ringRadius, 32);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: i === 0 ? 0x44ff44 : 0xffff44,
+      transparent: true, opacity: 0.3,
+      side: THREE.DoubleSide, depthWrite: false,
+    });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    // Ring in XZ plane at distance along -Y
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = -dist;
+    coneGroup.add(ring);
+  });
+
+  // Cone outline wireframe (full extent)
+  const fullConeGeo = new THREE.ConeGeometry(
+    Math.tan(fovRad / 2) * DETECT_MAX, DETECT_MAX, 16, 1, true
+  );
+  const coneWireMat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.3 });
+  const wireframe = new THREE.LineSegments(new THREE.EdgesGeometry(fullConeGeo), coneWireMat);
+  wireframe.position.y = -DETECT_MAX / 2;
+  coneGroup.add(wireframe);
+
+  const yawRad = THREE.MathUtils.degToRad(cam.yaw_deg);
+  const pitchRad = THREE.MathUtils.degToRad(cam.pitch_deg);
+
+  // Rotate cone: -Y local → +X (WPI forward), then apply pitch + yaw
+  const coneQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2);
+  const pitchQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -pitchRad);
+  const yawQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), yawRad);
+
+  coneGroup.quaternion.copy(yawQuat.multiply(pitchQuat).multiply(coneQuat));
+  robotGroup.add(coneGroup);
+
+  // Direction line
+  const dirLen = 0.5;
+  const dirGeo = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(0, 0, 0),
+    new THREE.Vector3(dirLen, 0, 0),
+  ]);
+  const dirGroup = new THREE.Group();
+  dirGroup.position.set(x, y, z);
+  dirGroup.quaternion.copy(lookQuat);
+  dirGroup.add(new THREE.Line(dirGeo, new THREE.LineBasicMaterial({ color })));
+  robotGroup.add(dirGroup);
+}
+
+function camColor(name) {
+  if (name.toLowerCase().includes('side')) return 0x44ddaa;
+  if (name.toLowerCase().includes('rear') || name.toLowerCase().includes('back')) return 0xdd8844;
+  return 0xaa44dd;
+}
+
+// ── Mechanism visualization ──────────────────────────────────────────
+function addMechanismViz(mech, robotHeight) {
+  const x = mech.x_inches * INCH;
+  const y = mech.y_inches * INCH;
+  const z = mech.z_inches * INCH;
+  const color = mech.color ? parseInt(mech.color.replace('#', '0x')) : 0x888888;
+  const yawRad = THREE.MathUtils.degToRad(mech.yaw_deg);
+
+  if (mech.type === 'swerve_module') {
+    const group = new THREE.Group();
+    group.position.set(x, y, robotHeight);
+
+    // Module block
+    const l = mech.length_inches * INCH;
+    const w = mech.width_inches * INCH;
+    const h = 0.04;
+    const blockGeo = new THREE.BoxGeometry(l, w, h);
+    const blockMat = new THREE.MeshPhongMaterial({ color });
+    group.add(new THREE.Mesh(blockGeo, blockMat));
+
+    // Wireframe
+    const wireGeo = new THREE.EdgesGeometry(blockGeo);
+    group.add(new THREE.LineSegments(wireGeo, new THREE.LineBasicMaterial({ color: 0xdddd88 })));
+
+    // Wheel direction arrow (shows default heading)
+    const arrowDir = new THREE.Vector3(Math.cos(yawRad), Math.sin(yawRad), 0);
+    const arrow = new THREE.ArrowHelper(arrowDir, new THREE.Vector3(0, 0, h / 2 + 0.005), l * 0.6, 0xffffff, 0.015, 0.01);
+    group.add(arrow);
+
+    // Label
+    const label = makeTextSprite(mech.name, 0xdddd88, 28);
+    label.scale.set(0.04 * label.baseAspect, 0.04, 1);
+    label.position.set(0, 0, h / 2 + 0.03);
+    group.add(label);
+
+    robotGroup.add(group);
+
+  } else if (mech.type === 'turret') {
+    const group = new THREE.Group();
+    const tz = z > 0 ? z : robotHeight + 0.02;
+    group.position.set(x, y, tz);
+
+    const radius = mech.radius_inches * INCH;
+
+    // Turret ring
+    const ringGeo = new THREE.RingGeometry(radius * 0.85, radius, 32);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color, side: THREE.DoubleSide, transparent: true, opacity: 0.5,
+    });
+    group.add(new THREE.Mesh(ringGeo, ringMat));
+
+    // Circle outline
+    const circleGeo = new THREE.BufferGeometry();
+    const circPts = [];
+    for (let i = 0; i <= 64; i++) {
+      const a = (i / 64) * Math.PI * 2;
+      circPts.push(new THREE.Vector3(Math.cos(a) * radius, Math.sin(a) * radius, 0));
+    }
+    circleGeo.setFromPoints(circPts);
+    group.add(new THREE.Line(circleGeo, new THREE.LineBasicMaterial({ color })));
+
+    // Heading arrow (shows default turret direction)
+    const arrowDir = new THREE.Vector3(Math.cos(yawRad), Math.sin(yawRad), 0);
+    const arrow = new THREE.ArrowHelper(arrowDir, new THREE.Vector3(0, 0, 0.005), radius * 1.5, color, 0.025, 0.015);
+    group.add(arrow);
+
+    // Center dot
+    const dotGeo = new THREE.SphereGeometry(0.008, 8, 8);
+    const dotMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    group.add(new THREE.Mesh(dotGeo, dotMat));
+
+    // Label
+    const label = makeTextSprite(mech.name, color, 36);
+    label.scale.set(0.05 * label.baseAspect, 0.05, 1);
+    label.position.set(0, 0, 0.05);
+    group.add(label);
+
+    robotGroup.add(group);
+
+  } else {
+    // Generic: labeled block
+    const group = new THREE.Group();
+    group.position.set(x, y, z > 0 ? z : robotHeight + 0.02);
+
+    const l = mech.length_inches * INCH;
+    const w = mech.width_inches * INCH;
+    const h = 0.03;
+    const blockGeo = new THREE.BoxGeometry(l, w, h);
+    const blockMat = new THREE.MeshPhongMaterial({ color, transparent: true, opacity: 0.7 });
+    group.add(new THREE.Mesh(blockGeo, blockMat));
+
+    const wireGeo = new THREE.EdgesGeometry(blockGeo);
+    group.add(new THREE.LineSegments(wireGeo, new THREE.LineBasicMaterial({ color: 0xcccccc })));
+
+    const label = makeTextSprite(mech.name, color, 32);
+    label.scale.set(0.04 * label.baseAspect, 0.04, 1);
+    label.position.set(0, 0, h / 2 + 0.025);
+    group.add(label);
+
+    robotGroup.add(group);
+  }
+}
+
+// ── Camera sim views (what each camera sees) ─────────────────────────
+function setupCamSimViews() {
+  CONFIG.cameras.forEach((cam, idx) => {
+    const canvas = document.getElementById(`camSimCanvas_${idx}`);
+    if (!canvas) return;
+
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setClearColor(0x111122);
+
+    const simCam = new THREE.PerspectiveCamera(cam.fov_deg, 4 / 3, 0.05, 50);
+
+    // Store local (robot-relative) position and orientation
+    const localPos = new THREE.Vector3(
+      cam.x_inches * INCH, cam.y_inches * INCH, cam.z_inches * INCH
+    );
+    const lookQuat = getCameraLookQuat(cam);
+    const localLookDir = new THREE.Vector3(1, 0, 0).applyQuaternion(lookQuat);
+    const localUpDir = new THREE.Vector3(0, 0, 1).applyQuaternion(lookQuat);
+
+    camSimViews.push({
+      cam, simCam, renderer, canvas,
+      localPos, localLookDir, localUpDir,
+    });
+  });
+}
+
+function updateCamSimPositions() {
+  // Transform sim cameras to world space based on robotGroup
+  robotGroup.updateMatrixWorld(true);
+  const worldMat = robotGroup.matrixWorld;
+
+  camSimViews.forEach(({ simCam, localPos, localLookDir, localUpDir }) => {
+    // Transform local position to world
+    const worldPos = localPos.clone().applyMatrix4(worldMat);
+    simCam.position.copy(worldPos);
+
+    // Transform look direction (rotation only, no translation)
+    const normalMat = new THREE.Matrix3().getNormalMatrix(worldMat);
+    const worldLookDir = localLookDir.clone().applyMatrix3(normalMat).normalize();
+    const worldUpDir = localUpDir.clone().applyMatrix3(normalMat).normalize();
+
+    const target = worldPos.clone().add(worldLookDir);
+    simCam.up.copy(worldUpDir);
+    simCam.lookAt(target);
+  });
+}
+
+function resizeCamSimViews() {
+  camSimViews.forEach(({ renderer, canvas, simCam }) => {
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    if (w === 0 || h === 0) return;
+    renderer.setSize(w, h, false);
+    simCam.aspect = w / h;
+    simCam.updateProjectionMatrix();
+  });
+}
+
+function computeVisibleTags(simCam) {
+  const frustum = new THREE.Frustum();
+  const projScreenMatrix = new THREE.Matrix4();
+  simCam.updateMatrixWorld();
+  projScreenMatrix.multiplyMatrices(simCam.projectionMatrix, simCam.matrixWorldInverse);
+  frustum.setFromProjectionMatrix(projScreenMatrix);
+
+  const visible = [];
+
+  // Check field tags (real positions) when in field mode
+  const tagsToCheck = fieldManager.fieldTags.length > 0
+    ? fieldManager.fieldTags
+    : tagGroup.children;
+
+  // Collect field meshes for occlusion testing
+  const occluders = fieldManager.fieldMeshes.length > 0
+    ? fieldManager.fieldMeshes : [];
+  const _losRaycaster = new THREE.Raycaster();
+
+  tagsToCheck.forEach(child => {
+    if (child.userData && child.userData.tagId !== undefined) {
+      const worldPos = new THREE.Vector3();
+      child.getWorldPosition(worldPos);
+      if (frustum.containsPoint(worldPos)) {
+        const dist = simCam.position.distanceTo(worldPos);
+
+        // Line-of-sight check: raycast from camera to tag,
+        // see if any field geometry is closer
+        let occluded = false;
+        if (occluders.length > 0) {
+          const dir = worldPos.clone().sub(simCam.position).normalize();
+          _losRaycaster.set(simCam.position, dir);
+          _losRaycaster.far = dist - 0.05;  // stop just before the tag
+          const hits = _losRaycaster.intersectObjects(occluders, false);
+          if (hits.length > 0) occluded = true;
+        }
+
+        // Classify by detection range
+        const RELIABLE = 4.0, MARGINAL = 6.0;
+        const MAX_TAG_ANGLE = 60;  // degrees — max oblique angle for detection
+        if (dist > MARGINAL) return;  // too far — won't detect
+
+        // Check tag facing angle: the camera must see the tag face,
+        // not the edge. Get the tag's forward direction (the direction
+        // it faces) and check the angle to the camera.
+        const tagForward = new THREE.Vector3(1, 0, 0);  // default facing
+        // Apply the tag group's world rotation to get actual facing direction
+        const tagWorldQuat = new THREE.Quaternion();
+        child.getWorldQuaternion(tagWorldQuat);
+        tagForward.applyQuaternion(tagWorldQuat);
+
+        // Vector from tag to camera
+        const toCamera = simCam.position.clone().sub(worldPos).normalize();
+        // Angle between tag normal and camera direction
+        const dotProduct = Math.abs(tagForward.dot(toCamera));
+        const angleDeg = THREE.MathUtils.radToDeg(Math.acos(Math.min(dotProduct, 1)));
+        if (angleDeg > MAX_TAG_ANGLE) return;  // too oblique — can't detect
+
+        const label = child.userData.label || `Tag ${child.userData.tagId}`;
+        const range = dist <= RELIABLE ? 'reliable' : 'marginal';
+        visible.push({ id: child.userData.tagId, label, dist, occluded, range });
+      }
+    }
+  });
+  return visible;
+}
+
+// ── Sidebar info ─────────────────────────────────────────────────────
+function updateSidebar() {
+  const frame = CONFIG.robot_frame;
+
+  document.getElementById('robotInfo').innerHTML = `
+    <div class="cam-card">
+      <table>
+        <tr><td>Width (Y):</td><td>${toDisplay(frame.width_inches * INCH)} ${unitLabel()}</td></tr>
+        <tr><td>Length (X):</td><td>${toDisplay(frame.length_inches * INCH)} ${unitLabel()}</td></tr>
+      </table>
+    </div>
+  `;
+
+  let cardsHtml = '';
+  CONFIG.cameras.forEach((cam, idx) => {
+    const colorHex = '#' + camColor(cam.name).toString(16).padStart(6, '0');
+    cardsHtml += `
+      <div class="cam-card">
+        <div class="cam-name" style="color:${colorHex}">${cam.name}</div>
+        <table>
+          <tr><td>X (fwd/back):</td><td>${toDisplay(cam.x_inches * INCH)} ${unitLabel()}</td></tr>
+          <tr><td>Y (left/right):</td><td>${toDisplay(cam.y_inches * INCH)} ${unitLabel()}</td></tr>
+          <tr><td>Z (height):</td><td>${toDisplay(cam.z_inches * INCH)} ${unitLabel()}</td></tr>
+          <tr><td>Pitch (up):</td><td>${cam.pitch_deg.toFixed(1)}&deg;</td></tr>
+          <tr><td>Yaw:</td><td>${cam.yaw_deg.toFixed(1)}&deg;</td></tr>
+          <tr><td>FOV:</td><td>${cam.fov_deg.toFixed(1)}&deg;</td></tr>
+        </table>
+        <h3>Simulated View</h3>
+        <canvas id="camSimCanvas_${idx}" class="cam-view-canvas"></canvas>
+        <div class="visible-tags" id="visibleTags_${idx}"></div>
+        <h3>WPI Transform3d</h3>
+        <div class="transform-block">${formatTransform(cam)}</div>
+      </div>
+    `;
+  });
+  document.getElementById('cameraCards').innerHTML = cardsHtml;
+
+  // Transform summary
+  let tfHtml = '';
+  CONFIG.cameras.forEach(cam => {
+    tfHtml += `
+      <div class="cam-card">
+        <div class="cam-name">${cam.name}</div>
+        <h3>robot_to_camera</h3>
+        <div class="transform-block">${formatTransform(cam)}</div>
+        <h3>camera_to_robot (inverse)</h3>
+        <div class="transform-block">${formatInverseTransform(cam)}</div>
+      </div>
+    `;
+  });
+  document.getElementById('transformInfo').innerHTML = tfHtml;
+}
+
+function formatTransform(cam) {
+  const xm = (cam.x_inches * INCH).toFixed(4);
+  const ym = (cam.y_inches * INCH).toFixed(4);
+  const zm = (cam.z_inches * INCH).toFixed(4);
+  const wpiPitch = -cam.pitch_deg;
+  return `Translation3d(${xm}, ${ym}, ${zm})
+Rotation3d.fromDegrees(
+  roll=${cam.roll_deg.toFixed(1)},
+  pitch=${wpiPitch.toFixed(1)},
+  yaw=${cam.yaw_deg.toFixed(1)}
+)`;
+}
+
+function formatInverseTransform(cam) {
+  const yawRad = cam.yaw_deg * Math.PI / 180;
+  const pitchRad = cam.pitch_deg * Math.PI / 180;
+  const x = cam.x_inches * INCH;
+  const y = cam.y_inches * INCH;
+  const z = cam.z_inches * INCH;
+
+  const cosY = Math.cos(-yawRad);
+  const sinY = Math.sin(-yawRad);
+  const cosP = Math.cos(pitchRad);
+  const sinP = Math.sin(pitchRad);
+
+  const ix = -(x * cosY * cosP + y * sinY * cosP + z * sinP);
+  const iy = -(-x * sinY + y * cosY);
+  const iz = -(-x * cosY * sinP - y * sinY * sinP + z * cosP);
+
+  return `Translation3d(${ix.toFixed(4)}, ${iy.toFixed(4)}, ${iz.toFixed(4)})
+Rotation3d.fromDegrees(
+  roll=${(-cam.roll_deg).toFixed(1)},
+  pitch=${cam.pitch_deg.toFixed(1)},
+  yaw=${(-cam.yaw_deg).toFixed(1)}
+)
+
+(Use .inverse() in code)`;
+}
+
+// ── Resize handling ──────────────────────────────────────────────────
+function resize() {
+  const containers = [
+    { el: document.getElementById('topViewContainer'), renderer: topRenderer, camera: topCamera, isOrtho: true },
+    { el: document.getElementById('perspViewContainer'), renderer: perspRenderer, camera: perspCamera, isOrtho: false },
+  ];
+
+  containers.forEach(({ el, renderer, camera, isOrtho }) => {
+    const w = el.clientWidth;
+    const h = el.clientHeight;
+    renderer.setSize(w, h);
+    if (isOrtho) {
+      const aspect = w / h;
+      const viewSize = 0.6;
+      camera.left = -viewSize * aspect;
+      camera.right = viewSize * aspect;
+      camera.top = viewSize;
+      camera.bottom = -viewSize;
+      camera.updateProjectionMatrix();
+    } else {
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+    }
+  });
+
+  resizeCamSimViews();
+}
+
+// ── Animation loop ───────────────────────────────────────────────────
+let frameCount = 0;
+
+function animate() {
+  requestAnimationFrame(animate);
+  topControls.update();
+  perspControls.update();
+
+  // Main viewports — top view at reduced rate when CAD is loaded
+  if (frameCount % (cadManager.model ? 5 : 1) === 0) {
+    topRenderer.render(scene, topCamera);
+  }
+  perspRenderer.render(scene, perspCamera);
+
+  // Camera sim views: render every 10th frame (they're small sidebar previews)
+  frameCount++;
+  if (frameCount % 10 === 0) {
+    updateCamSimPositions();
+
+    // Track tag visibility across all cameras for 3D highlighting
+    const tagStatus = new Map(); // tagId -> 'clear' | 'blocked' | null
+
+    camSimViews.forEach(({ simCam, renderer }, idx) => {
+      renderer.render(scene, simCam);
+
+      const visible = computeVisibleTags(simCam);
+      const el = document.getElementById(`visibleTags_${idx}`);
+      if (el) {
+        if (visible.length === 0) {
+          el.textContent = 'Visible tags: none';
+          el.style.color = '#886';
+        } else {
+          const reliable = visible.filter(t => !t.occluded && t.range === 'reliable');
+          const marginal = visible.filter(t => !t.occluded && t.range === 'marginal');
+          const blocked = visible.filter(t => t.occluded);
+          let html = '';
+          if (reliable.length > 0) {
+            html += '<span style="color:#8c8">' + reliable.map(t =>
+              `ID${t.id} (${toDisplay(t.dist)}${unitLabel()})`
+            ).join(', ') + '</span>';
+          }
+          if (marginal.length > 0) {
+            if (html) html += ' | ';
+            html += '<span style="color:#cc8">' + marginal.map(t =>
+              `ID${t.id} (${toDisplay(t.dist)}${unitLabel()})`
+            ).join(', ') + '?</span>';
+          }
+          if (blocked.length > 0) {
+            if (html) html += ' | ';
+            html += '<span style="color:#c66">blocked: ' +
+              blocked.map(t => `ID${t.id}`).join(',') + '</span>';
+          }
+          el.innerHTML = html || 'Tags: none in range';
+          el.style.color = '';
+        }
+
+        // Accumulate tag status: reliable > marginal > blocked
+        visible.forEach(t => {
+          const prev = tagStatus.get(t.id);
+          if (t.occluded) {
+            if (!prev) tagStatus.set(t.id, 'blocked');
+          } else if (t.range === 'reliable') {
+            tagStatus.set(t.id, 'reliable');
+          } else if (t.range === 'marginal' && prev !== 'reliable') {
+            tagStatus.set(t.id, 'marginal');
+          }
+        });
+      }
+    });
+
+    // Highlight tags in 3D based on visibility
+    const tagsToHighlight = fieldManager.fieldTags.length > 0
+      ? fieldManager.fieldTags : tagGroup.children;
+    tagsToHighlight.forEach(child => {
+      if (!child.userData || child.userData.tagId === undefined) return;
+      const status = tagStatus.get(child.userData.tagId);
+      child.traverse(obj => {
+        if (obj.isMesh && obj.material) {
+          if (status === 'reliable') {
+            obj.material.color.setHex(0x44ff44);  // green = reliable
+          } else if (status === 'marginal') {
+            obj.material.color.setHex(0xffff44);  // yellow = marginal
+          } else if (status === 'blocked') {
+            obj.material.color.setHex(0xff6644);  // orange-red = blocked
+          } else {
+            obj.material.color.setHex(0xffffff);  // white = not seen
+          }
+        }
+      });
+    });
+  }
+}
+
+// ── Field manager ────────────────────────────────────────────────────
+const fieldManager = new FieldManager(scene, envGroup);
+fieldManager.onStatusChange = (text) => {
+  console.log(`[Field] ${text}`);
+};
+
+fieldManager.onSelect = (info) => {
+  const el = document.getElementById('cadSelection');
+  if (!info) {
+    el.innerHTML = '<div class="cam-card" style="color:#666; font-size:12px">Click a CAD or field component to inspect</div>';
+    return;
+  }
+  const c = info.fieldCenter;
+  const r = info.robotRelative;
+  const rIn = { x: (r.x / 0.0254).toFixed(2), y: (r.y / 0.0254).toFixed(2), z: (r.z / 0.0254).toFixed(2) };
+  el.innerHTML = `
+    <div class="cam-card">
+      <div class="cam-name" style="color:#ffaa00">${info.name} (field)</div>
+      <table>
+        <tr><td>Field X:</td><td>${toDisplay(c.x)} ${unitLabel()}</td></tr>
+        <tr><td>Field Y:</td><td>${toDisplay(c.y)} ${unitLabel()}</td></tr>
+        <tr><td>Field Z:</td><td>${toDisplay(c.z)} ${unitLabel()}</td></tr>
+      </table>
+      <h3>Field coords <button class="copy-btn" data-copy="Translation3d(${c.x.toFixed(4)}, ${c.y.toFixed(4)}, ${c.z.toFixed(4)})">Copy</button></h3>
+      <div class="transform-block">Translation3d(${c.x.toFixed(4)}, ${c.y.toFixed(4)}, ${c.z.toFixed(4)})</div>
+      <h3>Robot-relative <button class="copy-btn" data-copy="transform_from_inches(\\n    x_in=${rIn.x},\\n    y_in=${rIn.y},\\n    z_in=${rIn.z},\\n)">Copy</button></h3>
+      <div class="transform-block">transform_from_inches(
+    x_in=${rIn.x},
+    y_in=${rIn.y},
+    z_in=${rIn.z},
+)</div>
+      <h3>Distance to robot</h3>
+      <div class="transform-block">${toDisplay(r.length())} ${unitLabel()}</div>
+    </div>
+  `;
+};
+
+fieldManager.onFieldLoaded = ({ lengthM, widthM, robotX, robotY }) => {
+  // Adjust cameras to show the full field
+  const cx = lengthM / 2;
+  const cy = widthM / 2;
+
+  // Top-down: center on field, zoom to fit entire field
+  topCamera.position.set(cx, cy, 50);
+  // Calculate zoom so the field fits in the viewport
+  const container = document.getElementById('topViewContainer');
+  const aspect = container.clientWidth / container.clientHeight;
+  const halfW = lengthM / 2 * 1.05;  // 5% margin
+  const halfH = widthM / 2 * 1.05;
+  const viewSize = 0.6;  // matches resize()
+  const zoomX = viewSize * aspect / halfW;
+  const zoomY = viewSize / halfH;
+  topCamera.zoom = Math.min(zoomX, zoomY);
+  topCamera.updateProjectionMatrix();
+  topControls.target.set(cx, cy, 0);
+  topControls.update();
+
+  // 3/4 perspective: elevated view showing most of the field
+  perspCamera.position.set(cx + 10, cy - 8, 12);
+  perspControls.target.set(cx, cy, 0);
+  perspControls.update();
+};
+
+// ── Robot position controls ──────────────────────────────────────────
+function updateRobotPose() {
+  const x = parseFloat(document.getElementById('robotPoseX').value) || 0;
+  const y = parseFloat(document.getElementById('robotPoseY').value) || 0;
+  const hdg = parseFloat(document.getElementById('robotHeadingInput').value) || 0;
+  robotGroup.position.set(x, y, 0);
+  robotGroup.rotation.z = THREE.MathUtils.degToRad(hdg);
+}
+
+function syncPoseInputs() {
+  document.getElementById('robotPoseX').value = robotGroup.position.x.toFixed(2);
+  document.getElementById('robotPoseY').value = robotGroup.position.y.toFixed(2);
+  const hdgDeg = Math.round(THREE.MathUtils.radToDeg(robotGroup.rotation.z));
+  document.getElementById('robotHeadingInput').value = hdgDeg;
+  document.getElementById('robotHeadingSlider').value = ((hdgDeg % 360) + 360) % 360;
+}
+
+document.getElementById('robotPoseX').addEventListener('change', updateRobotPose);
+document.getElementById('robotPoseY').addEventListener('change', updateRobotPose);
+document.getElementById('robotHeadingInput').addEventListener('change', (e) => {
+  document.getElementById('robotHeadingSlider').value = ((parseInt(e.target.value) % 360) + 360) % 360;
+  updateRobotPose();
+});
+document.getElementById('robotHeadingSlider').addEventListener('input', (e) => {
+  document.getElementById('robotHeadingInput').value = e.target.value;
+  updateRobotPose();
+});
+
+// Update inputs when field loads (robot gets repositioned)
+const _origFieldLoaded = fieldManager.onFieldLoaded;
+fieldManager.onFieldLoaded = (info) => {
+  if (_origFieldLoaded) _origFieldLoaded(info);
+  // Sync after field positions the robot
+  setTimeout(syncPoseInputs, 100);
+};
+
+// Shift+left-click drag on top-down view to move robot
+let _robotDragActive = false;
+topCanvas.addEventListener('mousedown', (e) => {
+  if (e.button === 0 && e.shiftKey && fieldManager.currentMode !== 'robot-view') {
+    _robotDragActive = true;
+    topControls.enabled = false;  // disable orbit while dragging robot
+    e.preventDefault();
+  }
+});
+topCanvas.addEventListener('mousemove', (e) => {
+  if (!_robotDragActive) return;
+  const rect = topCanvas.getBoundingClientRect();
+  const ndcX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  const ndcY = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+  const ray = new THREE.Raycaster();
+  ray.setFromCamera(new THREE.Vector2(ndcX, ndcY), topCamera);
+  const ground = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+  const pt = new THREE.Vector3();
+  if (ray.ray.intersectPlane(ground, pt)) {
+    robotGroup.position.set(pt.x, pt.y, 0);
+    syncPoseInputs();
+  }
+});
+window.addEventListener('mouseup', () => {
+  if (_robotDragActive) {
+    _robotDragActive = false;
+    topControls.enabled = true;
+  }
+});
+
+// ── Init ─────────────────────────────────────────────────────────────
+buildScene();
+updateSidebar();
+
+// Capture default environment so field manager can hide/show it
+fieldManager.captureDefaultEnv();
+
+// Populate scene selector from server
+(async () => {
+  try {
+    const fields = await fieldManager.fetchFieldList();
+    const sel = document.getElementById('sceneSelect');
+    sel.innerHTML = '';  // clear the placeholder
+    fields.forEach(f => {
+      const opt = document.createElement('option');
+      opt.value = f.id;
+      opt.textContent = f.name;
+      if (f.id === 'robot-view') opt.selected = true;
+      sel.appendChild(opt);
+    });
+  } catch (e) {
+    console.error('Failed to load field list:', e);
+  }
+})();
+
+// Scene mode switching
+document.getElementById('sceneSelect').addEventListener('change', async (e) => {
+  const modeId = e.target.value;
+  const tagDistRow = document.getElementById('tagDistSelect').parentElement;
+  tagDistRow.style.display = modeId === 'robot-view' ? '' : 'none';
+  setLightingMode(modeId === 'robot-view' || modeId === 'cat-box' ? 'robot' : 'field');
+  await fieldManager.setMode(modeId, robotGroup);
+});
+
+// Setup cam sim views after sidebar DOM is created
+setupCamSimViews();
+
+resize();
+window.addEventListener('resize', resize);
+
+document.getElementById('unitSelect').addEventListener('change', (e) => {
+  currentUnit = e.target.value;
+  updateSidebar();
+  // Re-render selection info in new units
+  if (_lastSelectionInfo) renderSelectionInfo(_lastSelectionInfo);
+  // Re-setup sim canvases since sidebar HTML was rebuilt
+  camSimViews.length = 0;
+  setupCamSimViews();
+  resizeCamSimViews();
+});
+
+document.getElementById('tagDistSelect').addEventListener('change', (e) => {
+  tagDistance = parseFloat(e.target.value);
+  buildAprilTags();
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+  if (fieldManager.currentMode === 'robot-view' || fieldManager.currentMode === 'cat-box') {
+    topCamera.position.set(0, 0, 2);
+    topCamera.zoom = 1;
+    topControls.target.set(0, 0, 0);
+    perspCamera.position.set(0.8, -0.6, 0.5);
+    perspControls.target.set(0, 0, 0.1);
+  } else {
+    // Field mode — trigger the onFieldLoaded callback to re-fit
+    const cfg = fieldManager.fieldConfig;
+    const fl = cfg ? cfg.widthInches * 0.0254 : 16.48;
+    const fw = cfg ? cfg.heightInches * 0.0254 : 8.12;
+    fieldManager.onFieldLoaded({
+      lengthM: fl, widthM: fw,
+      robotX: fl / 2, robotY: fw / 2,
+    });
+  }
+  topCamera.updateProjectionMatrix();
+  topControls.update();
+  perspControls.update();
+});
+
+// ── Mouse coordinate readout ─────────────────────────────────────────
+const raycaster = new THREE.Raycaster();
+const groundPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);  // Z=0 ground plane
+const mouseNDC = new THREE.Vector2();
+const intersectPt = new THREE.Vector3();
+
+topCanvas.addEventListener('mousemove', (e) => {
+  const rect = topCanvas.getBoundingClientRect();
+  mouseNDC.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  mouseNDC.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+  raycaster.setFromCamera(mouseNDC, topCamera);
+  if (raycaster.ray.intersectPlane(groundPlane, intersectPt)) {
+    const el = document.getElementById('topCoords');
+    el.textContent = `X: ${toDisplay(intersectPt.x)} ${unitLabel()}  Y: ${toDisplay(intersectPt.y)} ${unitLabel()}`;
+  }
+});
+
+topCanvas.addEventListener('mouseleave', () => {
+  document.getElementById('topCoords').textContent = 'X: -- Y: --';
+});
+
+perspCanvas.addEventListener('mousemove', (e) => {
+  const rect = perspCanvas.getBoundingClientRect();
+  mouseNDC.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  mouseNDC.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+  raycaster.setFromCamera(mouseNDC, perspCamera);
+  if (raycaster.ray.intersectPlane(groundPlane, intersectPt)) {
+    const el = document.getElementById('perspCoords');
+    el.textContent = `X: ${toDisplay(intersectPt.x)} ${unitLabel()}  Y: ${toDisplay(intersectPt.y)} ${unitLabel()}  Z: 0`;
+  }
+});
+
+perspCanvas.addEventListener('mouseleave', () => {
+  document.getElementById('perspCoords').textContent = 'X: -- Y: -- Z: --';
+});
+
+// ── CAD model integration ────────────────────────────────────────────
+const cadManager = new CadModelManager(scene, robotGroup);
+const cadSlider = document.getElementById('cadOpacitySlider');
+const cadStatus = document.getElementById('cadStatusText');
+
+cadManager.onStatusChange = (text) => { cadStatus.textContent = text; };
+
+// Copy buttons (event delegation)
+document.getElementById('cadSelection').addEventListener('click', (e) => {
+  const btn = e.target.closest('.copy-btn');
+  if (!btn) return;
+  const text = btn.dataset.copy.replace(/\\n/g, '\n');
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1500);
+  });
+});
+
+let _lastSelectionInfo = null;
+
+function renderSelectionInfo(info) {
+  const el = document.getElementById('cadSelection');
+  if (!info) {
+    el.innerHTML = '<div class="cam-card" style="color:#666; font-size:12px">Click a CAD component to inspect</div>';
+    return;
+  }
+  const c = info.center;
+  const s = info.size;
+  const xIn = (c.x / 0.0254).toFixed(2);
+  const yIn = (c.y / 0.0254).toFixed(2);
+  const zIn = (c.z / 0.0254).toFixed(2);
+  el.innerHTML = `
+    <div class="cam-card">
+      <div class="cam-name" style="color:#ffaa00">${info.name}</div>
+      <table>
+        <tr><td>Center X:</td><td>${toDisplay(c.x)} ${unitLabel()}</td></tr>
+        <tr><td>Center Y:</td><td>${toDisplay(c.y)} ${unitLabel()}</td></tr>
+        <tr><td>Center Z:</td><td>${toDisplay(c.z)} ${unitLabel()}</td></tr>
+        <tr><td>Width:</td><td>${toDisplay(s.y)} ${unitLabel()}</td></tr>
+        <tr><td>Length:</td><td>${toDisplay(s.x)} ${unitLabel()}</td></tr>
+        <tr><td>Height:</td><td>${toDisplay(s.z)} ${unitLabel()}</td></tr>
+      </table>
+      <h3>robot_geometry.py <button class="copy-btn" data-copy="transform_from_inches(\n    x_in=${xIn},\n    y_in=${yIn},\n    z_in=${zIn},\n)">Copy</button></h3>
+      <div class="transform-block">transform_from_inches(
+    x_in=${xIn},
+    y_in=${yIn},
+    z_in=${zIn},
+)</div>
+      <h3>WPILib (meters) <button class="copy-btn" data-copy="Translation3d(${c.x.toFixed(4)}, ${c.y.toFixed(4)}, ${c.z.toFixed(4)})">Copy</button></h3>
+      <div class="transform-block">Translation3d(${c.x.toFixed(4)}, ${c.y.toFixed(4)}, ${c.z.toFixed(4)})</div>
+    </div>
+  `;
+}
+
+cadManager.onSelect = (info) => {
+  _lastSelectionInfo = info;
+  renderSelectionInfo(info);
+};
+
+// ── Part tree overlay ────────────────────────────────────────────────
+function buildPartTree() {
+  const container = document.getElementById('cadPartTree');
+  if (cadManager.partTree.length === 0) {
+    container.style.display = 'none';
+    return;
+  }
+  container.style.display = 'block';
+  container.innerHTML = '';
+
+  // Collapsible header
+  const header = document.createElement('div');
+  header.className = 'tree-header';
+  header.innerHTML = 'Parts <span id="treeCollapseIcon">\u25B6</span>';
+  container.appendChild(header);
+
+  const body = document.createElement('div');
+  body.className = 'tree-body collapsed';
+  container.appendChild(body);
+
+  header.addEventListener('click', (e) => {
+    // Don't collapse when clicking the show/hide buttons
+    if (e.target.tagName === 'BUTTON') return;
+    body.classList.toggle('collapsed');
+    document.getElementById('treeCollapseIcon').textContent =
+      body.classList.contains('collapsed') ? '\u25B6' : '\u25BC';
+  });
+
+  // Show All / Hide All buttons in header
+  const showAllBtn = document.createElement('button');
+  showAllBtn.textContent = 'All';
+  showAllBtn.style.cssText = 'font-size:10px; padding:1px 5px; margin-left:4px; background:#0f3460; color:#8c8; border:1px solid #533483; border-radius:3px; cursor:pointer;';
+  showAllBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    cadManager.meshes.forEach(m => { m.mesh.visible = true; m.visible = true; });
+    setAllTreeVisible(true);
+    cadManager._hideStack = [];
+    cadManager._redoStack = [];
+  });
+
+  const hideAllBtn = document.createElement('button');
+  hideAllBtn.textContent = 'None';
+  hideAllBtn.style.cssText = 'font-size:10px; padding:1px 5px; margin-left:2px; background:#0f3460; color:#c66; border:1px solid #533483; border-radius:3px; cursor:pointer;';
+  hideAllBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    cadManager.meshes.forEach(m => { m.mesh.visible = false; m.visible = false; });
+    setAllTreeVisible(false);
+    cadManager._hideStack = [];
+    cadManager._redoStack = [];
+  });
+
+  header.insertBefore(hideAllBtn, header.querySelector('#treeCollapseIcon'));
+  header.insertBefore(showAllBtn, hideAllBtn);
+
+  function setAllTreeVisible(visible) {
+    body.querySelectorAll('.tree-item input[type="checkbox"]').forEach(cb => {
+      cb.checked = visible;
+    });
+    const setNodes = (nodes) => {
+      for (const n of nodes) { n.visible = visible; setNodes(n.children); }
+    };
+    setNodes(cadManager.partTree);
+  }
+
+  function buildNode(node, parent) {
+    const item = document.createElement('div');
+    item.className = 'tree-item';
+    item.dataset.name = node.name;
+
+    // Checkbox for visibility
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = node.visible;
+    cb.addEventListener('change', (e) => {
+      e.stopPropagation();
+      cadManager.setPartVisible(node.name, cb.checked);
+      node.visible = cb.checked;
+    });
+    item.appendChild(cb);
+
+    // Toggle arrow for children
+    const toggle = document.createElement('span');
+    toggle.className = 'tree-toggle';
+    if (node.children.length > 0) {
+      toggle.textContent = '\u25BC';  // ▼
+    } else {
+      toggle.textContent = ' ';
+    }
+    item.appendChild(toggle);
+
+    // Name label — click to select
+    const label = document.createElement('span');
+    label.textContent = node.name;
+    label.title = node.name;
+    label.style.overflow = 'hidden';
+    label.style.textOverflow = 'ellipsis';
+    item.appendChild(label);
+
+    item.addEventListener('click', (e) => {
+      if (e.target === cb) return;  // don't select on checkbox click
+      e.preventDefault();
+      e.stopPropagation();
+      _treeClickInProgress = true;
+      const isCtrl = e.ctrlKey || e.metaKey;
+
+      if (!isCtrl) {
+        // Normal click: clear previous selection
+        cadManager._removeSelectionBox();
+        if (cadManager._highlightedMeshes) {
+          cadManager._highlightedMeshes.forEach(m => {
+            m.material.emissive.setHex(0x000000);
+            m.material.emissiveIntensity = 0;
+          });
+        }
+        cadManager._highlightedMeshes = [];
+        cadManager.selectedMesh = null;
+        container.querySelectorAll('.tree-item.selected').forEach(
+          el => el.classList.remove('selected')
+        );
+      } else {
+        // Ctrl+click: remove bounding box (will be recalculated)
+        cadManager._removeSelectionBox();
+        // If already selected, deselect this node
+        if (item.classList.contains('selected')) {
+          item.classList.remove('selected');
+          // Un-highlight this node's meshes
+          const removeNames = new Set(collectNodeNames(node));
+          cadManager._highlightedMeshes = cadManager._highlightedMeshes.filter(m => {
+            if (removeNames.has(m.name)) {
+              m.material.emissive.setHex(0x000000);
+              m.material.emissiveIntensity = 0;
+              return false;
+            }
+            return true;
+          });
+          // Recalculate bounding box from remaining
+          _updateMultiSelection();
+          _treeClickInProgress = false;
+          return;
+        }
+      }
+
+      // Add this node's meshes to selection
+      item.classList.add('selected');
+      const partNames = new Set(collectNodeNames(node));
+      const matchingMeshes = cadManager.meshes.filter(
+        m => partNames.has(m.mesh.name) && m.visible
+      );
+
+      matchingMeshes.forEach(({ mesh }) => {
+        mesh.material.emissive.setHex(0xffaa00);
+        mesh.material.emissiveIntensity = 0.4;
+        if (!cadManager._highlightedMeshes.includes(mesh)) {
+          cadManager._highlightedMeshes.push(mesh);
+        }
+      });
+
+      if (matchingMeshes.length > 0 && !cadManager.selectedMesh) {
+        cadManager.selectedMesh = matchingMeshes[0].mesh;
+      }
+
+      _updateMultiSelection();
+      _treeClickInProgress = false;
+    });
+
+    function collectNodeNames(n) {
+      let names = [n.name];
+      for (const child of n.children) names = names.concat(collectNodeNames(child));
+      return names;
+    }
+
+    function _updateMultiSelection() {
+      const highlighted = cadManager._highlightedMeshes;
+      if (highlighted.length === 0) {
+        cadManager.selectedMesh = null;
+        cadManager.onSelect(null);
+        return;
+      }
+
+      // Combined bounding box of all highlighted meshes
+      const combinedBox = new THREE.Box3();
+      highlighted.forEach(mesh => combinedBox.expandByObject(mesh));
+      cadManager._createSelectionBoxFromBox3(combinedBox);
+      cadManager.selectedMesh = highlighted[0];
+
+      // Build label from selected tree items
+      const selectedItems = container.querySelectorAll('.tree-item.selected');
+      const names = Array.from(selectedItems).map(el => el.dataset.name);
+      const label = names.length === 1
+        ? names[0]
+        : `${names.length} selections (${highlighted.length} parts)`;
+
+      const center = combinedBox.getCenter(new THREE.Vector3());
+      const bboxSize = combinedBox.getSize(new THREE.Vector3());
+      cadManager.onSelect({
+        name: label,
+        center,
+        size: bboxSize,
+        point: center.clone(),
+      });
+    }
+
+    parent.appendChild(item);
+
+    // Children container (collapsible)
+    if (node.children.length > 0) {
+      const childContainer = document.createElement('div');
+      childContainer.className = 'tree-children';
+      node.children.forEach(child => buildNode(child, childContainer));
+      parent.appendChild(childContainer);
+
+      toggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const collapsed = childContainer.style.display === 'none';
+        childContainer.style.display = collapsed ? '' : 'none';
+        toggle.textContent = collapsed ? '\u25BC' : '\u25B6';  // ▼ or ▶
+      });
+    }
+  }
+
+  cadManager.partTree.forEach(node => buildNode(node, body));
+}
+
+// Update tree highlight when selecting via 3D click (not tree click).
+// Tree clicks manage .selected themselves; this only runs for 3D raycasts.
+let _treeClickInProgress = false;
+const origOnSelect = cadManager.onSelect;
+cadManager.onSelect = (info) => {
+  origOnSelect(info);
+  if (_treeClickInProgress) return;  // tree handler manages its own highlights
+  const container = document.getElementById('cadPartTree');
+  container.querySelectorAll('.tree-item.selected').forEach(
+    el => el.classList.remove('selected')
+  );
+  if (info) {
+    const match = container.querySelector(`.tree-item[data-name="${CSS.escape(info.name)}"]`);
+    if (match) {
+      match.classList.add('selected');
+      match.scrollIntoView({ block: 'nearest' });
+    }
+  }
+};
+
+// Load button → modal
+document.getElementById('cadLoadBtn').addEventListener('click', async () => {
+  const modal = document.getElementById('cadModal');
+  modal.style.display = 'flex';
+  const listEl = document.getElementById('cadModelList');
+  listEl.textContent = 'Scanning...';
+  try {
+    const res = await fetch('/api/cad-models');
+    const models = await res.json();
+    if (models.length === 0) {
+      listEl.textContent = 'No .glb/.gltf files found in host/cad_tools/models/';
+    } else {
+      listEl.innerHTML = '';
+      models.forEach(m => {
+        const btn = document.createElement('button');
+        btn.className = 'model-btn';
+        const sizeMB = (m.size / 1024 / 1024).toFixed(1);
+        btn.innerHTML = `${m.name} <span class="size">${sizeMB} MB</span>`;
+        btn.addEventListener('click', async () => {
+          modal.style.display = 'none';
+          await cadManager.loadUrl(m.url);
+          cadSlider.disabled = false;
+          document.getElementById('cadRotBtn').disabled = false;
+          document.getElementById('cadTiltBtn').disabled = false;
+          buildPartTree();
+        });
+        listEl.appendChild(btn);
+      });
+    }
+  } catch (e) {
+    listEl.textContent = 'Error scanning: ' + e.message;
+  }
+});
+
+// File picker
+document.getElementById('cadFileInput').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  document.getElementById('cadModal').style.display = 'none';
+  await cadManager.loadFile(file);
+  cadSlider.disabled = false;
+  document.getElementById('cadRotBtn').disabled = false;
+  document.getElementById('cadTiltBtn').disabled = false;
+  buildPartTree();
+});
+
+// Modal cancel
+document.getElementById('cadModalCancel').addEventListener('click', () => {
+  document.getElementById('cadModal').style.display = 'none';
+});
+
+// Opacity slider
+cadSlider.addEventListener('input', (e) => {
+  cadManager.setOpacity(parseInt(e.target.value) / 100);
+});
+
+// BBox toggle
+document.getElementById('cadBBoxToggle').addEventListener('change', (e) => {
+  cadManager.setShowBBox(e.target.checked);
+});
+
+document.getElementById('cadTiltBtn').addEventListener('click', () => {
+  cadManager.rotateX90();
+});
+
+document.getElementById('cadRotBtn').addEventListener('click', () => {
+  cadManager.rotateYaw90();
+});
+
+
+// Helper: update tree checkbox for a part
+function updateTreeCheckbox(name, checked) {
+  const cb = document.querySelector(
+    `#cadPartTree .tree-item[data-name="${CSS.escape(name)}"] input[type="checkbox"]`
+  );
+  if (cb) cb.checked = checked;
+}
+
+// Ctrl+Z = undo hide, Ctrl+Y = redo hide
+document.addEventListener('keydown', (e) => {
+  const key = e.key.toLowerCase();
+  if (key === 'escape') {
+    // If renaming a point, revert and blur
+    const active = document.activeElement;
+    if (active && active.id === 'pointDetailName') {
+      active.value = _pointNameBeforeEdit;
+      if (pointManager.selectedPoint && _pointNameBeforeEdit) {
+        pointManager.renamePoint(pointManager.selectedPoint.id, _pointNameBeforeEdit);
+        updatePointList();
+      }
+      active.blur();
+      return;
+    }
+    // Skip other focused inputs
+    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
+      active.blur();
+      return;
+    }
+    // Clear all selections (CAD + field)
+    fieldManager._clearSelection();
+    cadManager._removeSelectionBox();
+    if (cadManager._highlightedMeshes) {
+      cadManager._highlightedMeshes.forEach(m => {
+        m.material.emissive.setHex(0x000000);
+        m.material.emissiveIntensity = 0;
+      });
+      cadManager._highlightedMeshes = [];
+    }
+    if (cadManager.selectedMesh) {
+      const prev = cadManager.meshes.find(m => m.mesh === cadManager.selectedMesh);
+      if (prev) {
+        prev.mesh.material.emissive.setHex(0x000000);
+        prev.mesh.material.emissiveIntensity = 0;
+      }
+      cadManager.selectedMesh = null;
+    }
+    cadManager.onSelect(null);
+    document.querySelectorAll('#cadPartTree .tree-item.selected').forEach(
+      el => el.classList.remove('selected')
+    );
+    return;
+  }
+  if (e.ctrlKey && !e.shiftKey && key === 'z') {
+    e.preventDefault();
+    e.stopPropagation();
+    const name = cadManager.undoHide();
+    if (name) {
+      updateTreeCheckbox(name, true);
+      console.log(`[CAD] Undo hide: ${name}`);
+    }
+  } else if (e.ctrlKey && (key === 'y' || (e.shiftKey && key === 'z'))) {
+    e.preventDefault();
+    e.stopPropagation();
+    const name = cadManager.redoHide();
+    if (name) {
+      updateTreeCheckbox(name, false);
+      console.log(`[CAD] Redo hide: ${name}`);
+    }
+  }
+});
+
+// ── Point manager ────────────────────────────────────────────────────
+const pointManager = new PointManager(scene);
+
+pointManager.onSelect = (pt) => {
+  const detail = document.getElementById('pointDetail');
+  if (!pt) {
+    detail.style.display = 'none';
+    return;
+  }
+  detail.style.display = 'block';
+  updatePointDetail(pt);
+};
+
+pointManager.onChange = () => {
+  updatePointList();
+};
+
+function updatePointList() {
+  const el = document.getElementById('pointsList');
+  if (pointManager.points.length === 0) {
+    el.textContent = 'No points placed';
+    return;
+  }
+  el.innerHTML = '';
+  pointManager.points.forEach(pt => {
+    const item = document.createElement('div');
+    item.className = 'point-list-item' + (pt.selected ? ' selected' : '');
+    item.innerHTML = `<span class="point-name">${pt.name}</span>` +
+      `<span style="color:#888; font-size:10px;">(${toDisplay(pt.position.x)}, ${toDisplay(pt.position.y)})</span>` +
+      `<span class="point-del" title="Delete">&times;</span>`;
+    item.querySelector('.point-name').addEventListener('click', () => {
+      pointManager.selectPoint(pt.id);
+      updatePointList();
+    });
+    item.querySelector('.point-del').addEventListener('click', (e) => {
+      e.stopPropagation();
+      pointManager.removePoint(pt.id);
+    });
+    el.appendChild(item);
+  });
+}
+
+function updatePointDetail(pt) {
+  document.getElementById('pointDetailName').value = pt.name;
+  document.getElementById('pointDetailX').textContent = `${toDisplay(pt.position.x)} ${unitLabel()}`;
+  document.getElementById('pointDetailY').textContent = `${toDisplay(pt.position.y)} ${unitLabel()}`;
+  document.getElementById('pointDetailZ').textContent = `${toDisplay(pt.position.z)} ${unitLabel()}`;
+  document.getElementById('pointZSlider').value = Math.round(pt.position.z / 0.0254);  // inches
+
+  document.getElementById('pointFieldCoords').textContent =
+    `Translation3d(${pt.position.x.toFixed(4)}, ${pt.position.y.toFixed(4)}, ${pt.position.z.toFixed(4)})`;
+
+  // Robot-relative transform
+  const rx = pt.position.x - robotGroup.position.x;
+  const ry = pt.position.y - robotGroup.position.y;
+  const rz = pt.position.z - robotGroup.position.z;
+  const rxIn = (rx / 0.0254).toFixed(2);
+  const ryIn = (ry / 0.0254).toFixed(2);
+  const rzIn = (rz / 0.0254).toFixed(2);
+  document.getElementById('pointRobotCoords').textContent =
+    `transform_from_inches(\n    x_in=${rxIn},\n    y_in=${ryIn},\n    z_in=${rzIn},\n)`;
+
+  // Wire copy buttons
+  document.getElementById('pointCopyField').dataset.copy =
+    `Translation3d(${pt.position.x.toFixed(4)}, ${pt.position.y.toFixed(4)}, ${pt.position.z.toFixed(4)})`;
+  document.getElementById('pointCopyRobot').dataset.copy =
+    `transform_from_inches(\n    x_in=${rxIn},\n    y_in=${ryIn},\n    z_in=${rzIn},\n)`;
+}
+
+// Z height slider
+document.getElementById('pointZSlider').addEventListener('input', (e) => {
+  if (!pointManager.selectedPoint) return;
+  const zInches = parseInt(e.target.value);
+  pointManager.setPointZ(pointManager.selectedPoint.id, zInches * 0.0254);
+  updatePointDetail(pointManager.selectedPoint);
+});
+
+// Add Point button
+document.getElementById('addPointBtn').addEventListener('click', () => {
+  if (pointManager.isAddMode) {
+    pointManager.exitAddMode();
+  } else {
+    pointManager.enterAddMode();
+  }
+});
+
+pointManager.onAddModeChange = (active) => {
+  const btn = document.getElementById('addPointBtn');
+  btn.textContent = active ? 'Cancel' : '+ Add';
+  btn.style.color = active ? '#f66' : '#0fa';
+  topCanvas.classList.toggle('add-point-mode', active);
+  perspCanvas.classList.toggle('add-point-mode', active);
+};
+
+// Live rename as you type, with Escape to revert
+let _pointNameBeforeEdit = '';
+document.getElementById('pointDetailName').addEventListener('focus', (e) => {
+  _pointNameBeforeEdit = e.target.value;
+});
+document.getElementById('pointDetailName').addEventListener('input', (e) => {
+  if (!pointManager.selectedPoint) return;
+  const newName = e.target.value.trim();
+  if (newName) {
+    pointManager.renamePoint(pointManager.selectedPoint.id, newName);
+    updatePointList();
+  }
+});
+document.getElementById('pointDetailName').addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    // Revert to name before editing started
+    e.target.value = _pointNameBeforeEdit;
+    if (pointManager.selectedPoint && _pointNameBeforeEdit) {
+      pointManager.renamePoint(pointManager.selectedPoint.id, _pointNameBeforeEdit);
+      updatePointList();
+    }
+    e.target.blur();
+    e.stopPropagation();
+  }
+});
+
+// Point set management
+async function refreshPointSets() {
+  const sets = await pointManager.listPointSets();
+  const sel = document.getElementById('pointSetSelect');
+  const current = sel.value;
+  sel.innerHTML = '';
+  if (sets.length === 0) {
+    sel.innerHTML = '<option value="default">default</option>';
+  } else {
+    sets.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.file;
+      opt.textContent = `${s.name} (${s.count})`;
+      sel.appendChild(opt);
+    });
+  }
+  // Restore selection if still exists
+  if ([...sel.options].some(o => o.value === current)) {
+    sel.value = current;
+  }
+}
+
+document.getElementById('pointSetSelect').addEventListener('change', () => {
+  const setName = document.getElementById('pointSetSelect').value;
+  pointManager.loadPoints(setName).then(() => updatePointList());
+});
+document.getElementById('savePointsBtn').addEventListener('click', () => {
+  const setName = document.getElementById('pointSetSelect').value;
+  pointManager.savePoints(setName).then(() => refreshPointSets());
+});
+document.getElementById('loadPointsBtn').addEventListener('click', () => {
+  const setName = document.getElementById('pointSetSelect').value;
+  pointManager.loadPoints(setName).then(() => updatePointList());
+});
+document.getElementById('newPointSetBtn').addEventListener('click', () => {
+  const name = prompt('Point set name:');
+  if (!name) return;
+  const sel = document.getElementById('pointSetSelect');
+  const opt = document.createElement('option');
+  opt.value = name.replace(/[^a-zA-Z0-9_-]/g, '_');
+  opt.textContent = name;
+  sel.appendChild(opt);
+  sel.value = opt.value;
+  // New set starts empty
+  pointManager.clearAll();
+  updatePointList();
+});
+
+// Load available point sets on init
+refreshPointSets();
+
+// Copy buttons for point panel (event delegation)
+document.getElementById('pointDetail').addEventListener('click', (e) => {
+  const btn = e.target.closest('.copy-btn');
+  if (!btn || !btn.dataset.copy) return;
+  const text = btn.dataset.copy.replace(/\\n/g, '\n');
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1500);
+  });
+});
+
+// Click-to-select on both canvases.
+// Track mousedown position to distinguish clicks from drags.
+function handleCadClick(canvas, camera) {
+  let downX = 0, downY = 0;
+  canvas.addEventListener('mousedown', (e) => {
+    downX = e.clientX;
+    downY = e.clientY;
+    // Clear any text selection so it doesn't interfere with orbit drag
+    window.getSelection()?.removeAllRanges();
+  });
+  canvas.addEventListener('mouseup', (e) => {
+    // Ignore drags (moved more than 5px)
+    const dx = e.clientX - downX;
+    const dy = e.clientY - downY;
+    if (dx * dx + dy * dy > 25) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const ndc = new THREE.Vector2(
+      ((e.clientX - rect.left) / rect.width) * 2 - 1,
+      -((e.clientY - rect.top) / rect.height) * 2 + 1
+    );
+
+    // Add point mode: place point at ground plane intersection
+    if (pointManager.isAddMode) {
+      const ray = new THREE.Raycaster();
+      ray.setFromCamera(ndc, camera);
+      const groundPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+      const pt = new THREE.Vector3();
+      if (ray.ray.intersectPlane(groundPlane, pt)) {
+        pointManager.addPoint(pt);
+        pointManager.exitAddMode();
+      }
+      return;
+    }
+
+    // Check if clicking a measurement point first
+    {
+      const ray = new THREE.Raycaster();
+      ray.setFromCamera(ndc, camera);
+      const hit = pointManager.handleClick(ray);
+      if (hit) {
+        updatePointList();
+        return;
+      }
+    }
+
+    // Check field element selection (only in field modes)
+    if (fieldManager.fieldModel) {
+      const ray = new THREE.Raycaster();
+      ray.setFromCamera(ndc, camera);
+      const hit = fieldManager.handleClick(ray, robotGroup);
+      if (hit) return;
+    }
+
+    if (!cadManager.model) return;
+    // Ctrl+click hides the part under the cursor, but only if it's selected
+    if (e.ctrlKey) {
+      const ray = new THREE.Raycaster();
+      ray.setFromCamera(ndc, camera);
+      const targets = cadManager.meshes
+        .filter((m) => m.visible)
+        .map((m) => m.mesh);
+      const hits = ray.intersectObjects(targets, false);
+      if (hits.length > 0) {
+        const hitMesh = hits[0].object;
+        if (cadManager._highlightedMeshes.includes(hitMesh) ||
+            cadManager.selectedMesh === hitMesh) {
+          cadManager.hidePart(hitMesh.name);
+          updateTreeCheckbox(hitMesh.name, false);
+        }
+      }
+      return;
+    }
+
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(ndc, camera);
+
+    // Shift+click: add/remove from multi-selection
+    if (e.shiftKey) {
+      const targets = cadManager.meshes
+        .filter((m) => m.visible)
+        .map((m) => m.mesh);
+      const hits = ray.intersectObjects(targets, false);
+      if (hits.length === 0) return;
+
+      const mesh = hits[0].object;
+      const idx = cadManager._highlightedMeshes.indexOf(mesh);
+
+      if (idx >= 0) {
+        // Already selected — remove from selection
+        cadManager._highlightedMeshes.splice(idx, 1);
+        mesh.material.emissive.setHex(0x000000);
+        mesh.material.emissiveIntensity = 0;
+        // Update tree
+        const treeItem = document.querySelector(
+          `#cadPartTree .tree-item[data-name="${CSS.escape(mesh.name)}"]`
+        );
+        if (treeItem) treeItem.classList.remove('selected');
+      } else {
+        // Add to selection
+        cadManager._highlightedMeshes.push(mesh);
+        mesh.material.emissive.setHex(0xffaa00);
+        mesh.material.emissiveIntensity = 0.4;
+        // Update tree
+        const treeItem = document.querySelector(
+          `#cadPartTree .tree-item[data-name="${CSS.escape(mesh.name)}"]`
+        );
+        if (treeItem) treeItem.classList.add('selected');
+      }
+
+      // Recalculate combined bounding box
+      cadManager._removeSelectionBox();
+      const highlighted = cadManager._highlightedMeshes;
+      if (highlighted.length === 0) {
+        cadManager.selectedMesh = null;
+        cadManager.onSelect(null);
+        return;
+      }
+      cadManager.selectedMesh = highlighted[0];
+      const combinedBox = new THREE.Box3();
+      highlighted.forEach(m => combinedBox.expandByObject(m));
+      cadManager._createSelectionBoxFromBox3(combinedBox);
+
+      const center = combinedBox.getCenter(new THREE.Vector3());
+      const bboxSize = combinedBox.getSize(new THREE.Vector3());
+      cadManager.onSelect({
+        name: `${highlighted.length} parts selected`,
+        center,
+        size: bboxSize,
+        point: center.clone(),
+      });
+      return;
+    }
+
+    cadManager.handleClick(ray);
+  });
+}
+handleCadClick(topCanvas, topCamera);
+handleCadClick(perspCanvas, perspCamera);
+
+animate();
+</script>
+</body>
+</html>

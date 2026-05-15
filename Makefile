@@ -33,7 +33,7 @@ ${VENV}:
 lint: ## Runs the linter(s)
 	# From CI pipeline. We are more strict in our local check
 	# --select=E9,F6,F7,F8,F4,W1,W2,W4,W5,W6,E11 --ignore W293
-	${VENVBIN}/flake8 . --count --select=E9,F6,F7,F8,F4,W1,W2,W4,W5,W6,E11 --ignore W293,W503 --show-source --statistics --exclude */tests/pyfrc*,utils/yaml/*,.venv*/,venv*/
+	${VENVBIN}/flake8 . --count --select=E9,F6,F7,F8,F4,W1,W2,W4,W5,W6,E11 --ignore W293,W503 --show-source --statistics --exclude */tests/pyfrc*,utils/yaml/*,.venv*/,venv*/,exclude=tests/pyfrc*,utils/yaml/*,.venv*/,venv*/,examples/robotpy
 
 test: setup_${VENV} lint  coverage ## Does a lint and then test
 	${VENVBIN}/${PYTHON} -m robotpy test
@@ -66,7 +66,7 @@ sync:
 deploy: sync
 	${PYTHON} -m robotpy deploy
 
-gui-exe: setup_${VENV} ## Build standalone controller config GUI executable
+gui-exe: setup_${VENV} ## Build standalone Controller Config GUI executable
 	${VENVBIN}/pip install pyinstaller
 	${VENVBIN}/pip install -r host/requirements.txt
 ifeq ($(OS), Windows_NT)
@@ -89,3 +89,15 @@ else
 	@echo "ERROR: Match Monitor exe is Windows-only (uses Windows tray/console APIs)"
 	@exit 1
 endif
+
+nfc-exe: setup_${VENV} ## Build standalone NFC Battery Tag Tool executable
+	${VENVBIN}/pip install pyinstaller
+	${VENVBIN}/pip install -r host/requirements.txt
+ifeq ($(OS), Windows_NT)
+	cd host && ../${VENVBIN}/pyinstaller nfc_tool_win.spec --distpath ../dist --workpath ../build/gui --clean -y
+else ifeq ($(shell uname),Darwin)
+	cd host && ../${VENVBIN}/pyinstaller nfc_tool_mac.spec --distpath ../dist --workpath ../build/gui --clean -y
+else
+	cd host && ../${VENVBIN}/pyinstaller nfc_tool_linux.spec --distpath ../dist --workpath ../build/gui --clean -y
+endif
+	@echo "Built in: dist/"
