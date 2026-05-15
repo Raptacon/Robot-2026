@@ -84,10 +84,12 @@ def maybe_build_spa() -> str:
         if not (STATIC_DIR / "index.html").is_file():
             log.warning(
                 "npm not found and static/index.html missing -- the SPA "
-                "won't load.  Install Node.js (https://nodejs.org) and "
-                "run 'npm install && npm run build' in %s", WEB_DIR)
+                "won't load.  Easiest fix: re-run scripts/controller_editor/"
+                "launch.{ps1,sh}, which auto-installs Node.  Or install "
+                "Node.js manually from https://nodejs.org and run "
+                "'npm install && npm run build' in %s", WEB_DIR)
         else:
-            log.debug("npm not on PATH; using committed static/ bundle")
+            log.debug("npm not on PATH; using existing static/ bundle")
         return "skipped"
 
     src_mtime = max(
@@ -105,11 +107,13 @@ def maybe_build_spa() -> str:
 
     log.info("SPA sources newer than static/; rebuilding")
     if not NODE_MODULES.is_dir():
-        log.info("installing npm dependencies (first run)")
-        if not _run([npm, "install", "--silent"], cwd=WEB_DIR):
+        # First-run npm install can take minutes -- drop --silent so the
+        # user sees progress instead of staring at a frozen terminal.
+        log.info("installing npm dependencies (first run, this may take a minute)")
+        if not _run([npm, "install"], cwd=WEB_DIR):
             return "failed"
 
-    if not _run([npm, "run", "build", "--silent"], cwd=WEB_DIR):
+    if not _run([npm, "run", "build"], cwd=WEB_DIR):
         return "failed"
     return "built"
 

@@ -4,7 +4,11 @@
 # What it does, in order:
 #   1. Find or create venv/ at the repo root (uses `python3` on PATH).
 #   2. Install requirements.txt + host/requirements.txt if anything is missing.
-#   3. Launch `python -m host.controller_web_editor` and open a browser.
+#   3. Ensure Node.js + npm are installed (auto-install via brew on
+#      macOS; print apt/dnf instructions on Linux).
+#   4. Launch `python -m host.controller_web_editor` -- the server
+#      builds the SPA on startup if static/ is missing or stale.
+#   5. Open a browser once the server is listening.
 #
 # Idempotent: re-running just re-launches the server.  Skips pip when
 # the install stamp matches.
@@ -65,6 +69,53 @@ if [[ "$need_install" -eq 1 ]]; then
     done
     printf '%s' "$req_hash" > "$stamp"
 fi
+
+ensure_node() {
+    if command -v npm >/dev/null 2>&1; then return 0; fi
+
+    echo "Node.js / npm not found on PATH."
+    case "$(uname -s)" in
+        Darwin)
+            if command -v brew >/dev/null 2>&1; then
+                echo "Installing Node.js via Homebrew (brew install node) ..."
+                brew install node
+            else
+                cat >&2 <<'EOF'
+Node.js is required to build the controller editor SPA.  Homebrew
+isn't available to auto-install it.  Install Node.js (LTS) manually:
+    https://nodejs.org/en/download
+Then re-run this launcher.
+EOF
+                exit 1
+            fi
+            ;;
+        Linux)
+            cat >&2 <<'EOF'
+Node.js is required to build the controller editor SPA.  Install it
+via your distro's package manager (sudo is required):
+    Ubuntu/Debian:  sudo apt-get update && sudo apt-get install -y nodejs npm
+    Fedora/RHEL:    sudo dnf install -y nodejs npm
+    Arch:           sudo pacman -S nodejs npm
+Or grab the official binaries from https://nodejs.org/en/download
+Then re-run this launcher.
+EOF
+            exit 1
+            ;;
+        *)
+            echo "Install Node.js LTS from https://nodejs.org/en/download then re-run." >&2
+            exit 1
+            ;;
+    esac
+
+    # Sanity-check after install.
+    if ! command -v npm >/dev/null 2>&1; then
+        echo "Node install reported success but npm still isn't on PATH.  Open a new terminal and re-run." >&2
+        exit 1
+    fi
+    echo "Node.js installed: $(node --version)"
+}
+
+ensure_node
 
 # Open a browser shortly after the server starts listening.
 port=8071

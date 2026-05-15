@@ -60,9 +60,11 @@ scripts/controller_editor/launch.sh      # macOS / Linux
 pip install -r host/requirements.txt
 python -m host.controller_web_editor   # http://127.0.0.1:8071
 ```
-Compiled bundle is committed under `host/controller_web_editor/static/`,
-so Node isn't required for end users.  Setup details, dev workflow, and
-CI export instructions in [host/controller_web_editor/README.md](host/controller_web_editor/README.md).
+The launcher scripts auto-install Node (via `winget` on Windows or
+`brew` on macOS) and build the SPA on first run.  `static/` is NOT
+committed -- the server builds it on startup when `web/src/` is newer
+or `static/` is missing.  Setup details, dev workflow, and CI export
+instructions in [host/controller_web_editor/README.md](host/controller_web_editor/README.md).
 
 **Style:**
 Follow major style guidelines from PEP8 based on what is configured for flake8.

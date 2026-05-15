@@ -3,7 +3,10 @@
 # What it does, in order:
 #   1. Find or create venv\ at the repo root (uses `python` on PATH).
 #   2. Install requirements.txt + host\requirements.txt if anything is missing.
-#   3. Launch `python -m host.controller_web_editor` and open a browser.
+#   3. Ensure Node.js + npm are installed (auto-install via winget if missing).
+#   4. Launch `python -m host.controller_web_editor` -- the server builds
+#      the SPA on startup if static/ is missing or stale.
+#   5. Open a browser once the server is listening.
 #
 # Idempotent: re-running just re-launches the server.  Skips pip when
 # the install stamp matches.
@@ -28,6 +31,42 @@ function Find-SystemPython {
         }
     }
     throw "No Python interpreter found on PATH.  Install Python 3.10+ from https://python.org and retry."
+}
+
+function Refresh-Path {
+    # Pull the latest PATH from the machine + user environment so a
+    # freshly-installed Node shows up without restarting the shell.
+    $machine = [System.Environment]::GetEnvironmentVariable('Path', 'Machine')
+    $user = [System.Environment]::GetEnvironmentVariable('Path', 'User')
+    $env:Path = @($machine, $user) -join ';'
+}
+
+function Ensure-Node {
+    if (Get-Command npm -ErrorAction SilentlyContinue) { return }
+
+    Write-Host "Node.js / npm not found on PATH." -ForegroundColor Yellow
+    $winget = Get-Command winget -ErrorAction SilentlyContinue
+    if (-not $winget) {
+        throw @"
+Node.js is required to build the controller editor SPA, and winget
+isn't available to auto-install it.  Install Node.js (LTS) manually:
+    https://nodejs.org/en/download
+Then re-run this launcher.
+"@
+    }
+
+    Write-Host "Installing Node.js LTS via winget ..." -ForegroundColor Cyan
+    & winget install --id OpenJS.NodeJS.LTS --exact `
+        --accept-package-agreements --accept-source-agreements `
+        --silent --disable-interactivity
+    if ($LASTEXITCODE -ne 0) {
+        throw "winget failed to install Node.js (exit $LASTEXITCODE).  Install manually from https://nodejs.org and retry."
+    }
+    Refresh-Path
+    if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+        throw "Node.js installed but npm still isn't on PATH.  Open a new PowerShell window and re-run the launcher."
+    }
+    Write-Host "Node.js installed: $((node --version) -join '')" -ForegroundColor Green
 }
 
 if (-not (Test-Path $VenvPython)) {
@@ -59,6 +98,10 @@ if ($needInstall) {
     }
     Set-Content -Path $Stamp -Value $reqHash -Encoding ascii
 }
+
+# Node is required: the SPA build runs on server start if static/ is
+# stale or missing.  Auto-install via winget when we can.
+Ensure-Node
 
 # Open the browser shortly after the server starts listening.  Background
 # job so the main shell stays attached to the server's stdout.

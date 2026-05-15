@@ -8,8 +8,7 @@ See [CLAUDE.md](CLAUDE.md) for the architecture and design notes.
 
 ## Quick start (just running it)
 
-The compiled SPA is committed under [static/](static), so a fresh checkout
-runs without Node.  From the repo root:
+From the repo root:
 
 **Windows (PowerShell):**
 ```powershell
@@ -21,9 +20,22 @@ runs without Node.  From the repo root:
 ./scripts/controller_editor/launch.sh
 ```
 
-The script creates `venv/` if missing, installs deps the first time
-(skipped on subsequent runs unless the requirements files change), then
-launches the server and opens <http://127.0.0.1:8071> in your browser.
+The launcher does everything needed for a fresh clone:
+
+1. Creates `venv/` if missing.
+2. Installs Python deps (`requirements.txt` + `host/requirements.txt`)
+   on first run, then skips that step unless the requirements files
+   change.
+3. Installs Node.js LTS via `winget` (Windows) or `brew` (macOS) if
+   it isn't already on `PATH`.  On Linux, prints the apt/dnf command
+   to install it and exits — `sudo` makes auto-install fragile.
+4. Launches the server.  The server detects that `static/` is missing
+   or out of date and runs `npm install` + `npm run build` before
+   serving (first build takes ~1 minute; subsequent ones a few seconds).
+5. Opens <http://127.0.0.1:8071> in your browser.
+
+Subsequent runs reuse the venv and the built SPA — startup drops to a
+couple of seconds.
 
 If you'd rather do it by hand:
 
@@ -37,6 +49,13 @@ source venv/bin/activate
 
 pip install -r requirements.txt
 pip install -r host/requirements.txt
+
+# One-time: build the SPA bundle (auto-rebuilds on subsequent server
+# starts when web/src/ is newer than static/).
+cd host/controller_web_editor/web
+npm install
+npm run build
+cd ../../..
 
 python -m host.controller_web_editor
 ```
@@ -53,8 +72,8 @@ python -m host.controller_web_editor --host 0.0.0.0 --port 8071
 
 If you change anything under `web/src/`, the server rebuilds the bundle
 automatically on the next start when it detects newer mtimes than
-`static/`.  This needs Node.js installed (LTS works) — get it from
-<https://nodejs.org>.
+`static/`.  Node.js LTS is required; the launcher auto-installs it but
+if you bypassed the launcher you can grab it from <https://nodejs.org>.
 
 For interactive development with hot reload, run the Vite dev server in
 a second terminal:
@@ -122,9 +141,11 @@ parity with the Python implementation, and export endpoint wiring.
 
 ## Troubleshooting
 
-- **Browser shows "The SPA isn't built yet" page** — the committed bundle
-  is missing.  Run `cd web && npm install && npm run build`.  If Node
-  isn't available, pull a fresh checkout; the bundle is tracked in git.
+- **Browser shows "The SPA isn't built yet" page** — Node wasn't
+  available when the server started and `static/index.html` doesn't
+  exist yet.  Easiest fix: re-run `scripts/controller_editor/launch.{ps1,sh}`,
+  which auto-installs Node.  Or install Node manually from
+  <https://nodejs.org>, then `cd web && npm install && npm run build`.
 - **`pip install -r host/requirements.txt` fails on `cairosvg`** —
   cairosvg needs the Cairo C library.  See the GHA section above for
   the apt/brew packages.  Alternatively, drop a pre-rendered

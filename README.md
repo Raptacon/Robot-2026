@@ -226,7 +226,7 @@ Browser-based replacement for the Tkinter tool.  Same YAML schema, but adds undo
 
 ### Quick start
 
-The compiled SPA is committed under `host/controller_web_editor/static/`, so a fresh clone runs without Node:
+The launcher script handles everything for a fresh clone — venv, Python deps, Node.js (auto-installed via `winget` on Windows or `brew` on macOS), and the SPA build:
 
 ```powershell
 # Windows
@@ -238,13 +238,14 @@ The compiled SPA is committed under `host/controller_web_editor/static/`, so a f
 ./scripts/controller_editor/launch.sh
 ```
 
-Both scripts create `venv/` if missing, install requirements on first run, launch the server on port 8071, and open your browser.  Subsequent runs skip the install when the requirements files haven't changed.
+First-run installs (Python deps + Node + the initial SPA build) take a minute or two; subsequent runs reuse everything and start in a couple of seconds.  Linux users get apt/dnf install commands printed if Node is missing — `sudo` makes auto-install too fragile to script.
 
 By hand:
 
 ```bash
 pip install -r requirements.txt
 pip install -r host/requirements.txt
+cd host/controller_web_editor/web && npm install && npm run build && cd ../../..
 python -m host.controller_web_editor   # http://127.0.0.1:8071
 ```
 
