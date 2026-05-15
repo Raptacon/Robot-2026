@@ -216,7 +216,7 @@ class TestRobotGeometryIntegration:
 
     def test_swerve_positions_symmetric(self):
         from constants.robot_geometry import (
-            SWERVE_FL, SWERVE_FR, SWERVE_BL, SWERVE_BR,
+            SWERVE_FL, SWERVE_FR, SWERVE_BL,
         )
         # FL and FR should be symmetric about Y
         assert abs(SWERVE_FL.X() - SWERVE_FR.X()) < 1e-9

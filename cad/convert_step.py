@@ -21,7 +21,6 @@ def convert_freecad(step_path: str, output_path: str) -> bool:
         import FreeCAD
         import Part
         import MeshPart
-        import Mesh
     except ImportError:
         return False
 
