@@ -1,0 +1,160 @@
+/* Theme system.
+ *
+ * Themes override the base palette via a `data-theme` attribute on
+ * <html>.  The default (no attribute) is the dark theme so first paint
+ * before the theme store loads doesn't flash.  See lib/theme.ts for
+ * the dropdown wiring and persistence.
+ */
+
+:root {
+  color-scheme: light dark;
+  /* Dark — default */
+  --bg: #0f1115;
+  --panel: #161a21;
+  --panel-2: #1e242d;
+  --panel-hover: #242b36;
+  --border: #2a313c;
+  --text: #e6e8eb;
+  --text-dim: #8a93a3;
+  --accent: #4f9cf9;
+  --accent-dim: #2c5d99;
+  --accent-text: #ffffff;
+  --danger: #e0625a;
+  --ok: #6bbf6b;
+  --selected: #1f3553;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 14px;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0f1115;
+  --panel: #161a21;
+  --panel-2: #1e242d;
+  --panel-hover: #242b36;
+  --border: #2a313c;
+  --text: #e6e8eb;
+  --text-dim: #8a93a3;
+  --accent: #4f9cf9;
+  --accent-dim: #2c5d99;
+  --accent-text: #ffffff;
+  --danger: #e0625a;
+  --ok: #6bbf6b;
+  --selected: #1f3553;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f5f6f8;
+  --panel: #ffffff;
+  --panel-2: #f0f2f5;
+  --panel-hover: #e6e9ee;
+  --border: #c8cdd5;
+  --text: #1c2026;
+  --text-dim: #5b6472;
+  --accent: #1f6feb;
+  --accent-dim: #5598ed;
+  --accent-text: #ffffff;
+  --danger: #c8362d;
+  --ok: #2c8a3a;
+  --selected: #d9e7fb;
+}
+
+:root[data-theme="raptacon"] {
+  color-scheme: dark;
+  --bg: #0a1410;
+  --panel: #101a14;
+  --panel-2: #16241c;
+  --panel-hover: #1d2f24;
+  --border: #2a4030;
+  --text: #e9f5ec;
+  --text-dim: #8aa792;
+  --accent: #39d353;        /* Raptacon green */
+  --accent-dim: #1f7a32;
+  --accent-text: #061a0d;
+  --danger: #e0625a;
+  --ok: #6fea84;
+  --selected: #1b3b25;
+}
+
+:root[data-theme="solarized-dark"] {
+  color-scheme: dark;
+  --bg: #002b36;
+  --panel: #073642;
+  --panel-2: #094655;
+  --panel-hover: #0d5468;
+  --border: #1a6678;
+  --text: #eee8d5;
+  --text-dim: #93a1a1;
+  --accent: #b58900;
+  --accent-dim: #8a6800;
+  --accent-text: #002b36;
+  --danger: #dc322f;
+  --ok: #859900;
+  --selected: #073d4a;
+}
+
+:root[data-theme="high-contrast"] {
+  color-scheme: dark;
+  --bg: #000000;
+  --panel: #000000;
+  --panel-2: #0a0a0a;
+  --panel-hover: #1a1a1a;
+  --border: #ffffff;
+  --text: #ffffff;
+  --text-dim: #d0d0d0;
+  --accent: #ffd400;
+  --accent-dim: #b59800;
+  --accent-text: #000000;
+  --danger: #ff5555;
+  --ok: #55ff55;
+  --selected: #333300;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #app {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+}
+
+button {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 0.35rem 0.7rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font: inherit;
+}
+button:hover { background: var(--panel-hover); }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+button.primary {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+button.primary:hover { background: var(--accent); }
+
+input, select, textarea {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.3rem 0.5rem;
+  font: inherit;
+}
+input:focus, select:focus, textarea:focus {
+  outline: 1px solid var(--accent);
+  border-color: var(--accent);
+}
+
+label { color: var(--text-dim); }
+
+.muted { color: var(--text-dim); }
+.row { display: flex; gap: 0.5rem; align-items: center; }
+.col { display: flex; flex-direction: column; gap: 0.4rem; }

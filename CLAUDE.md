@@ -50,6 +50,22 @@ pip install -r host/requirements.txt   # First time only (Pillow, PyYAML)
 python -m host.controller_config       # Launch GUI
 ```
 
+**Run controller web editor (Svelte SPA):**
+```bash
+# One-shot launcher (creates venv, installs deps, opens browser):
+scripts/controller_editor/launch.ps1     # Windows
+scripts/controller_editor/launch.sh      # macOS / Linux
+
+# Or by hand:
+pip install -r host/requirements.txt
+python -m host.controller_web_editor   # http://127.0.0.1:8071
+```
+The launcher scripts auto-install Node (via `winget` on Windows or
+`brew` on macOS) and build the SPA on first run.  `static/` is NOT
+committed -- the server builds it on startup when `web/src/` is newer
+or `static/` is missing.  Setup details, dev workflow, and CI export
+instructions in [host/controller_web_editor/README.md](host/controller_web_editor/README.md).
+
 **Style:**
 Follow major style guidelines from PEP8 based on what is configured for flake8.
 

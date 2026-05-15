@@ -1,0 +1,206 @@
+{
+  "viewBox": "0 0 744 500",
+  "_note": "Tuned via the in-editor hitbox tool. Use 'Edit hit regions' + 'Save as defaults' to update.",
+  "regions": {
+    "left_trigger": {
+      "shape": "ellipse",
+      "cx": 187.2,
+      "cy": 60.0,
+      "rx": 38,
+      "ry": 22
+    },
+    "right_trigger": {
+      "shape": "ellipse",
+      "cx": 562.2,
+      "cy": 71.2,
+      "rx": 38,
+      "ry": 22
+    },
+    "left_bumper": {
+      "shape": "ellipse",
+      "cx": 164.5,
+      "cy": 127.8,
+      "rx": 45,
+      "ry": 14
+    },
+    "right_bumper": {
+      "shape": "ellipse",
+      "cx": 577.9,
+      "cy": 123.7,
+      "rx": 45,
+      "ry": 14
+    },
+    "left_stick": {
+      "shape": "circle",
+      "cx": 162.3,
+      "cy": 268.4,
+      "r": 38
+    },
+    "left_stick_x": {
+      "shape": "rect",
+      "x": 123.9,
+      "y": 314.2,
+      "width": 76,
+      "height": 8
+    },
+    "left_stick_y": {
+      "shape": "rect",
+      "x": 108.3,
+      "y": 226.6,
+      "width": 8,
+      "height": 76
+    },
+    "left_stick_button": {
+      "shape": "circle",
+      "cx": 163.2,
+      "cy": 210.1,
+      "r": 14
+    },
+    "right_stick": {
+      "shape": "circle",
+      "cx": 466.7,
+      "cy": 369.1,
+      "r": 38
+    },
+    "right_stick_x": {
+      "shape": "rect",
+      "x": 427.9,
+      "y": 414.0,
+      "width": 76,
+      "height": 8
+    },
+    "right_stick_y": {
+      "shape": "rect",
+      "x": 411.0,
+      "y": 331.5,
+      "width": 8,
+      "height": 76
+    },
+    "right_stick_button": {
+      "shape": "circle",
+      "cx": 470.0,
+      "cy": 305.0,
+      "r": 14
+    },
+    "y_button": {
+      "shape": "circle",
+      "cx": 580.5,
+      "cy": 204.1,
+      "r": 17
+    },
+    "b_button": {
+      "shape": "circle",
+      "cx": 629.8,
+      "cy": 244.4,
+      "r": 17
+    },
+    "a_button": {
+      "shape": "circle",
+      "cx": 574.3,
+      "cy": 292.5,
+      "r": 17
+    },
+    "x_button": {
+      "shape": "circle",
+      "cx": 522.6,
+      "cy": 248.1,
+      "r": 17
+    },
+    "back_button": {
+      "shape": "ellipse",
+      "cx": 295.7,
+      "cy": 248.2,
+      "rx": 14,
+      "ry": 9
+    },
+    "start_button": {
+      "shape": "ellipse",
+      "cx": 447.7,
+      "cy": 250.7,
+      "rx": 14,
+      "ry": 9
+    },
+    "pov_up": {
+      "shape": "rect",
+      "x": 258.2,
+      "y": 307.3,
+      "width": 22,
+      "height": 26
+    },
+    "pov_down": {
+      "shape": "rect",
+      "x": 258.2,
+      "y": 373.7,
+      "width": 22,
+      "height": 26
+    },
+    "pov_left": {
+      "shape": "rect",
+      "x": 224.8,
+      "y": 342.3,
+      "width": 26,
+      "height": 22
+    },
+    "pov_right": {
+      "shape": "rect",
+      "x": 287.6,
+      "y": 342.3,
+      "width": 26,
+      "height": 22
+    },
+    "pov_up_left": {
+      "shape": "rect",
+      "x": 226.8,
+      "y": 309.3,
+      "width": 22,
+      "height": 22
+    },
+    "pov_up_right": {
+      "shape": "rect",
+      "x": 289.6,
+      "y": 309.3,
+      "width": 22,
+      "height": 22
+    },
+    "pov_down_left": {
+      "shape": "rect",
+      "x": 226.8,
+      "y": 375.7,
+      "width": 22,
+      "height": 22
+    },
+    "pov_down_right": {
+      "shape": "rect",
+      "x": 289.6,
+      "y": 375.7,
+      "width": 22,
+      "height": 22
+    },
+    "rumble_left": {
+      "shape": "rect",
+      "x": 249.8,
+      "y": 79.3,
+      "width": 90,
+      "height": 22
+    },
+    "rumble_right": {
+      "shape": "rect",
+      "x": 406.3,
+      "y": 80.9,
+      "width": 90,
+      "height": 22
+    },
+    "rumble_both": {
+      "shape": "rect",
+      "x": 329.1,
+      "y": 138.3,
+      "width": 90,
+      "height": 22
+    }
+  },
+  "_note": "Tuned via the in-editor hitbox tool. Use 'Edit hit regions' + 'Save as defaults' to update.",
+  "fonts": {
+    "input_name": 11.5,
+    "action_label": 16
+  }
+}

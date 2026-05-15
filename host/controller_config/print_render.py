@@ -416,6 +416,70 @@ def render_landscape_page(
         hide_unassigned, icon_loader)
 
 
+def _render_pages(
+    config: FullConfig,
+    orientation: str,
+    label_positions: dict[str, tuple[int, int]] | None = None,
+    hide_unassigned: bool = False,
+    icon_loader=None,
+) -> list[Image.Image]:
+    """Build the list of PIL pages for an export.  Shared by file and
+    in-memory exporters so they stay byte-stable with each other."""
+    controllers = [config.controllers[p]
+                   for p in sorted(config.controllers.keys())]
+    if not controllers:
+        raise ValueError("No controllers to export")
+
+    pages: list[Image.Image] = []
+    if orientation == "portrait":
+        for i in range(0, len(controllers), 2):
+            batch = controllers[i:i + 2]
+            pages.append(render_portrait_page(
+                batch, label_positions, hide_unassigned, icon_loader))
+    else:
+        for ctrl in controllers:
+            pages.append(render_landscape_page(
+                ctrl, label_positions, hide_unassigned, icon_loader))
+    return pages
+
+
+def render_to_bytes(
+    config: FullConfig,
+    orientation: str,
+    fmt: str,
+    label_positions: dict[str, tuple[int, int]] | None = None,
+    hide_unassigned: bool = False,
+    icon_loader=None,
+) -> bytes:
+    """Render the export and return the raw bytes.
+
+    Used by the web editor's HTTP export endpoint so the result can be
+    streamed without touching the filesystem.  PNG multi-page exports
+    (more than one controller per page in portrait or one per page in
+    landscape) raise ``ValueError`` — request PDF instead.
+    """
+    fmt = fmt.lower().lstrip(".")
+    if fmt not in ("png", "pdf"):
+        raise ValueError(f"Unsupported format: {fmt} (use png or pdf)")
+
+    pages = _render_pages(config, orientation, label_positions,
+                          hide_unassigned, icon_loader)
+
+    buf = io.BytesIO()
+    if fmt == "pdf":
+        first = pages[0]
+        rest = pages[1:] if len(pages) > 1 else []
+        first.save(buf, "PDF", resolution=DPI,
+                   save_all=True, append_images=rest)
+    else:
+        if len(pages) > 1:
+            raise ValueError(
+                "PNG export only supports a single page; "
+                "use PDF for multi-controller layouts.")
+        pages[0].save(buf, "PNG")
+    return buf.getvalue()
+
+
 def export_pages(
     config: FullConfig,
     orientation: str,
@@ -438,23 +502,8 @@ def export_pages(
     if fmt not in ("png", "pdf"):
         raise ValueError(f"Unsupported format: {fmt} (use .png or .pdf)")
 
-    controllers = [config.controllers[p]
-                   for p in sorted(config.controllers.keys())]
-    if not controllers:
-        raise ValueError("No controllers to export")
-
-    pages: list[Image.Image] = []
-
-    if orientation == "portrait":
-        # Group controllers in pairs
-        for i in range(0, len(controllers), 2):
-            batch = controllers[i:i + 2]
-            pages.append(render_portrait_page(
-                batch, label_positions, hide_unassigned, icon_loader))
-    else:
-        for ctrl in controllers:
-            pages.append(render_landscape_page(
-                ctrl, label_positions, hide_unassigned, icon_loader))
+    pages = _render_pages(config, orientation, label_positions,
+                          hide_unassigned, icon_loader)
 
     if fmt == "pdf":
         # Pillow multi-page PDF
