@@ -78,6 +78,18 @@ else
 endif
 	@echo "Built in: dist/"
 
+match-monitor-exe: setup_${VENV} ## Build standalone Match Monitor executable (Windows only)
+	${VENVBIN}/pip install pyinstaller
+	${VENVBIN}/pip install -r host/requirements.txt
+ifeq ($(OS), Windows_NT)
+	${VENVBIN}/python host/make_ico.py
+	cd host && ../${VENVBIN}/pyinstaller match_monitor_win.spec --distpath ../dist --workpath ../build/match_monitor --clean -y
+	@echo "Built: dist/raptacon-match-monitor.exe"
+else
+	@echo "ERROR: Match Monitor exe is Windows-only (uses Windows tray/console APIs)"
+	@exit 1
+endif
+
 nfc-exe: setup_${VENV} ## Build standalone NFC Battery Tag Tool executable
 	${VENVBIN}/pip install pyinstaller
 	${VENVBIN}/pip install -r host/requirements.txt

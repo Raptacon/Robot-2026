@@ -20,6 +20,7 @@ import constants.swerve_constants as consts
 from data.telemetry import Telemetry
 import commands
 import subsystem
+from subsystem.health_and_status import HealthAndStatus
 from subsystem.nfc_battery_tracker import NfcBatteryTracker
 from utils.input import InputFactory
 from utils.odometry_logic_2026 import determineShooterTargets2026
@@ -27,7 +28,6 @@ from utils.odometry_logic_2026 import determineShooterTargets2026
 # Third-party imports
 import commands2
 import wpilib
-from commands2.button import Trigger
 from pathplannerlib.auto import AutoBuilder
 from wpimath.geometry import Rotation2d
 
@@ -49,6 +49,7 @@ class RobotSwerve:
 
         # Subsystem instantiation
         self.drivetrain = subsystem.drivetrain.swerve_drivetrain.SwerveDrivetrain()
+        self.health_and_status = HealthAndStatus()
         self.nfc_battery_tracker = NfcBatteryTracker()
         from subsystem.localization.localization import Localization
         self.localization = Localization(self.drivetrain, field=self.field)
@@ -92,29 +93,10 @@ class RobotSwerve:
         if self._enable_telemetry:
             self.telemetry = Telemetry(
                 driveTrain=self.drivetrain,
-                driverController=self.factory.getController(0),
-                mechController=self.factory.getController(1),
             )
 
         wpilib.SmartDashboard.putString("Robot Version", self.getDeployInfo("git-hash"))
         wpilib.SmartDashboard.putString("Git Branch", self.getDeployInfo("git-branch"))
-        wpilib.SmartDashboard.putString(
-            "Deploy Host", self.getDeployInfo("deploy-host")
-        )
-        wpilib.SmartDashboard.putString(
-            "Deploy User", self.getDeployInfo("deploy-user")
-        )
-
-        # Update drivetrain motor idle modes 3 seconds after the robot has been disabled.
-        # to_break should be False at competitions where the robot is turned off between matches
-        Trigger(is_disabled()).debounce(3).onTrue(
-            commands2.cmd.runOnce(
-                self.drivetrain.set_motor_stop_modes(
-                    to_drive=True, to_break=True, all_motor_override=True, burn_flash=True
-                ),
-                self.drivetrain
-            )
-        )
 
 
     def robotPeriodic(self):
@@ -151,11 +133,6 @@ class RobotSwerve:
 
     def autonomousInit(self):
         self.updateAlliance()
-        self.auto_command = self.auto_chooser.getSelected()
-        if self.auto_command:
-            self.auto_command.schedule()
-        else:
-            self.drivetrain.reset_pose_estimator(self.drivetrain.get_default_starting_pose())
 
     def autonomousPeriodic(self):
         pass
@@ -180,13 +157,11 @@ class RobotSwerve:
 
         if self.hood:
             self.hood.setDefaultCommand(self.hood.autoAngleCommand())
-            
 
     def teleopPeriodic(self):
         pass
 
     def testInit(self):
-        #TODO Move to NT listener on change listener
         self.updateAlliance()
         commands2.CommandScheduler.getInstance().cancelAll()
         # See teleopInit for DefaultDrive vs DefaultDriveCircular notes
@@ -321,8 +296,6 @@ class RobotSwerve:
             # Read from ~/deploy.json
             with open(release_file, "r") as openfile:
                 json_object = json.load(openfile)
-                print(json_object)
-                print(type(json_object))
                 if key in json_object:
                     return json_object[key]
                 else:
