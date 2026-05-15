@@ -317,7 +317,6 @@
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { CadModelManager } from '/cad_loader.js';
 import { FieldManager } from '/field_loader.js';
 import { PointManager } from '/point_manager.js';
@@ -1302,7 +1301,6 @@ fieldManager.onSelect = (info) => {
   }
   const c = info.fieldCenter;
   const r = info.robotRelative;
-  const cIn = { x: (c.x / 0.0254).toFixed(2), y: (c.y / 0.0254).toFixed(2), z: (c.z / 0.0254).toFixed(2) };
   const rIn = { x: (r.x / 0.0254).toFixed(2), y: (r.y / 0.0254).toFixed(2), z: (r.z / 0.0254).toFixed(2) };
   el.innerHTML = `
     <div class="cam-card">
@@ -2027,9 +2025,6 @@ function updatePointDetail(pt) {
   document.getElementById('pointDetailZ').textContent = `${toDisplay(pt.position.z)} ${unitLabel()}`;
   document.getElementById('pointZSlider').value = Math.round(pt.position.z / 0.0254);  // inches
 
-  const xIn = (pt.position.x / 0.0254).toFixed(2);
-  const yIn = (pt.position.y / 0.0254).toFixed(2);
-  const zIn = (pt.position.z / 0.0254).toFixed(2);
   document.getElementById('pointFieldCoords').textContent =
     `Translation3d(${pt.position.x.toFixed(4)}, ${pt.position.y.toFixed(4)}, ${pt.position.z.toFixed(4)})`;
 
