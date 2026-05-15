@@ -4,7 +4,7 @@
 
 ## Welcome to Robot 2024
 
-Please take a look at the [wiki](https://github.com/Raptacon/Robot-2023/wiki) for the most up to date documenation
+Please take a look at the [wiki](https://github.com/Raptacon/Robot-2026/wiki) for the most up to date documentation
 
 Browse the auto-generated [API documentation](http://raptacon.github.io/Robot-2026/robot.html)
 
@@ -209,6 +209,56 @@ Each test uses a **seed number** so the "random" inputs are the same every time.
 - `test_fuzz_teleop_long` - Thorough 5000-cycle test (runs in CI)
 
 # Host Tools
+
+Two parallel tools exist for editing the same controller YAML files under
+`data/inputs/`.  Pick one:
+
+| Tool | Tech | Status |
+|---|---|---|
+| [Controller Web Editor](#controller-web-editor) | Svelte + Python HTTP server | **Recommended** |
+| [Controller Configuration GUI](#controller-configuration-gui) | Tkinter | Legacy — will deprecate after one parallel release |
+
+Both read and write the same YAML and produce the same printable PNG / PDF output via `host/controller_config/print_render.py`.
+
+## Controller Web Editor
+
+Browser-based replacement for the Tkinter tool.  Same YAML schema, but adds undo/redo, drag-to-bind, live curve preview with a connected gamepad, a theme picker (Light / Dark / Raptacon / Solarized Dark / High Contrast), and a server-side PNG/PDF export endpoint that works from `curl` for CI pipelines.
+
+### Quick start
+
+The compiled SPA is committed under `host/controller_web_editor/static/`, so a fresh clone runs without Node:
+
+```powershell
+# Windows
+.\scripts\controller_editor\launch.ps1
+```
+
+```bash
+# macOS / Linux
+./scripts/controller_editor/launch.sh
+```
+
+Both scripts create `venv/` if missing, install requirements on first run, launch the server on port 8071, and open your browser.  Subsequent runs skip the install when the requirements files haven't changed.
+
+By hand:
+
+```bash
+pip install -r requirements.txt
+pip install -r host/requirements.txt
+python -m host.controller_web_editor   # http://127.0.0.1:8071
+```
+
+### Headless export (CI / docs)
+
+```bash
+curl -fsSO "http://127.0.0.1:8071/api/export?path=data/inputs/controller.yaml&orientation=landscape&format=pdf&hide_unassigned=1"
+```
+
+Or use the Tkinter tool's CLI (same renderer, no server needed) — see the [Printing and Exporting](#printing-and-exporting) section below.
+
+### More details
+
+Setup, dev workflow (`npm run dev` with HMR), GitHub Actions deps, and troubleshooting are in [`host/controller_web_editor/README.md`](host/controller_web_editor/README.md).  Architecture and design rationale are in [`host/controller_web_editor/CLAUDE.md`](host/controller_web_editor/CLAUDE.md).
 
 ## Controller Configuration GUI
 
