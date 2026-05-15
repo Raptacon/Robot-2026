@@ -27,7 +27,7 @@ from host.camera_visualizer.routes import (  # noqa: E402
 )
 
 PORT = 8070
-CAD_DIR = os.path.join(PROJECT_ROOT, 'cad')
+CAD_DIR = os.path.join(PROJECT_ROOT, 'host', 'cad_tools', 'models')
 CACHE_DIR = os.path.join(PROJECT_ROOT, 'cache', 'fields')
 BUNDLE_CACHE = os.path.join(PROJECT_ROOT, 'cache', 'frc_assets.zip')
 POINTS_DIR = os.path.join(PROJECT_ROOT, 'data', 'field_points')

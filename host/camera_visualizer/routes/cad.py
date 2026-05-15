@@ -4,7 +4,7 @@ import os
 
 
 def list_cad_models(cad_dir: str) -> list:
-    """Scan cad/ directory for loadable model files."""
+    """Scan host/cad_tools/models/ directory for loadable model files."""
     models = []
     if os.path.isdir(cad_dir):
         for fname in sorted(os.listdir(cad_dir)):

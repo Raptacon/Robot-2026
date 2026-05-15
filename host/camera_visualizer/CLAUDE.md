@@ -22,7 +22,7 @@ host/camera_visualizer/
   routes/
     config.py           — robot config JSON from constants/robot_geometry.py, page building
     fields.py           — AprilTag field layout extraction from robotpy_apriltag
-    cad.py              — CAD model listing and serving from cad/ directory
+    cad.py              — CAD model listing and serving from host/cad_tools/models/
     points.py           — field measurement point persistence (named sets)
   cad_loader.js         — GLTF/GLB loader with DRACO, mesh optimization, part tree
   field_loader.js       — field model loading, scene modes, AprilTag placement, selection

@@ -1,6 +1,9 @@
 # Downloaded field assets cache (fetched at runtime)
 cache/
 
+# CAD model files (large binaries — live in separate team CAD repo)
+host/cad_tools/models/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

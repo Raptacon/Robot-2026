@@ -208,7 +208,7 @@
 <div id="cadModal">
   <div class="modal-body">
     <h3>Load CAD Model</h3>
-    <div style="font-size:13px; color:#888; margin-bottom:6px">Available in cad/ directory:</div>
+    <div style="font-size:13px; color:#888; margin-bottom:6px">Available in host/cad_tools/models/:</div>
     <div id="cadModelList" style="margin-bottom:12px; font-size:13px; color:#666">Scanning...</div>
     <hr style="border-color:#0f3460; margin:12px 0">
     <div style="font-size:13px; color:#888; margin-bottom:6px">Or pick a local .glb / .gltf file:</div>
@@ -1847,7 +1847,7 @@ document.getElementById('cadLoadBtn').addEventListener('click', async () => {
     const res = await fetch('/api/cad-models');
     const models = await res.json();
     if (models.length === 0) {
-      listEl.textContent = 'No .glb/.gltf files found in cad/ directory';
+      listEl.textContent = 'No .glb/.gltf files found in host/cad_tools/models/';
     } else {
       listEl.innerHTML = '';
       models.forEach(m => {

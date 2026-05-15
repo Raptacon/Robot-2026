@@ -140,6 +140,10 @@ Three.js web app for visualizing robot geometry, CAD models, and FRC fields. Run
 - `utils/geometry.py` — `transform_from_inches()`, `chain_transforms()`, `CameraGeometry`, `MechanismMount`
 - Edit `robot_geometry.py` and refresh browser to see changes (no server restart needed)
 
+### CAD Tools (`host/cad_tools/`)
+
+STEP→GLTF conversion script and storage for robot CAD models. The visualizer reads from `host/cad_tools/models/` (gitignored — large binaries live in a separate team CAD repo). See `host/cad_tools/README.md`.
+
 ## Future
 
 - [ ] JSON Schema for controller config YAML validation — IDE autocompletion + red squiggles. `config_io.py` abstraction makes format swaps straightforward.

@@ -2,7 +2,10 @@
 Convert STEP files to GLTF/GLB for the camera visualizer.
 
 Usage:
-    python cad/convert_step.py cad/2026rev2.step cad/2026rev2.glb
+    python host/cad_tools/convert_step.py <input.step> <output.glb>
+
+Output GLB files placed in host/cad_tools/models/ are auto-detected by
+the camera visualizer's Load CAD button.
 
 Tries these backends in order:
   1. FreeCAD headless (best assembly fidelity, preserves part names)
@@ -116,7 +119,7 @@ def main():
     print("  1. Open the assembly in Onshape")
     print("  2. Click the Export button (or right-click the assembly tab)")
     print("  3. Select 'GLTF' format")
-    print("  4. Download and place the .gltf file in the cad/ directory")
+    print("  4. Download and place the .gltf file in host/cad_tools/models/")
     print()
     print("Option 2: Install a conversion backend")
     print("  pip install trimesh[easy] cascadio")
@@ -124,7 +127,7 @@ def main():
     print()
     print("Option 3: Install FreeCAD")
     print("  Download from https://www.freecadweb.org/")
-    print("  Run: FreeCADcmd cad/convert_step.py <input> <output>")
+    print("  Run: FreeCADcmd host/cad_tools/convert_step.py <input> <output>")
     print("=" * 60)
     sys.exit(1)
 

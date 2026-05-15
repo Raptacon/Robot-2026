@@ -106,7 +106,7 @@ class TestFieldTagRoutes:
 class TestCadRoutes:
     def test_list_cad_models_with_real_dir(self):
         cad_dir = os.path.join(
-            os.path.dirname(__file__), '..', '..', '..', 'cad'
+            os.path.dirname(__file__), '..', '..', 'cad_tools', 'models'
         )
         models = cad.list_cad_models(cad_dir)
         # May or may not have models, but should be a list
