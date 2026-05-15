@@ -13,7 +13,7 @@ from typing import Optional, Set, List
 import wpilib
 from ntcore.util import ntproperty
 
-from utils.control_listener import ControlListener
+from utils.match_monitor.control_listener import ControlListener
 
 logger = logging.getLogger(__name__)
 

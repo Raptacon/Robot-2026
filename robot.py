@@ -5,7 +5,7 @@ import inspect
 import commands2
 
 from robotswerve import RobotSwerve
-from utils.match_monitor_connection import MatchMonitorConnection
+from utils.match_monitor import MatchMonitorConnection
 from utils.datalog_bridge import setup_logging
 from utils.loop_timing import LoopTimer
 import wpilib

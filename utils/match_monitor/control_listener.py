@@ -223,7 +223,7 @@ class ControlListener:
 
     def _clear_manifests(self) -> int:
         """Delete all .uploaded_manifest files from log directories."""
-        from utils.log_uploader import LOG_DIRS, MANIFEST_FILENAME
+        from utils.match_monitor.log_uploader import LOG_DIRS, MANIFEST_FILENAME
         count = 0
         for log_dir in LOG_DIRS:
             manifest = log_dir / MANIFEST_FILENAME
@@ -238,7 +238,7 @@ class ControlListener:
 
     def _list_log_files(self) -> list:
         """Scan log directories and return file info with upload status."""
-        from utils.log_uploader import LOG_DIRS, LOG_EXTENSIONS, MANIFEST_FILENAME
+        from utils.match_monitor.log_uploader import LOG_DIRS, LOG_EXTENSIONS, MANIFEST_FILENAME
         files = []
         for log_dir in LOG_DIRS:
             if not log_dir.is_dir():

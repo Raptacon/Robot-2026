@@ -12,8 +12,8 @@ from typing import Optional
 
 import wpilib
 
-from utils.control_listener import ControlListener
-from utils.log_uploader import LogUploader
+from utils.match_monitor.control_listener import ControlListener
+from utils.match_monitor.log_uploader import LogUploader
 
 logger = logging.getLogger(__name__)
 
