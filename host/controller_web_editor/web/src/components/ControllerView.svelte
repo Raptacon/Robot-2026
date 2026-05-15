@@ -68,6 +68,17 @@
   let menuX = $state(0);
   let menuY = $state(0);
 
+  // Flashes the info tray when the user right-clicks off any hit region.
+  // We intentionally do NOT preventDefault on the SVG-level contextmenu,
+  // so the browser's native context menu shows on top of the flash.
+  let flashNoInput = $state(false);
+  let flashTimer: ReturnType<typeof setTimeout> | null = null;
+  function pulseNoInput(): void {
+    flashNoInput = true;
+    if (flashTimer !== null) clearTimeout(flashTimer);
+    flashTimer = setTimeout(() => { flashNoInput = false; flashTimer = null; }, 1500);
+  }
+
   // --- Label-display helpers -------------------------------------------
   // Some inputs don't deserve a name label in normal use:
   //  * POV cells are too small to fit text alongside their dpad artwork.
@@ -767,7 +778,21 @@
     {#if !$hitboxes}
       <p class="muted">Loading hit regions…</p>
     {:else}
-    <svg viewBox={$hitboxes.viewBox} preserveAspectRatio="xMidYMid meet">
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <svg
+      viewBox={$hitboxes.viewBox}
+      preserveAspectRatio="xMidYMid meet"
+      oncontextmenu={(e: MouseEvent) => {
+        // Region-level handlers call preventDefault() to keep the
+        // browser menu out of the way and open our custom binding
+        // menu.  When we see a bubbled-up contextmenu with
+        // defaultPrevented still false, the click missed every region
+        // -- flash the tray as a "no button under cursor" indicator
+        // and let the browser's native menu show.
+        if (e.defaultPrevented) return;
+        if (editMode) return;
+        pulseNoInput();
+      }}>
       <defs>
         <!-- Double-ended axis arrow.  `context-stroke` makes the marker
              fill follow the line's stroke colour so the arrowheads track
@@ -990,8 +1015,13 @@
   <!-- Bottom info tray.  Always rendered so toggling edit-mode or
        opening the binding menu doesn't reflow the controller above it.
        Content switches based on mode. -->
-  <div class="info-tray" class:empty={!trayState.input}>
-      {#if trayState.input}
+  <div class="info-tray" class:empty={!trayState.input} class:flash-no-input={flashNoInput}>
+      {#if flashNoInput && !trayState.input}
+        <div class="tray-no-input">
+          <strong>No input under cursor</strong>
+          <span class="muted">— right-click on a region to bind an action.</span>
+        </div>
+      {:else if trayState.input}
         {@const trayInput = trayState.input}
         {@const hb = trayState.hb}
         {@const cat = trayState.cat}
@@ -1421,6 +1451,20 @@
     pointer-events: none;
   }
 
+  .info-tray.flash-no-input {
+    animation: tray-flash 1.5s ease-out 1;
+  }
+  @keyframes tray-flash {
+    0%   { background: var(--danger); }
+    20%  { background: var(--panel); }
+    100% { background: var(--panel); }
+  }
+  .tray-no-input {
+    display: flex;
+    gap: 0.4rem;
+    align-items: baseline;
+    color: var(--text);
+  }
   .info-tray {
     border-top: 1px solid var(--border);
     background: var(--panel);

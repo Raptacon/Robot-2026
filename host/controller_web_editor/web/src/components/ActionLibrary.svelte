@@ -31,12 +31,46 @@
     selectedAction.set(qualifiedName(a));
   }
 
-  function addGroup() {
-    const name = prompt('New group name')?.trim();
+  // Inline new-group input.  Replaces a prompt() dialog -- on first
+  // launch the dialog sometimes appeared to not commit the new group
+  // (root cause unclear -- possibly a focus/blur race between the modal
+  // and the Svelte input); inline keeps the whole flow under our
+  // control and surfaces the field where the new group will appear.
+  let addingGroup = $state(false);
+  let newGroupName = $state('');
+
+  function startAddGroup(): void {
+    newGroupName = '';
+    addingGroup = true;
+  }
+
+  // mousedown on the cancel × fires blur on the input before click.
+  // Without this guard, blur -> commitAddGroup would create the group
+  // *before* cancelAddGroup ran.
+  let cancelPending = false;
+
+  function commitAddGroup(): void {
+    if (cancelPending) {
+      cancelPending = false;
+      return;
+    }
+    const name = newGroupName.trim();
+    addingGroup = false;
     if (!name) return;
     mutate(`add group ${name}`, (c) => {
       if (!c.empty_groups.includes(name)) c.empty_groups.push(name);
     });
+  }
+
+  function cancelAddGroup(): void {
+    cancelPending = true;
+    addingGroup = false;
+    newGroupName = '';
+  }
+
+  function onAddGroupKey(ev: KeyboardEvent): void {
+    if (ev.key === 'Enter') { ev.preventDefault(); commitAddGroup(); }
+    else if (ev.key === 'Escape') { ev.preventDefault(); cancelAddGroup(); }
   }
 
   function addAction(group: string) {
@@ -135,10 +169,29 @@
       bind:value={query}
       aria-label="Search actions"
     />
-    <button title="Add group" onclick={addGroup}>＋ group</button>
+    <button title="Add group" onclick={startAddGroup}>＋ group</button>
   </header>
 
   <div class="groups">
+    {#if addingGroup}
+      <section class="group new-group">
+        <header>
+          <input
+            class="group-rename"
+            type="text"
+            placeholder="New group name…"
+            bind:value={newGroupName}
+            use:focusOnMount
+            onkeydown={onAddGroupKey}
+            onblur={commitAddGroup}
+          />
+          <span class="group-actions">
+            <button class="ghost" title="Cancel" onclick={cancelAddGroup}>×</button>
+          </span>
+        </header>
+        <p class="muted empty">Enter a name and press Enter</p>
+      </section>
+    {/if}
     {#each filtered as g (g.group)}
       <section
         class="group"
@@ -233,6 +286,13 @@
     padding: 0.25rem 0;
   }
   .group { margin: 0.5rem 0; }
+  .new-group {
+    border-left: 2px solid var(--accent);
+    padding-left: 0.25rem;
+  }
+  .new-group .group-rename {
+    width: 100%;
+  }
   .group.drop-target {
     background: rgba(255, 184, 77, 0.08);
     outline: 1px dashed rgba(255, 184, 77, 0.55);
