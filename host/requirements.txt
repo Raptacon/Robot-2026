@@ -2,3 +2,4 @@ pyyaml
 cairosvg
 Pillow
 XInput-Python
+pyserial

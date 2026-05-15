@@ -30,5 +30,6 @@ phoenix6==26.*
 photonlibpy==2026.*
 robotpy-urcl
 
-
+#NFC battery tracking
+pyserial
 

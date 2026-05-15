@@ -20,6 +20,7 @@ import constants.swerve_constants as consts
 from data.telemetry import Telemetry
 import commands
 import subsystem
+from subsystem.nfc_battery_tracker import NfcBatteryTracker
 from utils.input import InputFactory
 from utils.odometry_logic_2026 import determineShooterTargets2026
 
@@ -48,6 +49,7 @@ class RobotSwerve:
 
         # Subsystem instantiation
         self.drivetrain = subsystem.drivetrain.swerve_drivetrain.SwerveDrivetrain()
+        self.nfc_battery_tracker = NfcBatteryTracker()
         from subsystem.localization.localization import Localization
         self.localization = Localization(self.drivetrain, field=self.field)
         self._vision_cycle_counter = 0
@@ -130,6 +132,7 @@ class RobotSwerve:
         self.updateAlliance()
         self.drivetrain.set_motor_stop_modes(to_drive=True, to_break=True, all_motor_override=True, burn_flash=False)
         self.drivetrain.stop_driving()
+        self.nfc_battery_tracker.onDisabledInit()
 
         if self.shooter:
             self.shooter.setRPM(0)
