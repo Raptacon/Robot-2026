@@ -223,8 +223,6 @@ class Localization:
         for cam in self.cameras:
             # Skip isConnected() in sim — VisionSystemSim doesn't publish
             # heartbeats, so isConnected() always returns False.
-            pass
-
             for result in cam.photon_camera.getAllUnreadResults():
                 had_results = True
                 self._process_photonlib_result(cam, result)

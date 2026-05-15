@@ -1,6 +1,5 @@
 """CAD model file routes."""
 
-import json
 import os
 
 

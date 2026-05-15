@@ -1,7 +1,5 @@
 """Field model and AprilTag routes."""
 
-import json
-
 
 def get_field_tags() -> dict:
     """Get AprilTag positions from robotpy_apriltag field layout."""

@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Callable
 
 # Internal imports
-from config import HoodConfig, OperatorRobotConfig
+from config import OperatorRobotConfig
 import constants.swerve_constants as consts
 from data.telemetry import Telemetry
 import commands
