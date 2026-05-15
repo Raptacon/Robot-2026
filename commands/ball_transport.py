@@ -28,10 +28,10 @@ def run_hopper_while_active(hopper):
 
 
 def run_hopper_and_feed(hopper, feed):
-    """Return a command that runs hopper at 50% and feed at 30% while held."""
+    """Return a command that runs hopper at 50% and feed at 60% while held."""
     def _start():
         hopper.setPower(consts.HopperConstants.defaultPower)
-        feed.setPower(0.3)
+        feed.setPower(0.8)
 
     def _end():
         hopper.stop()

@@ -80,5 +80,5 @@ class NfcBatteryTrackerConfig:
 
 class ShooterConfig:
     # Configs for shooter
-    shooterFeedMotorPIDF = (0, 0, 0, 1 / 473)
+    shooterFeedMotorPIDF = (0.000224999996135011, 0, 0, 1 / 473)
     shooterFlywheelMotorPIDF = (0, 0, 0, 1 / 560)

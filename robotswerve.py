@@ -15,13 +15,14 @@ from pathlib import Path
 from typing import Callable
 
 # Internal imports
-from config import OperatorRobotConfig
+from config import HoodConfig, OperatorRobotConfig
 import constants.swerve_constants as consts
 from data.telemetry import Telemetry
 import commands
 import subsystem
 from subsystem.health_and_status import HealthAndStatus
 from subsystem.nfc_battery_tracker import NfcBatteryTracker
+from subsystem.robot_state import RobotState
 from utils.input import InputFactory
 from utils.odometry_logic_2026 import determineShooterTargets2026
 
@@ -54,13 +55,22 @@ class RobotSwerve:
         from subsystem.localization.localization import Localization
         self.localization = Localization(self.drivetrain, field=self.field)
         self._vision_cycle_counter = 0
-        # TODO: Re-enable mechanisms after input delay debugging
-        self.shooter = None  # subsystem.mechanisms.shooter.Shooter()
-        self.feed = None  # subsystem.mechanisms.shooter.Feed()
-        self.hood = None  # subsystem.mechanisms.shooter.createHood(consts.HoodConstants, HoodConfig)
-        self.hopper = None  # subsystem.Hopper()
-        self.intake_position = None  # subsystem.IntakePosition()
-        self.intake_roller = None  # subsystem.IntakeRoller()
+
+        # Mechanism subsystems — toggle each to True/False individually
+        _enable_shooter = False
+        _enable_feed = False
+        _enable_hood = False
+        _enable_hopper = False
+        _enable_intake_position = False
+        _enable_intake_roller = True
+
+        self.shooter = subsystem.mechanisms.shooter.Shooter() if _enable_shooter else None
+        self.feed = subsystem.mechanisms.shooter.Feed() if _enable_feed else None
+        self.hood = subsystem.mechanisms.shooter.createHood(consts.HoodConstants, HoodConfig) if _enable_hood else None
+        self.hopper = subsystem.Hopper() if _enable_hopper else None
+        self.intake_position = subsystem.IntakePosition() if _enable_intake_position else None
+        self.intake_roller = subsystem.IntakeRoller() if _enable_intake_roller else None
+        self.robot_state = RobotState()
         # Alliance instantiation
         self.updateAlliance()
 
@@ -99,6 +109,7 @@ class RobotSwerve:
         wpilib.SmartDashboard.putString("Git Branch", self.getDeployInfo("git-branch"))
 
 
+
     def robotPeriodic(self):
         self._vision_cycle_counter += 1
         if self._vision_cycle_counter >= OperatorRobotConfig.vision_update_rate_divisor:
@@ -131,8 +142,16 @@ class RobotSwerve:
     def disabledPeriodic(self):
         pass
 
+
     def autonomousInit(self):
         self.updateAlliance()
+        self.auto_command = self.auto_chooser.getSelected()
+        if self.auto_command:
+            self.auto_command.schedule()
+            if self.auto_command.getName().lower() == "instantcommand":
+                self.drivetrain.reset_pose_estimator(self.drivetrain.get_default_starting_pose())
+        else:
+            self.drivetrain.reset_pose_estimator(self.drivetrain.get_default_starting_pose())
 
     def autonomousPeriodic(self):
         pass
@@ -141,6 +160,10 @@ class RobotSwerve:
         self.updateAlliance()
         if self.auto_command:
             self.auto_command.cancel()
+            if self.auto_command.getName().lower() == "instantcommand":
+                self.drivetrain.reset_pose_estimator(self.drivetrain.get_default_starting_pose())
+        else:
+            self.drivetrain.reset_pose_estimator(self.drivetrain.get_default_starting_pose())
 
         # DefaultDrive: raw square input (diagonals get full per-axis output)
         # DefaultDriveCircular: remaps circular stick input so diagonals
