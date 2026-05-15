@@ -150,7 +150,7 @@ class NfcToolApp(tk.Tk):
 
     def __init__(self, project_root=None):
         super().__init__()
-        self.title("NFC Battery Tag Tool \u2014 Team 3200")
+        self.title("NFC Battery Tag Tool - Team 3200")
         self.geometry("650x550")
         self.minsize(500, 400)
 
