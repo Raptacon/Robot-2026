@@ -35,3 +35,6 @@ robotpy-urcl
 #NFC battery tracking
 pyserial
 
+#macOS sim controller support (GLFW cannot read Xbox/PS controllers on macOS)
+pysdl2; sys_platform == "darwin"
+pysdl2-dll; sys_platform == "darwin"
