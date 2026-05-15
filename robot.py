@@ -5,8 +5,7 @@ import inspect
 import commands2
 
 from robotswerve import RobotSwerve
-from utils.control_listener import ControlListener
-from utils.log_uploader import LogUploader
+from utils.match_monitor_connection import MatchMonitorConnection
 from utils.datalog_bridge import setup_logging
 from utils.loop_timing import LoopTimer
 import wpilib
@@ -41,37 +40,7 @@ class MyRobot(commands2.TimedCommandRobot):
         #Init telem files
         self.telemInit()
 
-        # TCP control listener — host connects to robot to establish link
-        try:
-            self.control_listener = ControlListener()
-            self.control_listener.start()
-        except Exception:
-            self.control_listener = None
-            wpilib.reportError("Unable to create ControlListener", printTrace=True)
-
-        # Log uploader for match monitor
-        try:
-            self.log_uploader = LogUploader(self.control_listener) if self.control_listener else None
-        except Exception:
-            self.log_uploader = None
-            wpilib.reportError("Unable to create LogUploader", printTrace=True)
-
-        # Wire up host command callbacks
-        if self.control_listener and self.log_uploader:
-            self.control_listener.on_force_upload = self.log_uploader.start_upload
-            self.control_listener.on_stop_upload = self.log_uploader.stop_upload
-
-            def _on_clear_manifest():
-                # 1. Let current file finish uploading, then stop
-                self.log_uploader.stop_and_wait()
-                # 2. Clear manifests
-                count = self.control_listener._clear_manifests()
-                self.control_listener.send_message(
-                    {'type': 'MANIFEST_CLEARED', 'count': count})
-                # 3. Restart uploads (same criteria as disabledInit)
-                self.log_uploader.start_upload()
-
-            self.control_listener.on_clear_manifest_done = _on_clear_manifest
+        self.match_monitor = MatchMonitorConnection()
 
         # Instantiate our RobotContainer. This will perform all our button bindings, and put our
         # autonomous chooser on the dashboard.
@@ -123,22 +92,16 @@ class MyRobot(commands2.TimedCommandRobot):
         """This function is called once each time the robot enters Disabled mode."""
         self.__timing.reset_all()
         self.container.disabledInit()
-        if self.log_uploader is not None:
-            self.log_uploader.start_upload()
+        self.match_monitor.start_upload()
 
     def disabledPeriodic(self) -> None:
         """This function is called periodically when disabled"""
         self.__timing.start("userCode")
         self.container.disabledPeriodic()
 
-    def _stopLogUpload(self) -> None:
-        """Stop any in-progress log upload to free bandwidth."""
-        if self.log_uploader is not None:
-            self.log_uploader.stop_upload()
-
     def autonomousInit(self) -> None:
         """This autonomous runs the autonomous command selected by your RobotContainer class."""
-        self._stopLogUpload()
+        self.match_monitor.stop_upload()
         self.__timing.reset_all()
         self.container.autonomousInit()
 
@@ -148,7 +111,7 @@ class MyRobot(commands2.TimedCommandRobot):
         self.__callAndCatch(self.container.autonomousPeriodic)
 
     def teleopInit(self) -> None:
-        self._stopLogUpload()
+        self.match_monitor.stop_upload()
         self.__timing.reset_all()
         self.container.teleopInit()
 
@@ -158,7 +121,7 @@ class MyRobot(commands2.TimedCommandRobot):
         self.__callAndCatch(self.container.teleopPeriodic)
 
     def testInit(self) -> None:
-        self._stopLogUpload()
+        self.match_monitor.stop_upload()
         self.__timing.reset_all()
         self.container.testInit()
 
