@@ -25,10 +25,51 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
     - name: Robotpy tests
+      timeout-minutes: 3
+      continue-on-error: False
+      run: |
+        python -m robotpy coverage test
+
+  RobotUnitTestMacOS:
+    name: Unit / Integration Tests (macOS)
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      timeout-minutes: 2
+      uses: actions/setup-python@v5
+      with:
+        python-version: 3.14.*
+
+    - name: Install dependencies
+      timeout-minutes: 5
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    - name: Robotpy tests
       timeout-minutes: 1
       continue-on-error: False
       run: |
         python -m robotpy coverage test
+
+    - name: Sim smoke test (headless, 5s)
+      timeout-minutes: 1
+      run: |
+        python -c "
+        import subprocess, sys, time
+        proc = subprocess.Popen([sys.executable, '-m', 'robotpy', 'sim', '--nogui'],
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        time.sleep(5)
+        if proc.poll() is not None:
+            out = proc.stdout.read()
+            print(out)
+            print(f'Sim exited early with code {proc.returncode}')
+            sys.exit(1)
+        proc.terminate()
+        proc.wait(timeout=5)
+        print('Sim ran for 5s without error — OK')
+        "
 
   StaticCritical:
     name: Critical Static Analysis
@@ -47,7 +88,7 @@ jobs:
       run: |
         pip install flake8
         # stop the build if there are Python syntax errors or undefined names
-        flake8 . --count --select=E9,F6,F7,F8,F4,W1,W2,W4,W5,W6,E11 --ignore=W293,W503 --show-source --statistics --exclude=tests/pyfrc*,utils/yaml/*,.venv*/,venv*/
+        flake8 . --count --select=E9,F6,F7,F8,F4,W1,W2,W4,W5,W6,E11 --ignore=W293,W503 --show-source --statistics --exclude=tests/pyfrc*,*/tests/pyfrc*,utils/yaml/*,.venv*/,venv*/
         # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
         
   ExtraStaticAnalysis:

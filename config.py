@@ -24,16 +24,24 @@ class OperatorRobotConfig:
     pathplanner_translation_pid: Tuple[float] = (4.0, 0.0, 0.0)
     pathplanner_rotation_pid: Tuple[float] = (5.0, 0.0, 0.0)
 
-    robot_Cam_Translation_Left: Tuple[float] = (0.203716, 0.3063875, 0.365125)
-    robot_Cam_Translation_Right: Tuple[float] = (0.203716, -0.3063875, 0.365125)
-    robot_Cam_Rotation_Degress_Left: Tuple[float] = (0.0, 0.0, 0.0)
-    robot_Cam_Rotation_Degress_Right: Tuple[float] = (0.0, 0.0, 0.0)
+    # Camera mounts and robot geometry are defined in constants/robot_geometry.py.
+    # See constants.robot_geometry.CAMERAS for positions, angles, and FOV.
 
-    vision_default_std_dev: float = 3.0 # pose estimator sigma to use if no distance is available
-    vision_distance_threshold_m: float = 1.0 # meters; how far away a tag can be before its data is discarded
-    vision_ambiguity_threshold: float = 0.1 # the max ambiguity score a tag estimate can have before its data is discarded
-    vision_std_dev_basis: float = 1.1
-    vision_std_dev_scale_factor: float = 1
+    # Vision filtering thresholds (see subsystem/localization/VISION.md)
+    vision_ambiguity_threshold: float = 0.2
+    vision_single_tag_max_distance_m: float = 4.0
+    vision_field_border_margin_m: float = 0.5
+    vision_max_z_error_m: float = 0.5
+    vision_max_rotation_error_deg: float = 20.0
+
+    # Dynamic standard deviation base values (x meters, y meters, theta radians)
+    # See VISION.md for how these are scaled with distance.
+    vision_single_tag_std_devs: Tuple[float] = (4.0, 4.0, float('inf'))
+    vision_multi_tag_std_devs: Tuple[float] = (0.5, 0.5, 1.0)
+    vision_std_dev_distance_factor: float = 30.0
+    # How many robot loop cycles between vision updates.
+    # 1 = every cycle (~20ms). Increase if vision still uses too much CPU.
+    vision_update_rate_divisor: int = 1
     # First three elements are PID, last two elements are trapezoidal profile
     # Translation trapezoidal profile units are mps and mps^2, rotation are rps and rps^2
     pid_to_pose_translation_pid_profile: Tuple[float] = (2.0, 0.0, 0.0, 3, 1.5)
@@ -49,6 +57,19 @@ class OperatorRobotConfig:
     # max angular velocity (dps), max angular acceleration (dps^2).
     teleop_pathplan_constraints: Tuple[float] = (2.5, 2.0, 360.0, 360.0)
 
+    # Placeholder: not yet wired into IntakePosition (uses hardcoded gains)
+    intake_pivot_pid: Tuple[float] = [0, 0, 0, 1 / 565]
+
+
+class HoodConfig:
+    # PID gains for hood position control (WPILib PIDController)
+    hoodPID = (0.2, 0.02, 0)
+    # ArmFeedforward gains: (kS, kG, kV, kA)
+    hoodFeedforward = (0.4, 0.04, 0, 0)
+    # Offset in degrees from hood 0-position to true horizontal.
+    horizontalOffsetDegrees = 0.0
+
+
 class NfcBatteryTrackerConfig:
     # Serial port for PN532 NFC reader.
     # Default COM12 for dev/sim. roboRIO port TBD when hardware is wired.
@@ -61,8 +82,3 @@ class ShooterConfig:
     # Configs for shooter
     shooterFeedMotorPIDF = (0, 0, 0, 1 / 473)
     shooterFlywheelMotorPIDF = (0, 0, 0, 1 / 560)
-    # Feed, Lead, Follower
-    shooterInverted = (False, False, False)
-    shooterRangeInterval = 0.2
-    shooterOffsetDelta = 100
-    shooterFeedPercentOfFlywheel = 0.9

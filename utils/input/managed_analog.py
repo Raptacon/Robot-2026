@@ -92,6 +92,10 @@ class ManagedAnalog(NtMappingMixin):
             self._trigger_mode = EventTriggerMode.RAW
             self._extra = {}
 
+        # Binding info — set by the factory after construction.
+        # Format: "ControllerName.input_name (channel)"
+        self._binding_info: str = "unbound"
+
         self._init_nt_mapping()
 
         self._pipeline: Callable[[float], float] = lambda x: x
@@ -169,6 +173,19 @@ class ManagedAnalog(NtMappingMixin):
         return self.get()
 
     # --- Internal ---
+
+    def __str__(self) -> str:
+        name = self._action.qualified_name if self._action else "unbound"
+        mode = self._trigger_mode.value
+        parts = [f"ManagedAnalog('{name}'"]
+        parts.append(f"bind={self._binding_info}")
+        parts.append(f"mode={mode}")
+        parts.append(f"pipeline={self._pipeline}")
+        if self._slew_rate > 0:
+            neg = self._extra.get("negative_slew_rate", -self._slew_rate)
+            parts.append(f"slew_rate={self._slew_rate}/{neg}")
+        parts_str = ", ".join(parts)
+        return f"{parts_str})"
 
     def _rebuild_pipeline(self) -> None:
         """Rebuild the shaping closure from current properties."""

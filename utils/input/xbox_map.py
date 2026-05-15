@@ -76,6 +76,46 @@ OUTPUT_ACCESSORS: dict[
 }
 
 
+# --- Raw HID channel numbers ---
+# Maps input_name -> integer channel for logging/display.
+# Axes use GenericHID axis indices, buttons use 1-based button numbers,
+# POV uses the angle as the identifier, outputs use rumble type ordinal.
+
+HID_CHANNEL: dict[str, int] = {
+    # Axes (GenericHID axis index)
+    "left_stick_x":  0,
+    "left_stick_y":  1,
+    "left_trigger":  2,
+    "right_trigger": 3,
+    "right_stick_x": 4,
+    "right_stick_y": 5,
+    # Buttons (1-based)
+    "a_button":           1,
+    "b_button":           2,
+    "x_button":           3,
+    "y_button":           4,
+    "left_bumper":        5,
+    "right_bumper":       6,
+    "back_button":        7,
+    "start_button":       8,
+    "left_stick_button":  9,
+    "right_stick_button": 10,
+    # POV (angle in degrees)
+    "pov_up":         0,
+    "pov_up_right":   45,
+    "pov_right":      90,
+    "pov_down_right": 135,
+    "pov_down":       180,
+    "pov_down_left":  225,
+    "pov_left":       270,
+    "pov_up_left":    315,
+    # Outputs (rumble type ordinal)
+    "rumble_left":  0,
+    "rumble_right": 1,
+    "rumble_both":  2,
+}
+
+
 # --- Aggregate sets (exported for use by validation.py) ---
 
 ALL_INPUT_NAMES: set[str] = (

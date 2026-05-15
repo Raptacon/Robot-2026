@@ -1,0 +1,3 @@
+# Force LF on shell scripts so a Windows clone (autocrlf=true) doesn't
+# break bash parsing on macOS / Linux.
+*.sh text eol=lf

@@ -14,38 +14,54 @@ import os
 from pathlib import Path
 from typing import Callable
 
-import wpimath
-
 # Internal imports
+from config import OperatorRobotConfig
+import constants.swerve_constants as consts
 from data.telemetry import Telemetry
-from commands.default_swerve_drive import DefaultDrive
-from subsystem.drivetrain.swerve_drivetrain import SwerveDrivetrain
+import commands
+import subsystem
 from subsystem.nfc_battery_tracker import NfcBatteryTracker
 from utils.input import InputFactory
+from utils.odometry_logic_2026 import determineShooterTargets2026
 
 # Third-party imports
 import commands2
 import wpilib
 from commands2.button import Trigger
 from pathplannerlib.auto import AutoBuilder
-
+from wpimath.geometry import Rotation2d
 
 class RobotSwerve:
-    # forward declare critical types for editors
-    drivetrain: SwerveDrivetrain
-
     def __init__(self, is_disabled: Callable[[], bool]) -> None:
         # networktables setup
         self.field = wpilib.Field2d()
         wpilib.SmartDashboard.putData("Field", self.field)
 
-        # Subsystem instantiation
-        self.drivetrain = SwerveDrivetrain()
-        self.nfc_battery_tracker = NfcBatteryTracker()
+        # In simulation, pre-seed CANcoder supply voltage so the absolute
+        # encoders report valid data when swerve modules call
+        # baseline_relative_encoders() during construction.
+        if wpilib.RobotBase.isSimulation():
+            import phoenix6
+            for base_id in OperatorRobotConfig.swerve_module_channels:
+                encoder_id = base_id + 2
+                encoder = phoenix6.hardware.CANcoder(encoder_id)
+                encoder.sim_state.set_supply_voltage(12.0)
 
+        # Subsystem instantiation
+        self.drivetrain = subsystem.drivetrain.swerve_drivetrain.SwerveDrivetrain()
+        self.nfc_battery_tracker = NfcBatteryTracker()
+        from subsystem.localization.localization import Localization
+        self.localization = Localization(self.drivetrain, field=self.field)
+        self._vision_cycle_counter = 0
+        # TODO: Re-enable mechanisms after input delay debugging
+        self.shooter = None  # subsystem.mechanisms.shooter.Shooter()
+        self.feed = None  # subsystem.mechanisms.shooter.Feed()
+        self.hood = None  # subsystem.mechanisms.shooter.createHood(consts.HoodConstants, HoodConfig)
+        self.hopper = None  # subsystem.Hopper()
+        self.intake_position = None  # subsystem.IntakePosition()
+        self.intake_roller = None  # subsystem.IntakeRoller()
         # Alliance instantiation
         self.updateAlliance()
-
 
         # Initialize timer
         self.timer = wpilib.Timer()
@@ -72,8 +88,8 @@ class RobotSwerve:
 
         # Telemetry setup
         wpilib.SmartDashboard.putNumber("Drivetrain speed", self._drive_scale_fast)
-        self.enableTelemetry = wpilib.SmartDashboard.getBoolean("enableTelemetry", True)
-        if self.enableTelemetry:
+        self._enable_telemetry = wpilib.SmartDashboard.getBoolean("enableTelemetry", True)
+        if self._enable_telemetry:
             self.telemetry = Telemetry(
                 driveTrain=self.drivetrain,
                 driverController=self.factory.getController(0),
@@ -100,8 +116,14 @@ class RobotSwerve:
             )
         )
 
+
     def robotPeriodic(self):
-        if self.enableTelemetry and self.telemetry:
+        self._vision_cycle_counter += 1
+        if self._vision_cycle_counter >= OperatorRobotConfig.vision_update_rate_divisor:
+            self._vision_cycle_counter = 0
+            self.localization.update()
+
+        if self._enable_telemetry and self.telemetry:
             self.telemetry.runDefaultDataCollections()
 
         self.field.setRobotPose(self.drivetrain.current_pose())
@@ -111,6 +133,18 @@ class RobotSwerve:
         self.drivetrain.set_motor_stop_modes(to_drive=True, to_break=True, all_motor_override=True, burn_flash=False)
         self.drivetrain.stop_driving()
         self.nfc_battery_tracker.onDisabledInit()
+
+        if self.shooter:
+            self.shooter.setRPM(0)
+            self.shooter.resetOffset()
+        if self.feed:
+            self.feed.stop()
+        if self.hopper:
+            self.hopper.stop()
+        if self.intake_roller:
+            self.intake_roller.stop()
+        if self.intake_position:
+            self.intake_position.disable()
 
     def disabledPeriodic(self):
         pass
@@ -131,8 +165,11 @@ class RobotSwerve:
         if self.auto_command:
             self.auto_command.cancel()
 
+        # DefaultDrive: raw square input (diagonals get full per-axis output)
+        # DefaultDriveCircular: remaps circular stick input so diagonals
+        #   reach full speed (use when stick hardware caps diagonal ~70%)
         self.drivetrain.setDefaultCommand(
-            DefaultDrive(
+            commands.default_swerve_drive.DefaultDrive(  # TODO: switch back to DefaultDriveCircular
                 self.drivetrain,
                 self.translate_x,
                 self.translate_y,
@@ -141,6 +178,10 @@ class RobotSwerve:
             )
         )
 
+        if self.hood:
+            self.hood.setDefaultCommand(self.hood.autoAngleCommand())
+            
+
     def teleopPeriodic(self):
         pass
 
@@ -148,16 +189,21 @@ class RobotSwerve:
         #TODO Move to NT listener on change listener
         self.updateAlliance()
         commands2.CommandScheduler.getInstance().cancelAll()
+        # See teleopInit for DefaultDrive vs DefaultDriveCircular notes
         self.drivetrain.setDefaultCommand(
-            DefaultDrive(
+            commands.default_swerve_drive.DefaultDrive(  # TODO: switch back to DefaultDriveCircular
                 self.drivetrain,
-                lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftY(), 0.06),
-                lambda: wpimath.applyDeadband(-1 * self.driver_controller.getLeftX(), 0.06),
-                lambda: wpimath.applyDeadband(-1 * self.driver_controller.getRightX(), 0.1),
-                lambda: not self.driver_controller.getRightBumperButton()
+                self.translate_x,
+                self.translate_y,
+                self.rotate,
+                lambda: not self.robot_relative_btn()
             )
         )
         commands2.cmd.run(lambda: self.drivetrain.drive(2, 0, 0, False), self.drivetrain).withTimeout(5).schedule()
+
+        if self.hood:
+            self.hood.setDefaultCommand(
+                self.hood.manualTestCommand(self.hood_angle_input))
 
     def testPeriodic(self):
         pass
@@ -176,18 +222,71 @@ class RobotSwerve:
         self.rotate = self.factory.getAnalog("drivetrain.rotate")
         self.robot_relative_btn = self.factory.getRawButton("drivetrain.robot_relative")
 
-        # Cancel-all: event-driven via Trigger instead of polling
-        self.factory.getButton("drivetrain.cancel_all").onTrue(
+        # Cancel-all: emergency stop all commands
+        self.factory.getButton("drivetrain.cancel_all").bind(
             commands2.cmd.runOnce(
                 lambda: commands2.CommandScheduler.getInstance().cancelAll()
             )
         )
 
-        # Speed toggle: Y button switches between slow and fast scale
-        self.factory.getButton("drivetrain.speed_toggle").onTrue(
+        # Speed toggle: switch between slow and fast drive scale
+        self.factory.getButton("drivetrain.speed_toggle").bind(
             commands2.cmd.runOnce(self._toggle_drive_scale)
         )
 
+        # Auto-rotate: align drivetrain to target while held
+        self.factory.getButton("drivetrain.auto_align").bind(
+            commands.auto.pid_to_angle.PIDAlignToTarget(
+                self.drivetrain,
+                lambda: determineShooterTargets2026(self.drivetrain.current_pose, self.alliance),
+                self.translate_x,
+                self.translate_y,
+                lambda: not self.robot_relative_btn(),
+                alignment_angle=Rotation2d.fromDegrees(180)
+            )
+        )
+
+        # Mechanism controls — only registered when subsystems are enabled
+        if self.shooter:
+            self.factory.getButton("shooter.increment_RPM").bind(
+                commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(consts.ShooterConstants.offsetDelta), self.shooter)
+            )
+            self.factory.getButton("shooter.decrement_RPM").bind(
+                commands2.cmd.runOnce(lambda: self.shooter.modifyOffset(-consts.ShooterConstants.offsetDelta), self.shooter)
+            )
+            self.factory.getButton("shooter.reset_RPM_offset").bind(
+                commands2.cmd.runOnce(self.shooter.resetOffset, self.shooter)
+            )
+
+        if self.hood:
+            self.hood_angle_input = self.factory.getAnalog("hood.angle")
+
+        if self.hopper:
+            self.factory.getButton("hopper.toggle_hopper").bind(
+                commands.ball_transport.run_hopper_while_active(self.hopper)
+            )
+
+        if self.intake_position:
+            self.factory.getButton("intake.toggle_deploy").bind(
+                commands.intake_commands.toggle_intake_deploy(self.intake_position)
+            )
+
+        if self.intake_roller:
+            self.factory.getButton("ball_transport.hold_roller").bind(
+                commands.ball_transport.run_roller_while_held(self.intake_roller)
+            )
+
+        if self.shooter and self.hood:
+            self.factory.getButton("shooter.spinup_toggle").bind(
+                commands.shooter_commands.toggle_spinup(self.shooter, self.hood)
+            )
+
+        if self.hopper and self.feed:
+            self.factory.getButton("ball_transport.run_hopper_feed").bind(
+                commands.ball_transport.run_hopper_and_feed(self.hopper, self.feed)
+            )
+
+        #Turret stop
         # Map all drive axes' scale to a shared SmartDashboard entry.
         # Dashboard changes and Y-button toggles both write to this path;
         # the factory auto-syncs the value into all three analogs each cycle.
@@ -217,10 +316,10 @@ class RobotSwerve:
         """
         json_object = None
         home = str(Path.home()) + os.path.sep
-        releaseFile = home + 'py' + os.path.sep + "deploy.json"
+        release_file = home + 'py' + os.path.sep + "deploy.json"
         try:
             # Read from ~/deploy.json
-            with open(releaseFile, "r") as openfile:
+            with open(release_file, "r") as openfile:
                 json_object = json.load(openfile)
                 print(json_object)
                 print(type(json_object))
@@ -239,4 +338,3 @@ class RobotSwerve:
         """
         self.alliance = wpilib.DriverStation.getAlliance()
         self.drivetrain.update_alliance_flag(self.alliance)
-

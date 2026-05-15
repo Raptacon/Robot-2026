@@ -4,10 +4,14 @@ Physical constants and identifiers for the swerve drivetrain.
 
 # Native imports
 import math
-from enum import Enum, StrEnum
+from enum import StrEnum
+
+# Third-party imports
+import rev
 
 # Internal imports
 from .robot_constants import RobotConstants
+from .robot_geometry import SWERVE_FL, SWERVE_FR, SWERVE_BL, SWERVE_BR
 
 
 class SwerveModuleName(StrEnum):
@@ -28,15 +32,15 @@ class SwerveModuleName(StrEnum):
 
 
 class SwerveDriveConsts(RobotConstants):
-    # where the wheel is compared to the center of the robot in meters
-    moduleFrontLeftX: float = 0.264
-    moduleFrontLeftY: float = 0.287
-    moduleFrontRightX: float = 0.264
-    moduleFrontRightY: float = -0.287
-    moduleBackLeftX: float = -0.264
-    moduleBackLeftY: float = 0.287
-    moduleBackRightX: float = -0.264
-    moduleBackRightY: float = -0.287
+    # Module positions derived from constants/robot_geometry.py (single source)
+    moduleFrontLeftX: float = SWERVE_FL.X()
+    moduleFrontLeftY: float = SWERVE_FL.Y()
+    moduleFrontRightX: float = SWERVE_FR.X()
+    moduleFrontRightY: float = SWERVE_FR.Y()
+    moduleBackLeftX: float = SWERVE_BL.X()
+    moduleBackLeftY: float = SWERVE_BL.Y()
+    moduleBackRightX: float = SWERVE_BR.X()
+    moduleBackRightY: float = SWERVE_BR.Y()
 
     # inverts if the module or gyro does not rotate counterclockwise positive
     invertGyro: bool = False
@@ -127,18 +131,69 @@ class SwerveModuleMk4iL2Consts(SwerveModuleMk4iConsts):
 #############################
 
 
-class CaptainPlanetConsts:
-    kIntakeMotorCanId = 11
-    kRollerMotorCanId = 56
-    kMotorInverted = False
-    kCurrentLimitAmps = 30
-    # kBreakBeam = 2
-    # kFrontBreakBeam = 2
-    # kBackBreakBeam = 0
-    # kHallEffectSensor = 6
-    kDefaultSpeed = 0.15
-    kOperatorDampener = 0.15
-    class BreakBeamActionOptions(Enum):
-        DONOTHING = 1
-        TOFRONT = 2
-        TOBACK = 3
+class HoodConstants:
+    motorId = 34
+    inverted = False
+    # Position conversion factor — set by calibration or known gear ratio.
+    # Use PassiveRangeFinderCommand with full_range to measure this.
+    positionConversionFactor = 9.53  # deg/rotation (from calibration)
+    maxAngleDegrees = 20.0
+    minAngleDegrees = 0.0
+
+
+class IntakePivotConstants:
+    name = "intake_pivot"
+    canId = 20
+    inverted = False
+    motorClass = rev.SparkFlex
+    currentLimitAmps = 30
+    # Degrees per motor rotation — measure or calculate from gear ratio
+    positionConversionFactor = 1.0  # TODO: calibrate on hardware
+    # Mechanical safety boundaries (degrees)
+    minSoftLimit = 0.0
+    maxSoftLimit = 155.0
+    # Target positions for commands (degrees)
+    stowedPosition = 0.0
+    deployedPosition = 155.0
+
+
+class IntakeRollerConstants:
+    name = "intake_roller"
+    canId = 21
+    inverted = False
+    motorClass = rev.SparkFlex
+    defaultPower = 0.6
+
+
+class HopperConstants:
+    name = "hopper"
+    canId = 40
+    inverted = True
+    defaultPower = 0.5
+
+
+class ShooterConstants:
+    name = "shooter"
+    flywheelLeadMotorId = 32
+    flywheelFollowerMotorId = 33
+    flywheelLeadInverted = False
+    flywheelFollowerInverted = True
+    currentLimitAmps = 40
+    offsetDelta = 100
+    fixedRPM = 6500
+    # TODO: Get rest and max positions for shooter
+    hoodRestPosition = 0
+    hoodMaxPosition = 1
+    hoodPosition1 = 0.25
+    hoodPosition2 = 0.5
+    hoodPosition3 = 0.75
+    positionConversionFactor = 1 / 1.5
+
+
+class FeedConstants:
+    name = "feed"
+    upperMotorId = 35
+    lowerMotorId = 36
+    upperInverted = True
+    lowerInverted = True
+    currentLimitAmps = 30

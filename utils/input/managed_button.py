@@ -52,6 +52,10 @@ class ManagedButton(NtMappingMixin):
         # without rebuilding the Trigger or losing command bindings.
         self._threshold_ref: list[float] | None = None
 
+        # Binding info — set by the factory after construction.
+        # Format: "ControllerName.input_name (channel)"
+        self._binding_info: str = "unbound"
+
         self._init_nt_mapping()
 
     # --- Threshold property (BOOLEAN_TRIGGER live-tuning) ---
@@ -169,6 +173,18 @@ class ManagedButton(NtMappingMixin):
     def action(self) -> ActionDefinition | None:
         """The action definition, if any."""
         return self._action
+
+    def __str__(self) -> str:
+        name = self._action.qualified_name if self._action else "unbound"
+        parts = [f"ManagedButton('{name}'"]
+        parts.append(f"bind={self._binding_info}")
+        if self._action is not None:
+            parts.append(f"type={self._action.input_type.value}")
+            parts.append(f"mode={self._action.trigger_mode.value}")
+            if self._action.input_type == InputType.BOOLEAN_TRIGGER:
+                parts.append(f"threshold={self.threshold}")
+        parts_str = ", ".join(parts)
+        return f"{parts_str})"
 
     # --- Remapping support ---
 
