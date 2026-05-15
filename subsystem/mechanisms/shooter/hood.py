@@ -183,7 +183,7 @@ class Hood(Subsystem):
     def setAngleNormalized(self, value: float) -> None:
         """Set hood target from 0..1 range (0 = min, 1 = max angle)."""
         value = max(0.0, min(1.0, value))
-        self._target_degrees = value * self.max_angle_degrees
+        self._target_degrees = self.min_angle_degrees + value * (self.max_angle_degrees - self.min_angle_degrees)
 
     def setAngleRadians(self, radians: float) -> None:
         """Set hood target angle in radians, converted to degrees."""
@@ -194,7 +194,7 @@ class Hood(Subsystem):
     def setShooter(self, shooter) -> None:
         """Inject a shooter subsystem for safety interlock.
 
-        The shooter must have an `RPM` attribute representing
+        The shooter must have a `targetRPM` attribute representing
         the current setpoint in RPM.
         """
         self._shooter = shooter
@@ -221,7 +221,10 @@ class Hood(Subsystem):
 
     def getAngleNormalized(self) -> float:
         """Get current hood angle as 0..1 normalized value."""
-        return self.encoder.getPosition() / self.max_angle_degrees
+        range_deg = self.max_angle_degrees - self.min_angle_degrees
+        if range_deg == 0:
+            return 0.0
+        return (self.encoder.getPosition() - self.min_angle_degrees) / range_deg
 
     def getAngleRadians(self) -> float:
         """Get current hood angle in radians."""
@@ -274,7 +277,7 @@ class Hood(Subsystem):
         # Safety interlock: stow hood when shooter setpoint is low
         if (self.nt_safety_enabled
                 and self._shooter is not None
-                and self._shooter.RPM < self.nt_safety_rpm_threshold):
+                and self._shooter.targetRPM < self.nt_safety_rpm_threshold):
             self._target_degrees = self.nt_stowed_angle_degrees
 
         position_deg = self.encoder.getPosition()
@@ -415,9 +418,7 @@ class Hood(Subsystem):
         """Command that sets hood angle from shooter's distance lookup."""
         def _action():
             if self._shooter is not None:
-                self.setAngleDegrees(
-                    self._shooter.getHoodAngleForDistance(
-                        self._shooter.targetDistance))
+                self.setAngleDegrees(self._shooter.getHoodAngle())
 
         return commands2.cmd.run(_action, self)
 

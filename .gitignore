@@ -1,3 +1,9 @@
+# Downloaded field assets cache (fetched at runtime)
+cache/
+
+# CAD model files (large binaries — live in separate team CAD repo)
+host/cad_tools/models/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -166,5 +172,9 @@ controller_maps.py
 # Generated ICO (rebuilt during EXE build)
 images/*.ico
 
-# NetworkTables backup
+# NetworkTables persistence and backup
+networktables.json
 networktables.json.bck
+
+# WPILib IDE preferences
+.wpilib/
