@@ -2,7 +2,7 @@
 
 ![Build link](https://github.com/Raptacon/Robot-2023/actions/workflows/robot_ci.yml)
 
-## Welcome to Robot 2024
+## Welcome to Robot 2026
 
 Please take a look at the [wiki](https://github.com/Raptacon/Robot-2026/wiki) for the most up to date documentation
 
